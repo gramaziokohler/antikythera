@@ -182,6 +182,18 @@ The expansion from prototypical processes to more deterministic or algorithmic r
 
 ## Development
 
+### Coding Guidelines
+
+The project follows these coding guidelines:
+
+- **Style**: PEP 8
+- **Linter/Formatter**: `ruff`
+- **Line Length**: 179 characters
+- **Imports**: Single line imports
+- **Docstrings**: NumPy style
+- **Testing**: `pytest`
+
+
 ### Repository Structure
 
 The Antikythera project is organized as follows:
