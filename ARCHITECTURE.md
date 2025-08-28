@@ -100,24 +100,33 @@ The fabrication process is defined in a structured JSON format. The schema is un
     {
       "id": "A1",
       "type": "user_interaction.user_input",
+      "description": "Wait for user input",
       "outputs": {
-        "result1": "str"  // types are only primitives: str, int, float, bool, timestamp, bytes
+        "result1": "str"
       },
       "depends_on": [
         {"id": "start"}
-      ]
+      ],
+      "_docs": {
+        "result1": "Types are only primitives: str, int, float, bool, timestamp, bytes."
+      }
     },
     {
       "id": "A2",
       "type": "system.sleep",
-      "duration": 5,  // this param (in seconds) is a parametrization of the task itself, not an input that comes from process data
+      "description": "Sleep for 5 seconds",
+      "duration": 5,
       "depends_on": [
         {"id": "start"}
-      ]
+      ],
+      "_docs": {
+        "duration": "Duration in seconds. This is a task parameter, not an input from process data."
+      }
     },
     {
       "id": "B1",
       "type": "user_interaction.user_output",
+      "description": "Print result",
       "inputs": {
         "result1": "str"
       },
