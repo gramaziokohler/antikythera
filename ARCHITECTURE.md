@@ -41,8 +41,6 @@ The technologies above were selected to provide a balance between reliability, p
 - **Data store:** data-plane
 - **Observability:** TDB
 
----
-
 ## Components
 
 ### Orchestrator
@@ -151,19 +149,15 @@ The fabrication process is defined in a structured JSON format. The schema is un
 
 This schema will evolve as the system matures.
 
----
-
 ## Authoring Surface
-
-### Development Roadmap
 
 The authoring interface for fabrication processes will evolve through three phases:
 
-#### Phase 1: JSON-Based Definition (Current)
+### Phase 1: JSON-Based Definition (Current)
 
 Initially, fabrication processes are defined using the JSON format described above. This provides a structured, machine-readable representation that can be validated and executed by the system.
 
-#### Phase 2: Python DSL
+### Phase 2: Python DSL
 
 A domain-specific language (DSL) implemented in Python will provide a more ergonomic interface for defining fabrication processes programmatically. This will enable:
 
@@ -171,7 +165,7 @@ A domain-specific language (DSL) implemented in Python will provide a more ergon
 - Reuse of process components and patterns
 - Integration with existing Python-based workflows
 
-#### Phase 3: LLM-Assisted Authoring (Long-term Vision)
+### Phase 3: LLM-Assisted Authoring (Long-term Vision)
 
 In the ideal long-term vision, an LLM-based frontend will enable natural language process definition. This system will:
 
@@ -185,6 +179,25 @@ In the ideal long-term vision, an LLM-based frontend will enable natural languag
 The expansion from prototypical processes to more deterministic or algorithmic results will be handled by MCP tools, maintaining a separation between high-level process definition and low-level execution details.
 
 ---
+
+## Development
+
+### Repository Structure
+
+The Antikythera project is organized as follows:
+
+- **`antikythera/`**: Core package containing the orchestrator implementation
+  - **`orchestrator/`**: Main orchestration engine components
+  - **`models/`**: Data models and schemas
+
+- **`antikythera_agents/`**: Built-in agent implementations
+
+### Extension Points
+
+Antikythera is designed to be extensible. Custom agents can be implemented in separate repositories and languages, provided they adhere to the agent communication protocol. The system supports:
+
+- Python-based agents using the provided base classes
+- External agents communicating via MQTT
 
 ## Roadmap
 
