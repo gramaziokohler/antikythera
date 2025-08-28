@@ -1,32 +1,36 @@
-# Software architecture
+# Software Architecture
 
-> **Summary**: Antikythera is an distributed system for orchestration of fabrication processes in the context of architecture and construction.
+> **Summary**: Antikythera is a distributed system for orchestrating fabrication processes in architecture and construction.
 
 ---
 
 ## Terminology
 
-* `agent`: an entity that can run a specific type of `task`. It can be a remote machine or a local process. Examples of agents are an OS-level process, a robot control program, a CNC program, a microcontroller program, etc.
-* `task` is a unit of work that can be executed by an `agent` . They are `nodes` in the `graph` that describes the entire `fabrication process`. A `task` is effectivelly a tiny state machine that can be in one of the following states: `not started`, `running`, `succeeded`, `failed`. It declaratively defines input and output data so that data dependencies can be defined between nodes.
-* `graph`, aka `DAG`: a directed acyclic graph that describes the entire `fabrication process`. It is composed by `nodes` (tasks) and `edges` (dependencies). It will always contain at least two nodes: `START` and `END`, which can also define data dependencies to enable composing graphs into larger graphs.
-* `fabrication process`: the highest level of abstraction in Antikythera, describes all the steps to fabricate a physical object, for example, in a timber assembly, it describes the step-by-step assembly of each of the timber beams and how they depend on each other. It is internally represented as a `graph`. It has a JSON representation, the specific format still needs to be defined.
-* `behavior tree`: a robotics-oriented representation of a decision tree that can be used to implement control logic for semi-autonomous robot operation.
-* `FPID`: a fabrication process identifier, a UUID that uniquely identifies a fabrication process session. A single session can have very long running times, easily reaching into multi-weeks.
+* `Agent`: An entity that can run a specific type of `Task`. It can be a remote machine or a local process (e.g., OS-level process, robot control program, CNC program, microcontroller program).
+* `Task`: A unit of work executed by an `Agent`. Tasks are `Nodes` in the `DAG` that describes the fabrication process. Each task:
+  * Functions as a state machine with states: `not started`, `running`, `succeeded`, `failed`
+  * Declaratively defines input and output data to establish dependencies between nodes
+* `DAG` (Directed Acyclic Graph) / `Graph`: Describes the entire `Fabrication Process` through `Nodes` (tasks) and `Edges` (dependencies). Always contains at least two nodes: `START` and `END`, which can define data dependencies to enable graph composition.
+* `Fabrication Process`: The highest level of abstraction in Antikythera. Describes all steps to fabricate a physical object (e.g., step-by-step assembly of timber beams). Internally represented as a `DAG` with a JSON representation.
+* `Behavior Tree`: A robotics-oriented representation of a decision tree for implementing control logic in semi-autonomous robot operation.
+* `FPID`: Fabrication Process Identifier - a UUID that uniquely identifies a fabrication process session. Sessions can have long running times (potentially multiple weeks).
 
-## Technology
+## Technology Stack
 
+### Core Technologies
 * Python 3.12
-* `MQTT` based on `compas_eve` for the transport layer of the event system.
-* `compas` for the core framework, including the `DAG` implementation.
-* `compas_model` for model representation (i.e. the fabricatable object).
-* `immudb` for data storage.
+* `MQTT` (via `compas_eve`): Transport layer for the event system, enabling distributed communication
+* `compas`: Core framework, including the `DAG` implementation
+* `compas_model`: Model representation for fabricatable objects
+* `immudb`: Immutable database for persistent data storage, chosen for its append-only nature and data integrity guarantees
 
-Tentative technologies:
+### Integration Technologies
+* `compas_fab`: Handles tasks of type **Robotic Planning** (using Project Theseus, `wip_process` branch)
+* `compas_emma`: Implements tasks of type **Behavior Tree**
+* `compas_rrc`: Execution backend for `compas_emma` behavior trees
+* `FastMCP`: Potential implementation for tasks of type **MCP Server/tools**
 
-* `compas_fab` for `tasks` of type **Robotic Planning**. At the time of writing, it will use Project Theseus, i.e. the `wip_process` branch.
-* `compas_emma` for `tasks` of type **Behavior Tree**.
-* `compas_rrc` as the execution backend for `compas_emma` behavior trees.
-* `FastMCP` if we implement `tasks` of type **MCP Server/tools**.
+The technologies above were selected to provide a balance between reliability, performance, and integration with existing COMPAS ecosystem components.
 
 ---
 
@@ -75,22 +79,101 @@ TBD
 
 ## File formats
 
-### Fabrication process
+### Fabrication Process Definition
+
+The fabrication process is defined in a structured JSON format. The schema is under development, but will include:
 
 ```json
-
-TBD
+{
+  "version": "1.0",
+  "id": "toy-problem-1",
+  "name": "Toy Problem 1",
+  "description": "A sample fabrication process definition",
+  "tasks": [
+    {
+      "id": "start",
+      "type": "system.start",
+      "outputs": {
+        "process_start_time": "timestamp"
+      }
+    },
+    {
+      "id": "A1",
+      "type": "user_interaction.user_input",
+      "outputs": {
+        "result1": "str"  // types are only primitives: str, int, float, bool, timestamp, bytes
+      },
+      "depends_on": [
+        {"id": "start"}
+      ]
+    },
+    {
+      "id": "A2",
+      "type": "system.sleep",
+      "duration": 5,  // this param (in seconds) is a parametrization of the task itself, not an input that comes from process data
+      "depends_on": [
+        {"id": "start"}
+      ]
+    },
+    {
+      "id": "B1",
+      "type": "user_interaction.user_output",
+      "inputs": {
+        "result1": "str"
+      },
+      "depends_on": [
+        {"id": "A1", "type": "FS"},
+        {"id": "A2", "type": "FS"}
+      ]
+    },
+    {
+      "id": "end",
+      "type": "system.end",
+      "outputs": {
+        "process_end_time": "timestamp"
+      },
+      "depends_on": [
+        {"id": "B1"}
+      ]
+    }
+  ]
+}
 ```
+
+This schema will evolve as the system matures.
 
 ---
 
 ## Authoring Surface
 
-In the ideal, long-term vision of the project, an LLM-based frontend would receive a natural-language description of a fabrication process and the corresponding data: 1) COMPAS Model of the fabricatable object, and 2) A model of the fabrication environments (e.g. a `RobotCell` for the case of robotic fabrication). The LLM would then generate a **fabrication process** in the form the text format defined above, and that would be loaded/compiled/transformed into different internal representations as needed. The expansion from a prototypical process to mode deterministic or algorithmic results would be off-loaded to MCP tools.
+### Development Roadmap
 
-However, in the short-term, we will use only the simple JSON-based representation as the authoring surface.
+The authoring interface for fabrication processes will evolve through three phases:
 
-Eventually, a small DSL-ish Python API would be integrated.
+#### Phase 1: JSON-Based Definition (Current)
+
+Initially, fabrication processes are defined using the JSON format described above. This provides a structured, machine-readable representation that can be validated and executed by the system.
+
+#### Phase 2: Python DSL
+
+A domain-specific language (DSL) implemented in Python will provide a more ergonomic interface for defining fabrication processes programmatically. This will enable:
+
+- Type checking and validation during development
+- Reuse of process components and patterns
+- Integration with existing Python-based workflows
+
+#### Phase 3: LLM-Assisted Authoring (Long-term Vision)
+
+In the ideal long-term vision, an LLM-based frontend will enable natural language process definition. This system will:
+
+1. Accept natural language descriptions of fabrication processes
+2. Incorporate structured data inputs:
+   - COMPAS Model of the fabricatable object
+   - Model of fabrication environments (e.g., a `RobotCell` for robotic fabrication)
+3. Generate a formal **Fabrication Process** definition
+4. Support iterative refinement through natural language interaction
+
+The expansion from prototypical processes to more deterministic or algorithmic results will be handled by MCP tools, maintaining a separation between high-level process definition and low-level execution details.
 
 ---
 
