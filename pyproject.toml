@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "antikythera"
 description = "An all knowing, all controlling, robotic and otherwise, process manager."
-keywords = []
+keywords = ["magic", "orchestrator", "fabrication", "robotics", "automation", "architecture", "distributed systems", "events"]
 authors = [
     { name = "Gonzalo Casas", email = "casas@arch.ethz.ch" },
     { name = "Chen Kasirer", email = "kasirer@arch.ethz.ch" },
