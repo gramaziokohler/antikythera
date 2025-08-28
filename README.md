@@ -2,7 +2,7 @@
 
 > *An all knowing, all controlling, robotic and otherwise, process manager.*
 
-![Antikythera](./antikythera.png)
+<img src="./antikythera.png" alt="Antikythera" width="300" />
 
 Antikythera is an distributed system for orchestration of fabrication processes in the context of architecture and construction.
 
