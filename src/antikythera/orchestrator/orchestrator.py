@@ -68,7 +68,6 @@ class TaskScheduler:
         result.append(f"gantt\n  title    {title}")
 
         def create_label(task: Task):
-            name = task.type
             if task.state == TaskState.SUCCEEDED:
                 task_state = "✅"
             elif task.state == TaskState.FAILED:
@@ -81,7 +80,7 @@ class TaskScheduler:
                 task_state = "🏃"
             else:
                 task_state = "?"
-            task_label = f"{task_state} [{task.id}] {name}"
+            task_label = f"{task_state} [{task.id}] {task.type}"
             return task_label
 
         def append_node(previous, current):

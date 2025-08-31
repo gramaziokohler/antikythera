@@ -37,29 +37,29 @@ class AgentManager:
         self.callback = callback
 
 def system_start(task: Task) -> dict:
-    print("System start")
+    print(f"[{task.id}] {task.type} System start")
     time.sleep(1)
     return {"process_start_time": time.time()}
 
 def system_end(task: Task) -> dict:
-    print("System end")
+    print(f"[{task.id}] {task.type} System end")
     time.sleep(1)
     return {"process_end_time": time.time()}
 
 def system_sleep(task: Task) -> dict:
-    print(f"System sleep {task.params['duration']} seconds")
+    print(f"[{task.id}] {task.type} System sleep {task.params['duration']} seconds")
     time.sleep(task.params["duration"])
     return None
 
 def user_interaction_user_input(task: Task) -> dict:
-    print("User input!")
+    print(f"[{task.id}] {task.type} User input!")
     result = {}
     for key in task.outputs:
         result[key] = input(f"Enter {key}: ")
     return result
 
 def user_interaction_user_output(task: Task) -> dict:
-    print("User output!")
+    print(f"[{task.id}] {task.type} User output!")
     for key in task.inputs:
         print(f"{key}: {task.inputs[key]}")
     return None
@@ -83,7 +83,6 @@ class AgentLauncher:
 
 
     def on_task_start(self, message: Message) -> None:
-        print(f"Task start received: {message}")
         task = Task(
             id=message["id"],
             type=message["type"],
@@ -99,7 +98,6 @@ class AgentLauncher:
             state = "failed"
             outputs = {"exception": str(e)}
         msg = Message({"id": task.id, "state": state, "outputs": outputs})
-        print(f"Task completed: {task.id} ({msg})")
         self.task_completion_publisher.publish(msg)
 
 

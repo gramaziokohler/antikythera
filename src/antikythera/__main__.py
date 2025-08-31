@@ -3,8 +3,8 @@ import sys
 import time
 import uuid
 
+from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
-from antikythera.models import load_blueprint_from_file
 from antikythera.orchestrator import Orchestrator
 
 
@@ -17,7 +17,7 @@ def main():
     args = parser.parse_args()
 
     print(f"Loading blueprint: {args.blueprint_file}")
-    blueprint = load_blueprint_from_file(args.blueprint_file)
+    blueprint = Blueprint.from_file(args.blueprint_file)
     bsid = uuid.uuid4().hex
     session = BlueprintSession(bsid=bsid, blueprint=blueprint)
 

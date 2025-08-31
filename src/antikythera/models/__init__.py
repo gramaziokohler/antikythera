@@ -1,5 +1,5 @@
 from .states import TaskState, DependencyType
-from .blueprints import Blueprint, Task, Dependency, BlueprintSession, load_blueprint_from_file
+from .blueprints import Blueprint, Task, Dependency, BlueprintSession
 
 __all__ = [
     "TaskState",
@@ -8,5 +8,4 @@ __all__ = [
     "Task",
     "Dependency",
     "BlueprintSession",
-    "load_blueprint_from_file",
 ]

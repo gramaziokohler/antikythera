@@ -85,6 +85,29 @@ class Blueprint:
     description: Optional[str] = None
     tasks: List[Task] = field(default_factory=list)
 
+    @classmethod
+    def from_file(cls, filepath: str) -> "Blueprint":
+        """Loads a blueprint from a JSON file.
+
+        Args:
+            filepath: The path to the JSON file.
+
+        Returns:
+            An instance of Blueprint.
+        """
+        with open(filepath, "r") as f:
+            data = json.load(f)
+
+        task_defs = data.get("tasks", [])
+        tasks = [_parse_task(task_def) for task_def in task_defs]
+
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            description=data.get("description"),
+            tasks=tasks,
+        )
+
 
 @dataclass
 class BlueprintSession:
@@ -123,31 +146,5 @@ def _parse_task(task_def: Dict[str, Any]) -> Task:
         outputs=task_def.get("outputs", {}),
         depends_on=dependencies,
         params=params,
-    )
-
-def load_blueprint_from_file(filepath: str) -> Blueprint:
-    """Loads a blueprint from a JSON file.
-
-    Attributes
-    ----------
-    filepath : str
-        The path to the JSON file.
-
-    Returns
-    -------
-    Blueprint
-        An instance of Blueprint.
-    """
-    with open(filepath, "r") as f:
-        data = json.load(f)
-
-    task_defs = data.get("tasks", [])
-    tasks = [_parse_task(task_def) for task_def in task_defs]
-
-    return Blueprint(
-        id=data["id"],
-        name=data["name"],
-        description=data.get("description"),
-        version=data.get("version", "1.0"),
-        tasks=tasks,
+        state=TaskState.PENDING,
     )
