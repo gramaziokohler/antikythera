@@ -76,7 +76,7 @@ def system_sleep(task: Task) -> dict:
 
 
 def user_interaction_user_input(task: Task) -> dict:
-    print(f"{Colors.HEADER}✍️  [{task.id}][{task.type}] Awaiting user input...{Colors.ENDC}")
+    print(f"{Colors.HEADER}✍️ [{task.id}][{task.type}] Awaiting user input...{Colors.ENDC}")
     result = {}
     for key in task.outputs:
         result[key] = input(f"    [{task.id}][{task.type}] > Enter {key}: ")
@@ -101,7 +101,7 @@ TASK_HANDLERS = {
 }
 
 
-class AgentLauncher(object):
+class AgentLauncher:
     def __init__(self, broker_host="127.0.0.1", broker_port=1883):
         self.threads = []
         self.thread_lock = threading.Lock()
