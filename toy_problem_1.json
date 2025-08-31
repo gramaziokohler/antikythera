@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "id": "toy-problem-1",
+  "name": "Toy Problem 1",
+  "description": "A sample fabrication process definition",
+  "tasks": [
+    {
+      "id": "start",
+      "type": "system.start",
+      "outputs": {
+        "process_start_time": "timestamp"
+      }
+    },
+    {
+      "id": "A1",
+      "type": "user_interaction.user_input",
+      "description": "Wait for user input",
+      "outputs": {
+        "result1": "str"
+      },
+      "depends_on": [
+        {"id": "start"}
+      ]
+    },
+    {
+      "id": "A2",
+      "type": "system.sleep",
+      "description": "Sleep for 5 seconds",
+      "duration": 5,
+      "depends_on": [
+        {"id": "start"}
+      ]
+    },
+    {
+      "id": "B1",
+      "type": "user_interaction.user_output",
+      "description": "Print result",
+      "inputs": {
+        "result1": "str"
+      },
+      "depends_on": [
+        {"id": "A1", "type": "FS"},
+        {"id": "A2", "type": "FS"}
+      ]
+    },
+    {
+      "id": "end",
+      "type": "system.end",
+      "outputs": {
+        "process_end_time": "timestamp"
+      },
+      "depends_on": [
+        {"id": "B1"}
+      ]
+    }
+  ]
+}

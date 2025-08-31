@@ -1,22 +1,20 @@
 import json
 import pytest
-from antikythera.models.process import (
-    FabricationProcess,
-    Task,
-    Dependency,
-    load_process_from_file,
-)
-from antikythera.models.states import DependencyType, TaskState
+from antikythera.models import Blueprint
+from antikythera.models import Task
+from antikythera.models import Dependency
+from antikythera.models import DependencyType
+from antikythera.models import TaskState
+from antikythera.models import load_blueprint_from_file
 
 
 @pytest.fixture
-def sample_process_json():
-    """Provides a sample fabrication process as a dictionary."""
+def sample_blueprint_json():
     return {
         "id": "test-proc-1",
-        "name": "Test Process",
+        "name": "Test Blueprint",
         "version": "0.1.0",
-        "description": "A sample process for testing.",
+        "description": "A sample blueprint for testing.",
         "tasks": [
             {"id": "TASK_A", "type": "test.task.a", "description": "First task"},
             {
@@ -29,30 +27,28 @@ def sample_process_json():
     }
 
 
-def test_load_process_from_file(tmp_path, sample_process_json):
-    """Tests loading a FabricationProcess from a JSON file."""
-    process_file = tmp_path / "process.json"
-    with open(process_file, "w") as f:
-        json.dump(sample_process_json, f)
+def test_load_blueprint_from_file(tmp_path, sample_blueprint_json):
+    blueprint_file = tmp_path / "blueprint.json"
+    with open(blueprint_file, "w") as f:
+        json.dump(sample_blueprint_json, f)
 
-    process = load_process_from_file(str(process_file))
+    blueprint = load_blueprint_from_file(str(blueprint_file))
 
-    assert isinstance(process, FabricationProcess)
-    assert process.id == "test-proc-1"
-    assert process.name == "Test Process"
-    assert len(process.tasks) == 2
+    assert isinstance(blueprint, Blueprint)
+    assert blueprint.id == "test-proc-1"
+    assert blueprint.name == "Test Blueprint"
+    assert len(blueprint.tasks) == 2
 
 
-def test_task_parsing(tmp_path, sample_process_json):
-    """Tests that tasks are parsed correctly from the JSON file."""
-    process_file = tmp_path / "process.json"
-    with open(process_file, "w") as f:
-        json.dump(sample_process_json, f)
+def test_task_parsing(tmp_path, sample_blueprint_json):
+    blueprint_file = tmp_path / "blueprint.json"
+    with open(blueprint_file, "w") as f:
+        json.dump(sample_blueprint_json, f)
 
-    process = load_process_from_file(str(process_file))
+    blueprint = load_blueprint_from_file(str(blueprint_file))
 
-    task_a = next(t for t in process.tasks if t.id == "TASK_A")
-    task_b = next(t for t in process.tasks if t.id == "TASK_B")
+    task_a = next(t for t in blueprint.tasks if t.id == "TASK_A")
+    task_b = next(t for t in blueprint.tasks if t.id == "TASK_B")
 
     assert isinstance(task_a, Task)
     assert task_a.type == "test.task.a"
