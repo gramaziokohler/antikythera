@@ -5,7 +5,6 @@ from antikythera.models import Task
 from antikythera.models import Dependency
 from antikythera.models import DependencyType
 from antikythera.models import TaskState
-from antikythera.models import load_blueprint_from_file
 
 
 @pytest.fixture
@@ -27,12 +26,12 @@ def sample_blueprint_json():
     }
 
 
-def test_load_blueprint_from_file(tmp_path, sample_blueprint_json):
+def test_blueprint_from_file(tmp_path, sample_blueprint_json):
     blueprint_file = tmp_path / "blueprint.json"
     with open(blueprint_file, "w") as f:
         json.dump(sample_blueprint_json, f)
 
-    blueprint = load_blueprint_from_file(str(blueprint_file))
+    blueprint = Blueprint.from_file(str(blueprint_file))
 
     assert isinstance(blueprint, Blueprint)
     assert blueprint.id == "test-proc-1"
@@ -45,7 +44,7 @@ def test_task_parsing(tmp_path, sample_blueprint_json):
     with open(blueprint_file, "w") as f:
         json.dump(sample_blueprint_json, f)
 
-    blueprint = load_blueprint_from_file(str(blueprint_file))
+    blueprint = Blueprint.from_file(str(blueprint_file))
 
     task_a = next(t for t in blueprint.tasks if t.id == "TASK_A")
     task_b = next(t for t in blueprint.tasks if t.id == "TASK_B")

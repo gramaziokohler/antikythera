@@ -29,19 +29,25 @@ def main():
     orchestrator.start()
 
     t0 = time.time()
-    diagram = orchestrator.scheduler.to_mermaid_diagram()
 
-    while True:
-        diagram = orchestrator.scheduler.to_mermaid_diagram()
-        lines = len(diagram.split("\n")) - 1
-        sys.stdout.write(diagram)
-        sys.stdout.write(f"\033[{lines}A")
-        sys.stdout.write("\r")
-        sys.stdout.flush()
-        time.sleep(1)
+    try:
+        while True:
+            diagram = orchestrator.scheduler.to_mermaid_diagram()
+            lines = len(diagram.split("\n")) - 1
 
-        if time.time() - t0 > 30:
-            break
+            # Move cursor up, clear lines, and print diagram
+            sys.stdout.write(f"\033[{lines}A")
+            sys.stdout.write("\r")
+            sys.stdout.write(diagram)
+            sys.stdout.flush()
+            time.sleep(1)
+
+            # TODO: This should be replaced with a proper exit condition
+            # based on the orchestrator's state.
+            if time.time() - t0 > 30:
+                break
+    except KeyboardInterrupt:
+        print("\nExecution interrupted by user.")
 
     orchestrator.stop()
 

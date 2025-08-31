@@ -63,7 +63,6 @@ class TaskScheduler:
         if not self.graph:
             return
 
-        fixed_duration = "1d"
         result = list()
         result.append(f"gantt\n  title    {title}")
 
@@ -103,7 +102,7 @@ class TaskScheduler:
                 milestone = "milestone, "
                 duration = "0d"
             else:
-                duration = fixed_duration
+                duration = "1d"
             if task.type == "system.start" and dependencies == "":
                 dependencies = datetime.date.today().isoformat()
 
