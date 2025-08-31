@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import argparse
 import time
-from typing import Dict, Callable
+from typing import Callable
+
 from compas_eve import Message
-from compas_eve import Topic
-from compas_eve import Subscriber
 from compas_eve import Publisher
+from compas_eve import Subscriber
+from compas_eve import Topic
 from compas_eve.mqtt import MqttTransport
 
 from antikythera.models import Task
@@ -105,9 +105,9 @@ class AgentLauncher:
 
 def main():
     """Main entry point for running Antikythera agents."""
-    parser = argparse.ArgumentParser(description="Antikythera: Agent launcher.")
+    # parser = argparse.ArgumentParser(description="Antikythera: Agent launcher.")
     # parser.add_argument("agent_type", help="The type of agent to run (e.g., 'system').")
-    args = parser.parse_args()
+    # args = parser.parse_args()
 
     broker_host, broker_port = "127.0.0.1", 1883
     launcher = AgentLauncher(broker_host, broker_port)

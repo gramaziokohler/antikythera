@@ -1,21 +1,20 @@
 # -*- coding: utf-8 -*-
 
-from typing import Any
-from typing import Dict
 
-import time
 import threading
 
-from antikythera.models import BlueprintSession
-from antikythera.models import Task
-from antikythera.models import DependencyType
-from antikythera.models import TaskState
 from compas.datastructures import Graph
 from compas_eve import Message
-from compas_eve import Topic
-from compas_eve import Subscriber
 from compas_eve import Publisher
+from compas_eve import Subscriber
+from compas_eve import Topic
 from compas_eve.mqtt import MqttTransport
+
+from antikythera.models import BlueprintSession
+from antikythera.models import DependencyType
+from antikythera.models import Task
+from antikythera.models import TaskState
+
 
 class TaskScheduler:
     """Task scheduler with support for FS and SS task dependencies."""
@@ -58,6 +57,7 @@ class TaskScheduler:
            Gantt chart representation of the blueprint session.
         """
         import datetime
+
         from compas.topology import breadth_first_traverse
 
         if not self.graph:

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from compas_eve import Message
+from compas_eve import Topic
+
 from antikythera_agents.agent import Agent
-from compas_eve import Message, Topic
-from compas_eve.mqtt import MqttTransport
 
 
 class SystemAgent(Agent):

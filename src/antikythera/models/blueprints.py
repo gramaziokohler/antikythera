@@ -1,12 +1,13 @@
+import json
 from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-import json
 
-from .states import DependencyType, TaskState
+from .states import DependencyType
+from .states import TaskState
 
 
 @dataclass

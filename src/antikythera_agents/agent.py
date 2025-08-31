@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import time
-from compas_eve import Message, Topic
+
+from compas_eve import Message
+from compas_eve import Topic
 from compas_eve.mqtt import MqttTransport
 
 
