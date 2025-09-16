@@ -63,6 +63,8 @@ Agents can run locally or remotely. A minimal agent implementation is a simple c
 
 Agents don't explicitely send or receive MQTT messages. Their lifetime is controlled by an agent manager process that takes care of instantiating and disposing agents as needed, as well as triggering the `run()` method when a notification message arrives. The agent manager is also in charge of handling the termination of the orchestrator and disposing of all agents.
 
+<!-- TODO: Update implementation description of agents: they inherit from a class, and implement one or more "tools". A "tool" is a method decorated with the "@tool(name="tool_name") decorator. It takes task as input and returns a dictionary with the result. The agent type string is effectively the concatenation of agent's type in the @agent decorator + tool name in the @tool decorator. -->
+
 For simplicity, a simple launcher can be used to start one agent manager for each agent type defined in a blueprint.
 
 If a task ends up in a failed state, the orchestrator should be able to resume execution from that point. This topic is not yet addressed but will require tasks to define if they are idempotent, i.e. if they can be run multiple times without side effects, and if they can be retried in case of failure. For the time being, a failed task will cause the orchestrator to stop the session.
