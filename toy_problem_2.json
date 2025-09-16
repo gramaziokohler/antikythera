@@ -1,0 +1,176 @@
+{
+  "version": "1.0",
+  "id": "toy-problem-2",
+  "name": "Toy Problem 2",
+  "description": "Simple robot control with Antikythera",
+
+  "model": {
+    "elements": {
+      "beam_01": {
+        "dtype": "Element",
+        "frame": "Frame"
+      }
+    }
+  },
+  "scene": {
+    "robots": [],
+    "model": {"frame": "Frame"}
+  },
+  
+  "tasks": [
+    {
+      "id": "start",
+      "type": "system.start",
+      "outputs": {
+        "process_start_time": "timestamp"
+      }
+    },
+
+
+    // {
+    //   "type": "fall_demonstrator.gripping.plan_grip_frames",
+    //   "group": "robot11",
+    //   "grip_frame_count": 5,
+    //   "inputs": {
+    //     "element_id": "id"
+    //   },
+    //   "outputs": {
+    //     "grip_frames_in_ecf": "list"
+    //   }
+    // },
+
+    {
+      "type": "compas_fab.gripping.plan_boxy_element_grip",
+      "group": "robot11",
+      "grip_frame_count": 5,
+      "inputs": {
+        "element_id": "id"
+      },
+      "outputs": {
+        "grip_frames_in_ecf": "list",
+        "base_pick_frames_in_gcf": "list"
+      }
+    },
+  
+    // {
+    //   "type": "compas_fab.picking.possible_pick_frames",
+    //   "inputs": {
+    //     "element_id": "id"
+    //   },
+    //   "outputs": {
+    //     "base_pick_frames_in_gcf": "list"
+    //   }
+    // },
+
+
+    {
+      "type": "compas_fab.pickandplace.simple_pick_and_place_plan",
+      "pickup_station_frame": "Frame([0, 0, 0], [1, 0, 0], [0, 1, 0])",
+      "approach_vector": "Vector([0, 0, 1])",
+      "inputs": {
+        "element_id": "id",
+        "grip_frames_in_ecf": "grip_frames_in_ecf",
+        "base_pick_frames_in_gcf": "base_pick_frames_in_gcf"
+      },
+      "outputs": {
+        "approach_pick_frame": "Frame",
+        "pick_frame": "Frame",
+        "approach_place_frame": "Frame",
+        "place_frame": "Frame"
+      }
+    },
+
+
+    {
+      "type": "compas_fab.pickandplace.pick_and_place_ik_and_motion_planning",
+      "group": "robot11",
+      "inputs": {
+        "element_id": "id",
+        "approach_pick_frame": "approach_pick_frame",
+        "pick_frame": "pick_frame",
+        "approach_place_frame": "approach_place_frame",
+        "place_frame": "place_frame"
+      },
+      "outputs": {
+        "trajectory_1": "Trajectory",
+        "trajectory_2": "Trajectory",
+        "trajectory_3": "Trajectory",
+        "trajectory_4": "Trajectory",
+        "trajectory_5": "Trajectory",
+        "trajectory_6": "Trajectory"
+      }
+    },
+
+    // pick_frame_in_wcf = # ..pickup_station_frame + the transform of base_pick/grip_frame
+    // approach_pick_frame_in_wcf = # pick_frame_in_wcf - approach_vector
+    
+    // approach_pick_config = # ik for approach pick frame (from start state)
+    // pick_config = # ik for pick frame (from approach_pick_config)
+
+    // approach_place_config = # ik for approach place frame (from approach_pick_config)
+    // place_config = # ik for place frame (from approach_place_config)
+
+    {
+      "type": "compas_fab.picking.computer_vision_pick_frame",
+      "group": "robot11",
+      "inputs": {
+        "element_id": "id",
+        "grip_frames_in_ecf": "grip_frames_in_ecf"
+      },
+      "outputs": {
+        "pick_frame_in_wcf": "Frame",
+        "grip_frame_in_ecf": "Frame"
+      }
+    },
+
+
+
+    {
+      "type": "compas_fab.pick_and_place_element",
+      "group": "robot11",
+      "inputs": {
+        "element_id": "id",
+        "pick_frame_in_wcf": "pick_frame_in_wcf",
+        "element_frame_at_pickup_time_in_wcf": "frame"
+      }
+    },
+    
+
+    // - WCF
+    //   - MCF
+    //     // ..
+    //     - ECF
+    //       - GRIP_ECF
+    //         - BASE_PICK_GCF
+    
+    
+    
+    {
+      "id": "A1",
+      "type": "compas_fab.plan_trajectory",
+      "inputs": {
+        "robot": "compas_rrc.robot",
+        "trajectory": "compas_rrc.trajectory"
+      },
+      "outputs": {
+        "trajectory": "compas_rrc.trajectory"
+      },
+      "depends_on": [
+        {"id": "start"}
+      ]
+    },
+
+
+
+    {
+      "id": "end",
+      "type": "system.end",
+      "outputs": {
+        "process_end_time": "timestamp"
+      },
+      "depends_on": [
+        {"id": "B1"}
+      ]
+    }
+  ]
+}
