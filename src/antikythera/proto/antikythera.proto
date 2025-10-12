@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package antikythera.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+
+// Task assignment message sent by orchestrator to agents
+message TaskAssignmentMessage {
+  // Required: unique task identifier
+  string id = 1;
+  
+  // Required: task type (determines which agent handles it)
+  string type = 2;
+  
+  // Optional: task inputs from blueprint session data
+  // Uses google.protobuf.Any to support type-safe COMPAS objects via compas_pb
+  map<string, google.protobuf.Any> inputs = 3;
+  
+  // Optional: expected output keys (for validation)
+  repeated string output_keys = 4;
+  
+  // Optional: task-specific parameters (not from session data)
+  // Uses google.protobuf.Any to support type-safe COMPAS objects via compas_pb
+  map<string, google.protobuf.Any> params = 5;
+  
+  // Optional: assignment timestamp
+  google.protobuf.Timestamp timestamp = 6;
+}
+
+// Task completion message sent by agents to orchestrator
+message TaskCompletionMessage {
+  // Required: unique task identifier
+  string id = 1;
+  
+  // Required: current task state
+  TaskState state = 2;
+  
+  // Optional: task outputs (only for succeeded tasks)
+  // Uses google.protobuf.Any to support type-safe COMPAS objects via compas_pb
+  map<string, google.protobuf.Any> outputs = 3;
+  
+  // Optional: error information (required for failed tasks)
+  TaskError error = 4;
+  
+  // Optional: message timestamp
+  google.protobuf.Timestamp timestamp = 5;
+  
+  // Optional: task execution duration in milliseconds
+  uint64 duration_ms = 6;
+}
+
+enum TaskState {
+  TASK_STATE_UNSPECIFIED = 0;
+  TASK_STATE_PENDING = 1;
+  TASK_STATE_READY = 2;
+  TASK_STATE_RUNNING = 3;
+  TASK_STATE_SUCCEEDED = 4;
+  TASK_STATE_FAILED = 5;
+}
+
+message TaskError {
+  string code = 1;
+  string message = 2;
+  // Error details as type-safe COMPAS object via compas_pb
+  google.protobuf.Any details = 3;
+}
