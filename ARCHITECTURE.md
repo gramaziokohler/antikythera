@@ -58,18 +58,44 @@ The orchestrator loads a **blueprint** from a file or an API call, and will begi
 
 An **agent** is an entity that can run a specific type of **task**.
 
-Python agents are subclasses of the `Agent` class, which provides a common interface for all agents, however, it is possible to implement agents in other languages, provided they adhere to the agent communication protocol.
+Python agents are implemented as subclasses of the `Agent` base class and use decorators to define their capabilities, however, it is possible to implement agents in other languages, provided they adhere to the **Agent Communication Protocol**.
 
-Agents can run locally or remotely. A minimal agent implementation is a simple class with a defined method `run(self, task: Task)` for the execution of a single task instance. One instance of an agent can run multiple tasks, so the execution of `run()` should be thread-safe.
-
-Agents don't explicitely send or receive MQTT messages. Their lifetime is controlled by an agent manager process that takes care of instantiating and disposing agents as needed, as well as triggering the `run()` method when a notification message arrives. The agent manager is also in charge of handling the termination of the orchestrator and disposing of all agents.
-
-
-<!-- TODO: Update implementation description of agents: they inherit from a class, and implement one or more "tools". A "tool" is a method decorated with the "@tool(name="tool_name") decorator. It takes a TaskAssignmentMessage as input and returns a TaskCompletionMessage with the result. The agent type string is effectively the concatenation of agent's type in the @agent decorator + tool name in the @tool decorator. -->
+Agents can run locally or remotely. Agents don't explicitely send or receive MQTT messages. Their lifetime is controlled by an agent manager process that takes care of instantiating and disposing agents as needed, as well as triggering task execution. The agent manager is also in charge of handling the termination of the orchestrator and disposing of all agents.
 
 For simplicity, a simple launcher can be used to start one agent manager for each agent type defined in a blueprint.
 
-If a task ends up in a failed state, the orchestrator should be able to resume execution from that point. This topic is not yet addressed but will require tasks to define if they are idempotent, i.e. if they can be run multiple times without side effects, and if they can be retried in case of failure. For the time being, a failed task will cause the orchestrator to stop the session.
+#### Python Agents
+
+A base class for Python agents is provided to simplify development. Agents are registered used a class decorator, and their capabilities (tools) are defined using method decorators. Below is an example of a simple agent that can handle two types of tasks: `system.start` and `system.sleep`.
+
+```python
+from antikythera_agents import Agent, agent, tool
+from antikythera.models import Task
+
+@agent(type="system")
+class SystemAgent(Agent):
+    def __init__(self):
+        super().__init__()
+        self.start_time = time.time()
+    
+    def dispose(self):
+        super().dispose()
+    
+    @tool(name="start")
+    def start_process(self, task: Task) -> dict:
+        # ...
+        return {"process_start_time": time.time()}
+    
+    @tool(name="sleep")
+    def sleep_process(self, task: Task) -> dict:
+        duration = task.params.get("duration", 1)
+        time.sleep(duration)
+        return {"slept_duration": duration}
+```
+
+#### Error Handling and Recovery
+
+If a task ends up in a failed state, the orchestrator should be able to resume execution from that point. This topic is not yet addressed but will require tasks to define retry policies and idempotency, i.e. if a task can be run multiple times without side effects, and if they can be retried in case of failure. For the time being, a failed task will cause the orchestrator to stop the session.
 
 Initially, only very simple agents will be implemented to execute toy problems.
 

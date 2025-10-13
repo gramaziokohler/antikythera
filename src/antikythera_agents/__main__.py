@@ -1,23 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import sys
 import threading
 import time
-from typing import Callable
-
-
-class Colors:
-    """ANSI color codes for terminal output."""
-    HEADER = "\033[95m"
-    OKBLUE = "\033[94m"
-    OKCYAN = "\033[96m"
-    OKGREEN = "\033[92m"
-    WARNING = "\033[93m"
-    FAIL = "\033[91m"
-    ENDC = "\033[0m"
-    BOLD = "\033[1m"
-    UNDERLINE = "\033[4m"
 
 from compas_eve import Message
 from compas_eve import Publisher
@@ -26,79 +11,11 @@ from compas_eve import Topic
 from compas_eve.mqtt import MqttTransport
 
 from antikythera.models import Task
+from antikythera_agents.cli import Colors
 
-
-# @agent(type="system.start")
-class Agent:
-    """An agent for handling system-level tasks."""
-    # pre_state: pending
-    # post_state: ready | failed
-    def __init__(self):
-        pass
-
-    # pre_state: running
-    # post_state: succeeded | failed
-    def run(self, task: Task) -> dict:
-        pass
-        # print("System start agent started.")
-        # return {"result": "success"}
-        
-    # pre_state: succeeded | failed
-    # post_state: succeeded | failed
-    def dispose(self):
-        pass
-
-class AgentManager:
-    def __init__(self, callback: Callable[[Task], dict]):
-        self.callback = callback
-
-
-def system_start(task: Task) -> dict:
-    print(f"{Colors.OKBLUE}🏃 [{task.id}][{task.type}] Starting...{Colors.ENDC}")
-    time.sleep(1)
-    print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Finished.{Colors.ENDC}")
-    return {"process_start_time": time.time()}
-
-
-def system_end(task: Task) -> dict:
-    print(f"{Colors.OKBLUE}🏃 [{task.id}][{task.type}] Starting...{Colors.ENDC}")
-    time.sleep(1)
-    print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Finished.{Colors.ENDC}")
-    return {"process_end_time": time.time()}
-
-
-def system_sleep(task: Task) -> dict:
-    duration = task.params.get("duration", 1)
-    print(f"{Colors.OKBLUE}😴 [{task.id}][{task.type}] Sleeping for {duration}s...{Colors.ENDC}")
-    time.sleep(duration)
-    print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Finished sleeping.{Colors.ENDC}")
-    return None
-
-
-def user_interaction_user_input(task: Task) -> dict:
-    print(f"{Colors.HEADER}✍️ [{task.id}][{task.type}] Awaiting user input...{Colors.ENDC}")
-    result = {}
-    for key in task.outputs:
-        result[key] = input(f"    [{task.id}][{task.type}] > Enter {key}: ")
-    print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Input received.{Colors.ENDC}")
-    return result
-
-
-def user_interaction_user_output(task: Task) -> dict:
-    print(f"{Colors.OKCYAN}💬 [{task.id}][{task.type}] Displaying output:{Colors.ENDC}")
-    for key, value in task.inputs.items():
-        print(f"    [{task.id}][{task.type}] > {key}: {value}")
-    print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Finished displaying output.{Colors.ENDC}")
-    return None
-
-
-TASK_HANDLERS = {
-    "system.start": system_start,
-    "system.end": system_end,
-    "system.sleep": system_sleep,
-    "user_interaction.user_input": user_interaction_user_input,
-    "user_interaction.user_output": user_interaction_user_output,
-}
+# NOTE: For now, import agent implementations to register them, later should be properly discovered as plugins
+from antikythera_agents.system import SystemAgent
+from antikythera_agents.user_interaction import UserInteractionAgent
 
 
 class AgentLauncher:
@@ -108,6 +25,9 @@ class AgentLauncher:
         self.transport = MqttTransport(host=broker_host, port=broker_port)
         self.task_start_subscriber = Subscriber(Topic("antikythera/task/start"), self.on_task_start, transport=self.transport)
         self.task_completion_publisher = Publisher(Topic("antikythera/task/completed"), transport=self.transport)
+
+        self.agents = {}
+        self._initialize_agents()
 
     def start(self):
         self.task_start_subscriber.subscribe()
@@ -124,6 +44,26 @@ class AgentLauncher:
 
         for thread in active_threads:
             thread.join()
+
+        # Dispose of all agents
+        for agent in self.agents.values():
+            try:
+                agent.dispose()
+            except Exception as e:
+                print(f"Error disposing agent: {e}")
+
+    def _initialize_agents(self):
+        from antikythera_agents.decorators import list_registered_agents
+
+        registered_agents = list_registered_agents()
+        for agent_type, agent_class in registered_agents.items():
+            try:
+                self.agents[agent_type] = agent_class()
+                print(f"Initialized {agent_class.__name__} for type '{agent_type}' with {len(self.agents[agent_type].list_tools())} tools.")
+            except Exception as e:
+                print(f"Failed to initialize agent {agent_class.__name__}: {e}")
+        
+        print(f"Total agents initialized: {len(self.agents)}")
 
     def on_task_start(self, message: Message) -> None:
         task = Task(
@@ -147,19 +87,21 @@ class AgentLauncher:
                 self.threads.remove(threading.current_thread())
 
     def _execute_task(self, task: Task) -> None:
-        handler = TASK_HANDLERS.get(task.type)
-        if not handler:
-            print(f"{Colors.WARNING}⚠️  [WARNING] No handler for task type: {task.type}{Colors.ENDC}")
+        agent_type = task.type.split(".")[0] if "." in task.type else task.type
+        agent = self.agents.get(agent_type)
+
+        if not agent:
+            print(f"{Colors.WARNING}⚠️  [WARNING] No agent found for task type: {task.type}{Colors.ENDC}")
             return
 
         try:
-            outputs = handler(task)
+            outputs = agent.execute_task(task)
             state = "succeeded"
         except Exception as e:
-            print(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Error: {e}{Colors.ENDC}")
+            print(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Agent Error: {e}{Colors.ENDC}")
             state = "failed"
             outputs = {"exception": str(e)}
-        
+
         msg = Message({"id": task.id, "state": state, "outputs": outputs})
         self.task_completion_publisher.publish(msg)
 
