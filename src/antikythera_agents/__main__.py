@@ -17,7 +17,6 @@ from antikythera_agents.cli import Colors
 # NOTE: For now, import agent implementations to register them, later should be properly discovered as plugins
 from antikythera_agents.user_interaction import UserInteractionAgent
 from antikythera_agents.system import SystemAgent
-from antikythera_agents.demo import FallDemonstratorAgent
 
 
 class AgentLauncher:
