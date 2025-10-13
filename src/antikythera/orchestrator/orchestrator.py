@@ -182,9 +182,9 @@ class Orchestrator:
         task = self.graph.node[task_id]["task"]
 
         # TODO: Handle task failure properly
-        if message["state"] == "succeeded":
+        if message["state"] == TaskState.SUCCEEDED.value:
             task.state = TaskState.SUCCEEDED
-        elif message["state"] == "failed":
+        elif message["state"] == TaskState.FAILED.value:
             task.state = TaskState.FAILED
         else:
             raise ValueError(f"Invalid task state: {message['state']}")

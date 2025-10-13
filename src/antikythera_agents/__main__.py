@@ -11,6 +11,7 @@ from compas_eve import Topic
 from compas_eve.mqtt import MqttTransport
 
 from antikythera.models import Task
+from antikythera.models import TaskState
 from antikythera_agents.cli import Colors
 
 # NOTE: For now, import agent implementations to register them, later should be properly discovered as plugins
@@ -96,10 +97,10 @@ class AgentLauncher:
 
         try:
             outputs = agent.execute_task(task)
-            state = "succeeded"
+            state = TaskState.SUCCEEDED.value
         except Exception as e:
             print(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Agent Error: {e}{Colors.ENDC}")
-            state = "failed"
+            state = TaskState.FAILED.value
             outputs = {"exception": str(e)}
 
         msg = Message({"id": task.id, "state": state, "outputs": outputs})

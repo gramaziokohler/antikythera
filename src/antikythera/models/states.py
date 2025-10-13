@@ -15,8 +15,9 @@ class DependencyType(Enum):
 class TaskState(Enum):
     """Enumeration of possible task states."""
 
-    PENDING = "pending"
-    READY = "ready"
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
+    UNSPECIFIED = 0  # TASK_STATE_UNSPECIFIED
+    PENDING = 1      # TASK_STATE_PENDING  
+    READY = 2        # TASK_STATE_READY
+    RUNNING = 3      # TASK_STATE_RUNNING
+    SUCCEEDED = 4    # TASK_STATE_SUCCEEDED
+    FAILED = 5       # TASK_STATE_FAILED
