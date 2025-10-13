@@ -15,8 +15,9 @@ from antikythera.models import TaskState
 from antikythera_agents.cli import Colors
 
 # NOTE: For now, import agent implementations to register them, later should be properly discovered as plugins
-from antikythera_agents.system import SystemAgent
 from antikythera_agents.user_interaction import UserInteractionAgent
+from antikythera_agents.system import SystemAgent
+from antikythera_agents.demo import FallDemonstratorAgent
 
 
 class AgentLauncher:
@@ -58,12 +59,9 @@ class AgentLauncher:
 
         registered_agents = list_registered_agents()
         for agent_type, agent_class in registered_agents.items():
-            try:
-                self.agents[agent_type] = agent_class()
-                print(f"Initialized {agent_class.__name__} for type '{agent_type}' with {len(self.agents[agent_type].list_tools())} tools.")
-            except Exception as e:
-                print(f"Failed to initialize agent {agent_class.__name__}: {e}")
-        
+            self.agents[agent_type] = agent_class()
+            print(f"Initialized {agent_class.__name__} for type '{agent_type}' with {len(self.agents[agent_type].list_tools())} tools.")
+
         print(f"Total agents initialized: {len(self.agents)}")
 
     def on_task_start(self, message: Message) -> None:

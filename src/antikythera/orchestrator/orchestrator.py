@@ -18,6 +18,7 @@ from antikythera.models import TaskState
 
 class TaskScheduler:
     """Task scheduler with support for FS and SS task dependencies."""
+
     def __init__(self, session: BlueprintSession, graph: Graph) -> None:
         self.session = session
         self.graph = graph
@@ -44,7 +45,6 @@ class TaskScheduler:
                 pending_tasks.append(task)
 
         return pending_tasks
-
 
     def to_mermaid_diagram(self, title="Blueprint") -> str:
         """Generate a mermaid-syntax diagram representation of the blueprint session.
@@ -96,7 +96,7 @@ class TaskScheduler:
                 dependencies = "after " + " ".join(dependencies_list)
             else:
                 dependencies = ""
-            
+
             milestone = ""
             if task.type in ("system.start", "system.end"):
                 milestone = "milestone, "
@@ -175,7 +175,7 @@ class Orchestrator:
             except Exception as e:
                 print(f"Failed to start task {task.id}: {e}")
                 task.state = TaskState.FAILED
-    
+
     def on_task_completed(self, message: Message) -> None:
         """Handles incoming task completion messages."""
         task_id = message["id"]
@@ -194,7 +194,7 @@ class Orchestrator:
             self.session_data.update(task.outputs)
         else:
             task.outputs = {}
-    
+
         # Ready to schedule new tasks
         self._schedule_tasks()
 

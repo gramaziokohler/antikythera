@@ -112,7 +112,7 @@ class Blueprint:
 @dataclass
 class BlueprintSession:
     """Represents a session of the execution of a blueprint.
-    
+
     Attributes
     ----------
     bsid : str
@@ -120,6 +120,7 @@ class BlueprintSession:
     blueprint : Blueprint
         The blueprint.
     """
+
     bsid: str
     blueprint: Blueprint
 
@@ -134,8 +135,8 @@ def _parse_task(task_def: Dict[str, Any]) -> Task:
     dependencies_defs = task_def.get("depends_on", [])
     dependencies = []
     for dep_data in dependencies_defs:
-        if 'type' in dep_data:
-            dep_data['type'] = DependencyType(dep_data['type'])
+        if "type" in dep_data:
+            dep_data["type"] = DependencyType(dep_data["type"])
         dependencies.append(Dependency(**dep_data))
 
     return Task(

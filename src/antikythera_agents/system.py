@@ -26,7 +26,6 @@ class SystemAgent(Agent):
         print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Finished.{Colors.ENDC}")
         return {"process_end_time": time.time()}
 
-
     @tool(name="sleep")
     def sleep_process(self, task: Task) -> Dict[str, Any]:
         duration = task.params.get("duration", 1)

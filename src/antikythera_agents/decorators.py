@@ -103,6 +103,9 @@ def get_agent_tools(agent_class: type) -> Dict[str, Callable]:
 
     # Scan the class for tool methods
     for attr_name in dir(agent_class):
+        if attr_name.startswith("__"):
+            continue
+
         attr = getattr(agent_class, attr_name)
         if hasattr(attr, "_is_tool") and attr._is_tool:
             tool_name = getattr(attr, "_tool_name", attr_name)
