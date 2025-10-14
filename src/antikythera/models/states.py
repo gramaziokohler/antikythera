@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from dataclasses import dataclass
 from dataclasses import field
 from datetime import datetime
@@ -48,6 +49,14 @@ class TaskAssignmentMessage:
     params: Dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.now)
 
+    @property
+    def data(self) -> Dict[str, Any]:
+        """Get this message as a dictionary.
+
+        NOTE: this is to make this compatible with `compas_eve.Message`
+        """
+        return asdict(self)
+
 
 @dataclass
 class TaskCompletionMessage:
@@ -59,3 +68,11 @@ class TaskCompletionMessage:
     error: TaskError | None = None
     timestamp: datetime = field(default_factory=datetime.now)
     duration_ms: int | None = None
+
+    @property
+    def data(self) -> Dict[str, Any]:
+        """Get this message as a dictionary.
+
+        NOTE: this is to make this compatible with `compas_eve.Message`
+        """
+        return asdict(self)
