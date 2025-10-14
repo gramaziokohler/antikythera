@@ -1,4 +1,4 @@
-from .states import TaskState, DependencyType
+from .states import TaskState, DependencyType, TaskAssignmentMessage, TaskCompletionMessage
 from .blueprints import Blueprint, Task, Dependency, BlueprintSession
 
 __all__ = [
@@ -8,4 +8,6 @@ __all__ = [
     "Task",
     "Dependency",
     "BlueprintSession",
+    "TaskAssignmentMessage",
+    "TaskCompletionMessage",
 ]
