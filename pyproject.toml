@@ -31,6 +31,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
+[project.entry-points.'compas_pb.plugins']
+serializers = 'antikythera.models.conversions'
+
 [project.urls]
 Homepage = "https://gramaziokohler.github.io/antikythera"
 Documentation = "https://gramaziokohler.github.io/antikythera"
