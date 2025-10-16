@@ -18,6 +18,10 @@ jobs:
         python: ["3.12"]
 
     steps:
+      - name: Generate protobuf files
+        run: |
+          invoke generate-proto-classes -t python
+
       - uses: compas-dev/compas-actions.build@v4
         with:
           python: ${{ matrix.python }}
