@@ -18,8 +18,12 @@ jobs:
         python: ["3.12"]
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Generate protobuf files
         run: |
+          pip install -e .[dev]
           invoke generate-proto-classes -t python
 
       - uses: compas-dev/compas-actions.build@v4
