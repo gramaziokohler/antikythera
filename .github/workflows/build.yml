@@ -14,7 +14,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest]
+        os: [windows-latest, macos-latest]
         python: ["3.12"]
 
     steps:
@@ -26,8 +26,7 @@ jobs:
           pip install -e .[dev]
           invoke generate-proto-classes -t python
 
-      - uses: compas-dev/compas-actions.build@v4
-        with:
-          python: ${{ matrix.python }}
-          invoke_lint: true
-          invoke_test: true
+      - name: Run tests
+        run: |
+          invoke lint
+          invoke test
