@@ -1,4 +1,4 @@
 compas >= 2
 compas_eve
-compas_pb
+compas_pb >= 1.0.1
 immudb-py
