@@ -1,4 +1,4 @@
-from .states import TaskState, DependencyType, TaskAssignmentMessage, TaskCompletionMessage, TaskError
+from .tasks import TaskState, DependencyType, TaskAssignmentMessage, TaskCompletionMessage, TaskError
 from .blueprints import Blueprint, Task, Dependency, BlueprintSession
 
 __all__ = [

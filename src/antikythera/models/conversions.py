@@ -5,10 +5,10 @@ from compas_pb.registry import pb_serializer
 
 from antikythera.proto import antikythera_pb2
 
-from .states import TaskAssignmentMessage
-from .states import TaskCompletionMessage
-from .states import TaskError
-from .states import TaskState
+from .tasks import TaskAssignmentMessage
+from .tasks import TaskCompletionMessage
+from .tasks import TaskError
+from .tasks import TaskState
 
 
 @pb_serializer(TaskAssignmentMessage)
