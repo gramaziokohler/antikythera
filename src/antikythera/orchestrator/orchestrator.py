@@ -169,6 +169,7 @@ class Orchestrator:
                 inputs = {}
                 for key in task.inputs:
                     inputs[key] = self.session_data.get(key)
+                # TODO: Replace message with TaskStartMessage once compas_eve supports protobuf
                 self.task_start_publisher.publish(Message({"id": task.id, "type": task.type, "inputs": inputs, "outputs": task.outputs, "params": task.params}))
                 # TODO: Verify if they actually started
                 task.state = TaskState.RUNNING

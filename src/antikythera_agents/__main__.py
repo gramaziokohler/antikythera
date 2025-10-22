@@ -15,9 +15,9 @@ from antikythera.models import TaskState
 from antikythera_agents.cli import Colors
 
 # NOTE: For now, import agent implementations to register them, later should be properly discovered as plugins
-from antikythera_agents.user_interaction import UserInteractionAgent
-from antikythera_agents.system import SystemAgent
 from antikythera_agents.demo import FallDemonstratorAgent
+from antikythera_agents.system import SystemAgent
+from antikythera_agents.user_interaction import UserInteractionAgent
 
 
 class AgentLauncher:
@@ -101,6 +101,7 @@ class AgentLauncher:
             state = TaskState.FAILED.value
             outputs = {"exception": str(e)}
 
+        # TODO: Replace Message with TaskCompletionMessage once compas_eve supports protobuf
         msg = Message({"id": task.id, "state": state, "outputs": outputs})
         self.task_completion_publisher.publish(msg)
 
