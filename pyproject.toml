@@ -31,6 +31,11 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
+[project.entry-points.'antikythera.agents']
+system = 'antikythera_agents.system'
+interaction = 'antikythera_agents.user_interaction'
+
+
 [project.urls]
 Homepage = "https://gramaziokohler.github.io/antikythera"
 Documentation = "https://gramaziokohler.github.io/antikythera"
