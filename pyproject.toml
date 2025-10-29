@@ -31,6 +31,10 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
+[project.entry-points.'antikythera.agents']
+system = 'antikythera_agents.system'
+interaction = 'antikythera_agents.user_interaction'
+
 [project.scripts]
 antikythera = "antikythera.__main__:main"
 antikythera-agents = "antikythera_agents.__main__:main"

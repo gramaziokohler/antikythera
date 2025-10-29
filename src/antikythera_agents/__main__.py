@@ -15,8 +15,11 @@ from antikythera.models import TaskState
 from antikythera_agents.cli import Colors
 from antikythera_agents.system import SystemAgent
 
-# NOTE: For now, import agent implementations to register them, later should be properly discovered as plugins
-from antikythera_agents.user_interaction import UserInteractionAgent
+
+def _ensure_agents():
+    from antikythera.plugin import PLUGIN_MANAGER
+
+    PLUGIN_MANAGER.discover_plugins()
 
 
 class AgentLauncher:
@@ -55,6 +58,8 @@ class AgentLauncher:
 
     def _initialize_agents(self):
         from antikythera_agents.decorators import list_registered_agents
+
+        _ensure_agents()
 
         registered_agents = list_registered_agents()
         for agent_type, agent_class in registered_agents.items():
