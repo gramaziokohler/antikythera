@@ -6,6 +6,8 @@ from compas_invocations2 import docs
 from compas_invocations2 import style
 from compas_invocations2 import tests
 from invoke import Collection
+
+import compas_pb
 from compas_pb.invocations import generate_proto_classes
 
 ns = Collection(
@@ -27,7 +29,7 @@ ns.configure(
     {
         "base_folder": os.path.dirname(__file__),
         "proto_folder": Path("./src") / "antikythera" / "proto",
-        "proto_include_paths": [Path("./src") / "antikythera"/"proto"],
+        "proto_include_paths": [Path("./src") / "antikythera" / "proto", compas_pb.PROTOBUF_DEFS],
         "proto_out_folder": Path("./src") / "antikythera" / "proto",
     }
 )

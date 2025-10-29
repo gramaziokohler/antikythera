@@ -13,6 +13,7 @@ from compas_eve.mqtt import MqttTransport
 from antikythera.models import Task
 from antikythera.models import TaskState
 from antikythera_agents.cli import Colors
+from antikythera_agents.system import SystemAgent
 
 
 def _ensure_agents():
@@ -104,6 +105,7 @@ class AgentLauncher:
             state = TaskState.FAILED.value
             outputs = {"exception": str(e)}
 
+        # TODO: Replace Message with TaskCompletionMessage once compas_eve supports protobuf
         msg = Message({"id": task.id, "state": state, "outputs": outputs})
         self.task_completion_publisher.publish(msg)
 
@@ -128,8 +130,8 @@ def main():
         launcher.stop()
         print("Agents stopped.")
 
+    print("Bye!")
+
 
 if __name__ == "__main__":
     main()
-
-    print("Bye!")
