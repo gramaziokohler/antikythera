@@ -6,8 +6,8 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-from .states import DependencyType
-from .states import TaskState
+from .tasks import DependencyType
+from .tasks import TaskState
 
 
 @dataclass
