@@ -14,12 +14,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest]
+        os: [windows-latest, macos-latest]
         python: ["3.12"]
 
     steps:
-      - uses: compas-dev/compas-actions.build@v4
-        with:
-          python: ${{ matrix.python }}
-          invoke_lint: true
-          invoke_test: true
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate protobuf files
+        run: |
+          pip install -e .[dev]
+          invoke generate-proto-classes -t python
+
+      - name: Run tests
+        run: |
+          invoke lint
+          invoke test

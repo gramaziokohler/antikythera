@@ -35,6 +35,9 @@ classifiers = [
 antikythera = "antikythera.__main__:main"
 antikythera-agents = "antikythera_agents.__main__:main"
 
+[project.entry-points.'compas_pb.plugins']
+serializers = 'antikythera.models.conversions'
+
 [project.urls]
 Homepage = "https://gramaziokohler.github.io/antikythera"
 Documentation = "https://gramaziokohler.github.io/antikythera"

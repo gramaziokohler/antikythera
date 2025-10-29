@@ -213,21 +213,22 @@ The complete protobuf schema is maintained in [`src/antikythera/proto/antikyther
 package antikythera.v1;
 
 message TaskAssignmentMessage {
-  string id = 1;                                      // Task identifier
-  string type = 2;                                    // Task type
-  map<string, google.protobuf.Any> inputs = 3;       // Session data inputs
-  repeated string output_keys = 4;                    // Expected outputs
-  map<string, google.protobuf.Any> params = 5;       // Task parameters
-  google.protobuf.Timestamp timestamp = 6;           // Assignment time
+  string id = 1;                                    // Required: unique task identifier
+  string type = 2;                                  // Required: task type (determines which agent handles it)
+  map<string, compas_pb.data.AnyData> inputs = 3;   // Optional: task inputs from blueprint session data
+  repeated string output_keys = 4;                  // Optional: expected output keys (for validation)
+  map<string, compas_pb.data.AnyData> params = 5;  // Optional: task-specific parameters (not from session data)
+  google.protobuf.Timestamp timestamp = 6;          // Optional: assignment timestamp
 }
 
 message TaskCompletionMessage {
-  string id = 1;                                      // Task identifier
-  TaskState state = 2;                                // Completion state
-  map<string, google.protobuf.Any> outputs = 3;      // Task results
-  TaskError error = 4;                                // Error details (if failed)
-  google.protobuf.Timestamp timestamp = 5;           // Completion time
-  uint64 duration_ms = 6;                             // Execution duration
+  
+  string id = 1;                                    // Required: unique task identifier
+  TaskState state = 2;                              // Required: current task state
+  map<string, compas_pb.data.AnyData> outputs = 3; // Optional: task outputs (only for succeeded tasks)
+  TaskError error = 4;                              // Optional: error information (required for failed tasks)
+  google.protobuf.Timestamp timestamp = 5;          // Optional: message timestamp
+  uint64 duration_ms = 6;                            // Optional: task execution duration in milliseconds
 }
 
 enum TaskState {

@@ -100,6 +100,7 @@ class AgentLauncher:
             state = TaskState.FAILED.value
             outputs = {"exception": str(e)}
 
+        # TODO: Replace Message with TaskCompletionMessage once compas_eve supports protobuf
         msg = Message({"id": task.id, "state": state, "outputs": outputs})
         self.task_completion_publisher.publish(msg)
 
