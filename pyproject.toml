@@ -31,6 +31,10 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
+[project.scripts]
+antikythera = "antikythera.__main__:main"
+antikythera-agents = "antikythera_agents.__main__:main"
+
 [project.entry-points.'compas_pb.plugins']
 serializers = 'antikythera.models.conversions'
 
