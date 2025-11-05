@@ -1,0 +1,39 @@
+{
+  "version": "1.0",
+  "id": "TP4",
+  "name": "Toy Problem 4",
+  "description": "Nested blueprints using composite",
+  "tasks": [
+    {
+      "id": "start",
+      "type": "system.start",
+      "outputs": {
+        "process_start_time": "timestamp"
+      }
+    },
+
+    {
+      "id": "A1",
+      "type": "system.composite",
+      "description": "Call nested blueprint",
+      "blueprint": {
+        "static": "toy_problem_4_nested.json"
+      },
+
+      "depends_on": [
+        {"id": "start", "type": "FS"}
+      ]
+    },
+
+    {
+      "id": "end",
+      "type": "system.end",
+      "outputs": {
+        "process_end_time": "timestamp"
+      },
+      "depends_on": [
+        {"id": "A1"}
+      ]
+    }
+  ]
+}

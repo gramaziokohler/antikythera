@@ -119,10 +119,13 @@ class BlueprintSession:
         The ID of the blueprint session.
     blueprint : Blueprint
         The blueprint.
+    nested_blueprints : Dict[str, Blueprint], optional
+        A dictionary of nested blueprints used in this session.
     """
 
     bsid: str
     blueprint: Blueprint
+    nested_blueprints: dict[str, Blueprint] = field(default_factory=dict)
 
 
 def _parse_task(task_def: Dict[str, Any]) -> Task:

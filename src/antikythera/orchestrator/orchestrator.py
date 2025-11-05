@@ -2,6 +2,8 @@
 
 
 import threading
+from dataclasses import dataclass
+from queue import Queue
 
 from compas.datastructures import Graph
 from compas_eve import Message
@@ -10,10 +12,65 @@ from compas_eve import Subscriber
 from compas_eve import Topic
 from compas_eve.mqtt import MqttTransport
 
+from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
+from antikythera.models import Dependency
 from antikythera.models import DependencyType
 from antikythera.models import Task
 from antikythera.models import TaskState
+
+
+def _create_global_id(blueprint_id: str, task: Task) -> str:
+    """Creates a globally unique identifier for a task.
+
+    This is useful when dealing with nested blueprints to avoid ID collisions.
+
+    Parameters
+    ----------
+    blueprint_id : str
+        The ID of the blueprint to which the task belongs.
+    task : Task
+        The task for which to create a global ID.
+
+    Returns
+    -------
+    str
+        The globally unique identifier for the task.
+    """
+    return f"{blueprint_id}.{task.id}"
+
+
+@dataclass
+class PendingTask:
+    """Represents a task that is pending execution.
+
+    Attributes
+    ----------
+    blueprint_id : str
+        The ID of the blueprint to which the task belongs.
+    task : Task
+        The task that is pending execution.
+    """
+    blueprint_id: str
+    task: Task
+
+
+@dataclass
+class ProcessedTask:
+    """Represents a task that has been processed.
+
+    Attributes
+    ----------
+    task_id : str
+        The globally unique ID of the task.
+    blueprint_id : str
+        The ID of the blueprint to which the task belongs.
+    task: Task
+        The task that has been processed.
+    """
+    task_id: str
+    blueprint_id: str
+    task: Task
 
 
 class TaskScheduler:
@@ -22,29 +79,100 @@ class TaskScheduler:
     def __init__(self, session: BlueprintSession, graph: Graph) -> None:
         self.session = session
         self.graph = graph
+        self.queue = Queue()
         self._lock = threading.Lock()
 
-    def get_pending_tasks(self) -> list[Task]:
+    def queue_message(self, message: Message) -> None:
+        self.queue.put(message)
+    
+    def process_queue(self) -> list[ProcessedTask]:
+        processed_tasks = []
+
+        while not self.queue.empty():
+            message = self.queue.get()
+
+            task_id = message["id"]
+            task = self.graph.node[task_id]["task"]
+            blueprint_id = self.graph.node[task_id]["blueprint_id"]
+
+            # TODO: Handle task failure properly
+
+            # if the task has no listed Finish-to-Finish dependencies
+            dependencies = self._get_dependencies_from_graph(blueprint_id, task)
+            if not any(dep.type == DependencyType.FF for dep in dependencies):
+                if message["state"] == TaskState.SUCCEEDED.value:
+                    task.state = TaskState.SUCCEEDED
+                elif message["state"] == TaskState.FAILED.value:
+                    task.state = TaskState.FAILED
+                else:
+                    raise ValueError(f"Invalid task state: {message['state']}")
+            else:
+                # otherwise, ensure that all FF dependencies are satisfied before we mark the task as SUCCEEDED
+                ff_deps = [dep for dep in dependencies if dep.type == DependencyType.FF]
+                any_ff_failed = False
+                all_ff_succeeded = True
+
+                for dep in ff_deps:
+                    dep_task = self.graph.node[dep.id]["task"]
+
+                    # dep_task = self.graph.node[_create_global_id(blueprint_id, dep)]["task"]
+                    if dep_task.state != TaskState.SUCCEEDED:
+                        all_ff_succeeded = False
+                        break
+                if all_ff_succeeded:
+                    if message["state"] == TaskState.SUCCEEDED.value:
+                        task.state = TaskState.SUCCEEDED
+                    elif message["state"] == TaskState.FAILED.value:
+                        task.state = TaskState.FAILED
+                    else:
+                        raise ValueError(f"Invalid task state: {message['state']}")
+
+            if task.outputs:
+                task.outputs = message["outputs"]
+            else:
+                task.outputs = {}
+
+            processed_tasks.append(ProcessedTask(task_id=task_id, blueprint_id=blueprint_id, task=task))
+
+        return processed_tasks
+
+
+    def get_pending_tasks(self) -> list[PendingTask]:
         """Returns a list of tasks that are pending execution whose dependencies are satisfied."""
         pending_tasks = []
-        dependency_preconditions = []
 
-        for task in self.session.blueprint.tasks:
+        for task, blueprint_id in self.graph.nodes_attributes(("task", "blueprint_id")):
             if task.state != TaskState.PENDING:
                 continue
-            for dependency in task.depends_on:
-                dep_task = self.graph.node[dependency.id]["task"]
-                if dependency.type == DependencyType.FS:
+
+            dependencies = self._get_dependencies_from_graph(blueprint_id, task)
+            dependency_preconditions = []
+
+            for dep in dependencies:
+                dep_task = self.graph.node[dep.id]["task"]
+                dependency_type = dep.type
+                
+                if dependency_type == DependencyType.FS:
                     dependency_preconditions.append(dep_task.state == TaskState.SUCCEEDED)
-                elif dependency.type == DependencyType.SS:
+                elif dependency_type == DependencyType.SS:
                     dependency_preconditions.append(dep_task.state in (TaskState.RUNNING, TaskState.SUCCEEDED))
-                else:
-                    raise ValueError(f"Dependency type not yet supported: {dependency.type}")
+                # NOTE: Finish-type dependencies (ie. FF and SF) are implemented in the queue processing stage
 
             if all(dependency_preconditions):
-                pending_tasks.append(task)
+                pending_tasks.append(PendingTask(blueprint_id=blueprint_id, task=task))
 
         return pending_tasks
+
+    def _get_dependencies_from_graph(self, blueprint_id: str, task: Task) -> list[Dependency]:
+        fqn_task_id = _create_global_id(blueprint_id, task)
+        neighbors = self.graph.neighbors_in(fqn_task_id)
+        dependencies = []
+
+        for fqn_dep_task_id in neighbors:
+            dependency_type = self.graph.edge_attribute((fqn_dep_task_id, fqn_task_id), "type")
+            dependencies.append(Dependency(id=fqn_dep_task_id, type=dependency_type))
+
+        return dependencies
 
     def to_mermaid_diagram(self, title="Blueprint") -> str:
         """Generate a mermaid-syntax diagram representation of the blueprint session.
@@ -66,7 +194,7 @@ class TaskScheduler:
         result = list()
         result.append(f"gantt\n  title    {title}")
 
-        def create_label(task: Task):
+        def create_label(blueprint_id: str, task: Task):
             if task.state == TaskState.SUCCEEDED:
                 task_state = "✅"
             elif task.state == TaskState.FAILED:
@@ -79,18 +207,19 @@ class TaskScheduler:
                 task_state = "🏃"
             else:
                 task_state = "?"
-            task_label = f"{task_state} [{task.id}] {task.type}"
+            task_label = f"{task_state} [{_create_global_id(blueprint_id, task)}] {task.type}"
             return task_label
 
         def append_node(previous, current):
             task: Task = self.graph.node[current]["task"]
-            task_label = create_label(task)
+            blueprint_id = self.graph.node[current]["blueprint_id"]
+            task_label = create_label(blueprint_id, task)
 
             dependencies_list = []
 
             for node_in in self.graph.neighbors_in(current):
                 task_in = self.graph.node[node_in]["task"]
-                dependencies_list.append(task_in.id)
+                dependencies_list.append(_create_global_id(blueprint_id, task_in))
 
             if dependencies_list:
                 dependencies = "after " + " ".join(dependencies_list)
@@ -106,7 +235,7 @@ class TaskScheduler:
             if task.type == "system.start" and dependencies == "":
                 dependencies = datetime.date.today().isoformat()
 
-            result.append("  {:40}   : {}{}, {}, {}".format(task_label, milestone, task.id, dependencies, duration))
+            result.append("  {:40}   : {}{}, {}, {}".format(task_label, milestone, _create_global_id(blueprint_id, task), dependencies, duration))
 
         root_node = None
         for node in self.graph.nodes():
@@ -136,6 +265,7 @@ class Orchestrator:
     def __init__(self, session: BlueprintSession, broker_host="127.0.0.1", broker_port=1883) -> None:
         super(Orchestrator, self).__init__()
         self.session: BlueprintSession = session
+        self.composite_to_blueprint_map: dict[str, str] = {}
         self.graph: Graph = None
 
         self.transport = MqttTransport(host=broker_host, port=broker_port)
@@ -145,9 +275,11 @@ class Orchestrator:
         self.task_start_publisher = Publisher(self.task_start, transport=self.transport)
         self.task_completion_subscriber = Subscriber(self.task_completed, self.on_task_completed, transport=self.transport)
         self.task_completion_subscriber.subscribe()
+        # Session data is blueprint-namespaced
         # TODO: This should be replaced with a proper data store
         self.session_data = {}
 
+        self._preprocess_blueprint()
         self._build_graph()
         self.scheduler = TaskScheduler(self.session, self.graph)
 
@@ -163,14 +295,22 @@ class Orchestrator:
         """Schedules tasks for execution."""
         pending_tasks = self.scheduler.get_pending_tasks()
 
-        for task in pending_tasks:
+        for pending_task in pending_tasks:
             try:
+                blueprint_id = pending_task.blueprint_id
+                task = pending_task.task
+
                 task.state = TaskState.PENDING
+
+                # Prepare inputs to pass to the task
                 inputs = {}
                 for key in task.inputs:
-                    inputs[key] = self.session_data.get(key)
+                    inputs[key] = self.session_data.get(blueprint_id, {}).get(key)
+                # If task.type == "system.composite":
+                #  update session_data with inputs of blueprint into nested blueprint session data
+
                 # TODO: Replace message with TaskStartMessage once compas_eve supports protobuf
-                self.task_start_publisher.publish(Message({"id": task.id, "type": task.type, "inputs": inputs, "outputs": task.outputs, "params": task.params}))
+                self.task_start_publisher.publish(Message({"id": _create_global_id(blueprint_id, task), "type": task.type, "inputs": inputs, "outputs": task.outputs, "params": task.params}))
                 # TODO: Verify if they actually started
                 task.state = TaskState.RUNNING
             except Exception as e:
@@ -179,25 +319,39 @@ class Orchestrator:
 
     def on_task_completed(self, message: Message) -> None:
         """Handles incoming task completion messages."""
-        task_id = message["id"]
-        task = self.graph.node[task_id]["task"]
+        self.scheduler.queue_message(message)
+        processed_tasks = self.scheduler.process_queue()
 
-        # TODO: Handle task failure properly
-        if message["state"] == TaskState.SUCCEEDED.value:
-            task.state = TaskState.SUCCEEDED
-        elif message["state"] == TaskState.FAILED.value:
-            task.state = TaskState.FAILED
-        else:
-            raise ValueError(f"Invalid task state: {message['state']}")
+        for processed_task in processed_tasks:
+            blueprint_id = processed_task.blueprint_id
+            
+            if blueprint_id not in self.session_data:
+                self.session_data[blueprint_id] = {}
+            self.session_data[blueprint_id].update(processed_task.task.outputs)
 
-        if task.outputs:
-            task.outputs = message["outputs"]
-            self.session_data.update(task.outputs)
-        else:
-            task.outputs = {}
-
-        # Ready to schedule new tasks
         self._schedule_tasks()
+
+    def _preprocess_blueprint(self) -> None:
+        """Preprocesses the blueprint before execution to expand composite tasks."""
+        blueprint_queue = Queue()
+        blueprint_queue.put(self.session.blueprint)
+
+        while not blueprint_queue.empty():
+            blueprint = blueprint_queue.get()
+
+            for task in blueprint.tasks:
+                if task.type == "system.composite":
+                    nested_blueprint = self._load_nested_blueprint(task)
+                    self.session.nested_blueprints[nested_blueprint.id] = nested_blueprint
+                    blueprint_queue.put(nested_blueprint)
+
+                    fqn_task_id = _create_global_id(blueprint.id, task)
+                    self.composite_to_blueprint_map[fqn_task_id] = nested_blueprint.id
+
+    def _load_nested_blueprint(self, task: Task) -> Blueprint:
+        # TODO: Support dynamic blueprint loading
+        # TODO: Load blueprints from some kind of storage
+        return Blueprint.from_file(task.params["blueprint"]["static"])
 
     def _build_graph(self) -> None:
         """Builds a dependency graph from the loaded blueprint."""
@@ -205,11 +359,46 @@ class Orchestrator:
             return
 
         self.graph = Graph()
-        for task in self.session.blueprint.tasks:
-            self.graph.add_node(task.id, task=task)
 
-        for task in self.session.blueprint.tasks:
-            for dep in task.depends_on:
-                self.graph.add_edge(dep.id, task.id, type=dep.type)
+        all_blueprints = [self.session.blueprint]
+        all_blueprints.extend(list(self.session.nested_blueprints.values()))
+
+        dependencies_to_inject = []
+
+        for blueprint in all_blueprints:
+            for task in blueprint.tasks:
+                fqn_task_id = _create_global_id(blueprint.id, task)
+
+                if fqn_task_id in self.composite_to_blueprint_map:
+                    # 1. Modify `task` to point to nested blueprint's end node as FF
+                    # 2. Modify start task of nested_blueprint, to have an SS dependency on THIS `task`
+                    nested_blueprint_id = self.composite_to_blueprint_map[fqn_task_id]
+                    nested_blueprint = self.session.nested_blueprints[nested_blueprint_id]
+
+                    # Find start/end task of nested blueprint
+                    start_task = None
+                    end_task = None
+                    for t in nested_blueprint.tasks:
+                        if t.type == "system.start":
+                            start_task = t
+                        if t.type == "system.end":
+                            end_task = t
+                        if start_task and end_task:
+                            break
+
+                    fqn_nested_end_task_id = _create_global_id(nested_blueprint_id, end_task)
+                    fqn_nested_start_task_id = _create_global_id(nested_blueprint_id, start_task)
+                    
+                    dependencies_to_inject.append((fqn_task_id, fqn_nested_end_task_id, DependencyType.FF))
+                    dependencies_to_inject.append((fqn_nested_start_task_id, fqn_task_id, DependencyType.SS))
+
+                self.graph.add_node(fqn_task_id, task=task, blueprint_id=blueprint.id)
+
+            for task in blueprint.tasks:
+                for dep in task.depends_on:
+                    self.graph.add_edge(_create_global_id(blueprint.id, dep), _create_global_id(blueprint.id, task), type=dep.type)
+
+            for from_task_id, to_task_id, dep_type in dependencies_to_inject:
+                self.graph.add_edge(to_task_id, from_task_id, type=dep_type)
 
         # NOTE: Perhaps we need to do transitive_reduction here
