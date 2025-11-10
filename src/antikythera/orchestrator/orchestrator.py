@@ -137,18 +137,14 @@ class TaskScheduler:
             # TODO: Handle task failure properly
 
             dependencies = self._get_dependencies_from_graph(blueprint_id, task)
-            if not any(dep.type == DependencyType.FF for dep in dependencies):
-                # task has no FF dependencies, so we can process it right away
+            has_ff_deps = any(dep.type == DependencyType.FF for dep in dependencies)
+            if not has_ff_deps or self._are_ff_deps_fulfilled(dependencies):
+                # task has no FF dependencies, or it has but they are fulfilled => we can process it right away
                 processed_task = self._process_message(message, task, blueprint_id)
                 processed_tasks.append(processed_task)
             else:
-                # task has FF dependencies, check if they are fulfilled
-                if self._are_ff_deps_fulfilled(dependencies):
-                    processed_task = self._process_message(message, task, blueprint_id)
-                    processed_tasks.append(processed_task)
-                else:
-                    # still waiting on FF dependencies, put back to the stack for later processing
-                    put_back_to_queue.append(message)
+                # still waiting on FF dependencies, put back to the stack for later processing
+                put_back_to_queue.append(message)
 
         for message in put_back_to_queue:
             self.queue.put(message)
