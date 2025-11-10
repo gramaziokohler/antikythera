@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
-
+import logging
 import threading
 from dataclasses import dataclass
+from queue import LifoQueue
 from queue import Queue
 
 from compas.datastructures import Graph
@@ -18,6 +19,8 @@ from antikythera.models import Dependency
 from antikythera.models import DependencyType
 from antikythera.models import Task
 from antikythera.models import TaskState
+
+LOG = logging.getLogger(__name__)
 
 
 def _create_global_id(blueprint_id: str, task: Task) -> str:
@@ -51,6 +54,7 @@ class PendingTask:
     task : Task
         The task that is pending execution.
     """
+
     blueprint_id: str
     task: Task
 
@@ -68,6 +72,7 @@ class ProcessedTask:
     task: Task
         The task that has been processed.
     """
+
     task_id: str
     blueprint_id: str
     task: Task
@@ -79,14 +84,48 @@ class TaskScheduler:
     def __init__(self, session: BlueprintSession, graph: Graph) -> None:
         self.session = session
         self.graph = graph
-        self.queue = Queue()
+        self.queue = LifoQueue()
         self._lock = threading.Lock()
 
     def queue_message(self, message: Message) -> None:
         self.queue.put(message)
-    
+
+    def _are_ff_deps_fulfilled(self, dependencies) -> bool:
+        # Check if all Finish-to-Finish dependencies are fulfilled
+        # TODO: handle failed dependencies, should probably result in task failure
+        ff_deps = [dep for dep in dependencies if dep.type == DependencyType.FF]
+
+        all_ff_succeeded = True
+        for dep in ff_deps:
+            dep_task = self.graph.node[dep.id]["task"]
+
+            if dep_task.state != TaskState.SUCCEEDED:
+                all_ff_succeeded = False
+                break
+        return all_ff_succeeded
+
+    def _process_message(self, message: Message, task: Task, blueprint_id: str) -> None:
+        # THIS METHOD MUTATES `task`
+        # updated the task state according to the reported state in the message
+        # create and return a ProcessedTask object
+        if message["state"] == TaskState.SUCCEEDED.value:
+            task.state = TaskState.SUCCEEDED
+        elif message["state"] == TaskState.FAILED.value:
+            task.state = TaskState.FAILED
+        else:
+            raise ValueError(f"Invalid task state: {message['state']}")
+
+        if task.outputs:
+            task.outputs = message["outputs"]
+        else:
+            task.outputs = {}
+        return ProcessedTask(task_id=task.id, blueprint_id=blueprint_id, task=task)
+
     def process_queue(self) -> list[ProcessedTask]:
+        LOG.debug(f"processing queue: {[m.data['id'] for m in list(self.queue.queue)]}")
+
         processed_tasks = []
+        put_back_to_queue = []
 
         while not self.queue.empty():
             message = self.queue.get()
@@ -97,45 +136,24 @@ class TaskScheduler:
 
             # TODO: Handle task failure properly
 
-            # if the task has no listed Finish-to-Finish dependencies
             dependencies = self._get_dependencies_from_graph(blueprint_id, task)
             if not any(dep.type == DependencyType.FF for dep in dependencies):
-                if message["state"] == TaskState.SUCCEEDED.value:
-                    task.state = TaskState.SUCCEEDED
-                elif message["state"] == TaskState.FAILED.value:
-                    task.state = TaskState.FAILED
+                # task has no FF dependencies, so we can process it right away
+                processed_task = self._process_message(message, task, blueprint_id)
+                processed_tasks.append(processed_task)
+            else:
+                # task has FF dependencies, check if they are fulfilled
+                if self._are_ff_deps_fulfilled(dependencies):
+                    processed_task = self._process_message(message, task, blueprint_id)
+                    processed_tasks.append(processed_task)
                 else:
-                    raise ValueError(f"Invalid task state: {message['state']}")
-            else:
-                # otherwise, ensure that all FF dependencies are satisfied before we mark the task as SUCCEEDED
-                ff_deps = [dep for dep in dependencies if dep.type == DependencyType.FF]
-                any_ff_failed = False
-                all_ff_succeeded = True
+                    # still waiting on FF dependencies, put back to the stack for later processing
+                    put_back_to_queue.append(message)
 
-                for dep in ff_deps:
-                    dep_task = self.graph.node[dep.id]["task"]
-
-                    # dep_task = self.graph.node[_create_global_id(blueprint_id, dep)]["task"]
-                    if dep_task.state != TaskState.SUCCEEDED:
-                        all_ff_succeeded = False
-                        break
-                if all_ff_succeeded:
-                    if message["state"] == TaskState.SUCCEEDED.value:
-                        task.state = TaskState.SUCCEEDED
-                    elif message["state"] == TaskState.FAILED.value:
-                        task.state = TaskState.FAILED
-                    else:
-                        raise ValueError(f"Invalid task state: {message['state']}")
-
-            if task.outputs:
-                task.outputs = message["outputs"]
-            else:
-                task.outputs = {}
-
-            processed_tasks.append(ProcessedTask(task_id=task_id, blueprint_id=blueprint_id, task=task))
+        for message in put_back_to_queue:
+            self.queue.put(message)
 
         return processed_tasks
-
 
     def get_pending_tasks(self) -> list[PendingTask]:
         """Returns a list of tasks that are pending execution whose dependencies are satisfied."""
@@ -151,7 +169,7 @@ class TaskScheduler:
             for dep in dependencies:
                 dep_task = self.graph.node[dep.id]["task"]
                 dependency_type = dep.type
-                
+
                 if dependency_type == DependencyType.FS:
                     dependency_preconditions.append(dep_task.state == TaskState.SUCCEEDED)
                 elif dependency_type == DependencyType.SS:
@@ -281,6 +299,7 @@ class Orchestrator:
 
         self._preprocess_blueprint()
         self._build_graph()
+        # json_dump(self.graph, "orchestrator_graph.json")
         self.scheduler = TaskScheduler(self.session, self.graph)
 
     def start(self) -> None:
@@ -310,7 +329,9 @@ class Orchestrator:
                 #  update session_data with inputs of blueprint into nested blueprint session data
 
                 # TODO: Replace message with TaskStartMessage once compas_eve supports protobuf
-                self.task_start_publisher.publish(Message({"id": _create_global_id(blueprint_id, task), "type": task.type, "inputs": inputs, "outputs": task.outputs, "params": task.params}))
+                self.task_start_publisher.publish(
+                    Message({"id": _create_global_id(blueprint_id, task), "type": task.type, "inputs": inputs, "outputs": task.outputs, "params": task.params})
+                )
                 # TODO: Verify if they actually started
                 task.state = TaskState.RUNNING
             except Exception as e:
@@ -319,12 +340,14 @@ class Orchestrator:
 
     def on_task_completed(self, message: Message) -> None:
         """Handles incoming task completion messages."""
+        LOG.info(f"task finished: {message}")
+
         self.scheduler.queue_message(message)
         processed_tasks = self.scheduler.process_queue()
 
         for processed_task in processed_tasks:
             blueprint_id = processed_task.blueprint_id
-            
+
             if blueprint_id not in self.session_data:
                 self.session_data[blueprint_id] = {}
             self.session_data[blueprint_id].update(processed_task.task.outputs)
@@ -388,7 +411,7 @@ class Orchestrator:
 
                     fqn_nested_end_task_id = _create_global_id(nested_blueprint_id, end_task)
                     fqn_nested_start_task_id = _create_global_id(nested_blueprint_id, start_task)
-                    
+
                     dependencies_to_inject.append((fqn_task_id, fqn_nested_end_task_id, DependencyType.FF))
                     dependencies_to_inject.append((fqn_nested_start_task_id, fqn_task_id, DependencyType.SS))
 
