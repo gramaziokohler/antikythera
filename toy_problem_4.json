@@ -2,7 +2,7 @@
   "version": "1.0",
   "id": "TP4",
   "name": "Toy Problem 4",
-  "description": "Nested blueprints using composite",
+  "description": "Inner blueprints using composite",
   "tasks": [
     {
       "id": "start",
@@ -26,7 +26,7 @@
     {
       "id": "X2",
       "type": "system.composite",
-      "description": "Call nested blueprint",
+      "description": "Call inner blueprint",
       "inputs": {
           "something": "str"
       },
@@ -34,7 +34,7 @@
           "result1": "str"
       },
       "blueprint": {
-        "static": "toy_problem_4_nested.json"
+        "static": "toy_problem_4_inner.json"
       },
 
       "depends_on": [

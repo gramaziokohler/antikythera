@@ -1,8 +1,8 @@
 {
   "version": "1.0",
   "id": "PnP",
-  "name": "Toy Problem 4 - Nested blueprint",
-  "description": "Nested blueprints using composite",
+  "name": "Toy Problem 4 - Inner blueprint",
+  "description": "Inner blueprints using composite",
   "tasks": [
     {
       "id": "start",
