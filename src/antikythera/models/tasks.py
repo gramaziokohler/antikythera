@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Optional
 from typing import Dict
 
 from compas.data import Data
@@ -35,7 +35,7 @@ class TaskError(Data):
     def __data__(self) -> Dict[str, Any]:
         return {"code": self.code, "message": self.message, "details": self.details}
 
-    def __init__(self, code: str, message: str, details: Any | None = None) -> Dict[str, Any]:
+    def __init__(self, code: str, message: str, details: Optional[Any] = None) -> Dict[str, Any]:
         self.code = code
         self.message = message
         self.details = details
@@ -84,9 +84,9 @@ class TaskCompletionMessage(Data):
         id: str,
         state: TaskState,
         outputs: Dict[str, Any] = None,
-        error: TaskError | None = None,
-        timestamp: datetime = None,
-        duration_ms: int | None = None,
+        error: Optional[TaskError] = None,
+        timestamp: Optional[datetime] = None,
+        duration_ms: Optional[int] = None,
     ) -> None:
         super().__init__()
         self.id = id
