@@ -1,17 +1,16 @@
 import json
-from dataclasses import dataclass
-from dataclasses import field
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 
+from compas.data import Data
+
 from .tasks import DependencyType
 from .tasks import TaskState
 
 
-@dataclass
-class Dependency:
+class Dependency(Data):
     """Represents a dependency of a task on another.
 
     Attributes
@@ -23,12 +22,20 @@ class Dependency:
 
     """
 
-    id: str
-    type: DependencyType = DependencyType.FS
+    @property
+    def __data__(self) -> Dict[str, Any]:
+        return {"id": self.id, "type": self.type}
+
+    def __init__(self, id: str, type: DependencyType = DependencyType.FS) -> None:
+        super().__init__()
+        self.id = id
+        self.type = type
+
+    def __repr__(self):
+        return f"Dependency(id={self.id}, type={self.type})"
 
 
-@dataclass
-class Task:
+class Task(Data):
     """Represents a single task in a blueprint.
 
     Attributes
@@ -50,18 +57,45 @@ class Task:
 
     """
 
-    id: str
-    type: str
-    description: Optional[str] = None
-    inputs: Dict[str, Any] = field(default_factory=dict)
-    outputs: Dict[str, Any] = field(default_factory=dict)
-    depends_on: List[Dependency] = field(default_factory=list)
-    params: Dict[str, Any] = field(default_factory=dict)
-    state: TaskState = TaskState.PENDING
+    @property
+    def __data__(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": self.type,
+            "description": self.description,
+            "inputs": self.inputs,
+            "outputs": self.outputs,
+            "depends_on": self.depends_on,
+            "params": self.params,
+            "state": self.state,
+        }
+
+    def __init__(
+        self,
+        id: str,
+        type: str,
+        description: Optional[str] = None,
+        inputs: Dict[str, Any] = None,
+        outputs: Dict[str, Any] = None,
+        depends_on: List[Dependency] = None,
+        params: Dict[str, Any] = None,
+        state: TaskState = TaskState.PENDING,
+    ) -> None:
+        super().__init__()
+        self.id = id
+        self.type = type
+        self.description = description
+        self.inputs = inputs or {}
+        self.outputs = outputs or {}
+        self.depends_on = depends_on or []
+        self.params = params or {}
+        self.state = state
+
+    def __repr__(self):
+        return f"Task(id={self.id}, type={self.type}, dependencies={self.depends_on})"
 
 
-@dataclass
-class Blueprint:
+class Blueprint(Data):
     """Represents a complete blueprint.
 
     Attributes
@@ -79,11 +113,30 @@ class Blueprint:
 
     """
 
-    id: str
-    name: str
-    version: str = "1.0"
-    description: Optional[str] = None
-    tasks: List[Task] = field(default_factory=list)
+    @property
+    def __data__(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "version": self.version,
+            "description": self.description,
+            "tasks": self.tasks,
+        }
+
+    def __init__(
+        self,
+        id: str,
+        name: str,
+        version: str = "1.0",
+        description: Optional[str] = None,
+        tasks: List[Task] = None,
+    ) -> None:
+        super().__init__()
+        self.id = id
+        self.name = name
+        self.version = version
+        self.description = description
+        self.tasks = tasks or []
 
     @classmethod
     def from_file(cls, filepath: str) -> "Blueprint":
@@ -109,8 +162,7 @@ class Blueprint:
         )
 
 
-@dataclass
-class BlueprintSession:
+class BlueprintSession(Data):
     """Represents a session of the execution of a blueprint.
 
     Attributes
@@ -123,9 +175,24 @@ class BlueprintSession:
         A dictionary of nested blueprints used in this session.
     """
 
-    bsid: str
-    blueprint: Blueprint
-    nested_blueprints: dict[str, Blueprint] = field(default_factory=dict)
+    @property
+    def __data__(self) -> Dict[str, Any]:
+        return {
+            "bsid": self.bsid,
+            "blueprint": self.blueprint,
+            "nested_blueprints": self.nested_blueprints,
+        }
+
+    def __init__(
+        self,
+        bsid: str,
+        blueprint: Blueprint,
+        nested_blueprints: Dict[str, Blueprint] = None,
+    ) -> None:
+        super().__init__()
+        self.bsid = bsid
+        self.blueprint = blueprint
+        self.nested_blueprints = nested_blueprints or {}
 
 
 def _parse_task(task_def: Dict[str, Any]) -> Task:
