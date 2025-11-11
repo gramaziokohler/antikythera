@@ -36,7 +36,7 @@
       "type": "user_interaction.user_output",
       "description": "Print result",
       "inputs": {
-        "result1": "str"
+        "something": "str"
       },
       "depends_on": [
         {"id": "A1", "type": "FS"},

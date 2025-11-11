@@ -171,8 +171,8 @@ class BlueprintSession(Data):
         The ID of the blueprint session.
     blueprint : Blueprint
         The blueprint.
-    nested_blueprints : Dict[str, Blueprint], optional
-        A dictionary of nested blueprints used in this session.
+    inner_blueprints : Dict[str, Blueprint], optional
+        A dictionary of inner blueprints used in this session.
     """
 
     @property
@@ -180,19 +180,19 @@ class BlueprintSession(Data):
         return {
             "bsid": self.bsid,
             "blueprint": self.blueprint,
-            "nested_blueprints": self.nested_blueprints,
+            "inner_blueprints": self.inner_blueprints,
         }
 
     def __init__(
         self,
         bsid: str,
         blueprint: Blueprint,
-        nested_blueprints: Dict[str, Blueprint] = None,
+        inner_blueprints: Dict[str, Blueprint] = None,
     ) -> None:
         super().__init__()
         self.bsid = bsid
         self.blueprint = blueprint
-        self.nested_blueprints = nested_blueprints or {}
+        self.inner_blueprints = inner_blueprints or {}
 
 
 def _parse_task(task_def: Dict[str, Any]) -> Task:

@@ -11,17 +11,34 @@
         "process_start_time": "timestamp"
       }
     },
+    {
+      "id": "X1",
+      "type": "user_interaction.user_input",
+      "description": "Wait for user input",
+      "outputs": {
+        "something": "str"
+      },
+      "depends_on": [
+        {"id": "start"}
+      ]
+    },
 
     {
       "id": "A1",
       "type": "system.composite",
       "description": "Call nested blueprint",
+      "inputs": {
+          "something": "str"
+      },
+      "outputs": {
+          "result1": "str"
+      },
       "blueprint": {
         "static": "toy_problem_4_nested.json"
       },
 
       "depends_on": [
-        {"id": "start", "type": "FS"}
+        {"id": "X1", "type": "FS"}
       ]
     },
 

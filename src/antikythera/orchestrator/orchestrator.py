@@ -26,7 +26,7 @@ LOG = logging.getLogger(__name__)
 def _create_global_id(blueprint_id: str, task: Task) -> str:
     """Creates a globally unique identifier for a task.
 
-    This is useful when dealing with nested blueprints to avoid ID collisions.
+    This is useful when dealing with inner blueprints to avoid ID collisions.
 
     Parameters
     ----------
@@ -279,7 +279,7 @@ class Orchestrator:
     def __init__(self, session: BlueprintSession, broker_host="127.0.0.1", broker_port=1883) -> None:
         super(Orchestrator, self).__init__()
         self.session: BlueprintSession = session
-        self.composite_to_blueprint_map: dict[str, str] = {}
+        self.composite_to_inner_blueprint_map: dict[str, str] = {}
         self.graph: Graph = None
 
         self.transport = MqttTransport(host=broker_host, port=broker_port)
@@ -320,8 +320,13 @@ class Orchestrator:
                 inputs = {}
                 for key in task.inputs:
                     inputs[key] = self.session_data.get(blueprint_id, {}).get(key)
-                # If task.type == "system.composite":
-                #  update session_data with inputs of blueprint into nested blueprint session data
+
+                # Handle inputs for inner blueprints
+                if task.type == "system.composite":
+                    inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(blueprint_id, task)]
+                    if inner_blueprint_id not in self.session_data:
+                        self.session_data[inner_blueprint_id] = {}
+                    self.session_data[inner_blueprint_id].update(inputs)
 
                 # TODO: Replace message with TaskStartMessage once compas_eve supports protobuf
                 self.task_start_publisher.publish(
@@ -359,14 +364,14 @@ class Orchestrator:
 
             for task in blueprint.tasks:
                 if task.type == "system.composite":
-                    nested_blueprint = self._load_nested_blueprint(task)
-                    self.session.nested_blueprints[nested_blueprint.id] = nested_blueprint
-                    blueprint_queue.put(nested_blueprint)
+                    inner_blueprint = self._load_inner_blueprint(task)
+                    self.session.inner_blueprints[inner_blueprint.id] = inner_blueprint
+                    blueprint_queue.put(inner_blueprint)
 
                     fqn_task_id = _create_global_id(blueprint.id, task)
-                    self.composite_to_blueprint_map[fqn_task_id] = nested_blueprint.id
+                    self.composite_to_inner_blueprint_map[fqn_task_id] = inner_blueprint.id
 
-    def _load_nested_blueprint(self, task: Task) -> Blueprint:
+    def _load_inner_blueprint(self, task: Task) -> Blueprint:
         # TODO: Support dynamic blueprint loading
         # TODO: Load blueprints from some kind of storage
         return Blueprint.from_file(task.params["blueprint"]["static"])
@@ -379,7 +384,7 @@ class Orchestrator:
         self.graph = Graph()
 
         all_blueprints = [self.session.blueprint]
-        all_blueprints.extend(list(self.session.nested_blueprints.values()))
+        all_blueprints.extend(list(self.session.inner_blueprints.values()))
 
         dependencies_to_inject = []
 
@@ -387,16 +392,16 @@ class Orchestrator:
             for task in blueprint.tasks:
                 fqn_task_id = _create_global_id(blueprint.id, task)
 
-                if fqn_task_id in self.composite_to_blueprint_map:
-                    # 1. Modify `task` to point to nested blueprint's end node as FF
-                    # 2. Modify start task of nested_blueprint, to have an SS dependency on THIS `task`
-                    nested_blueprint_id = self.composite_to_blueprint_map[fqn_task_id]
-                    nested_blueprint = self.session.nested_blueprints[nested_blueprint_id]
+                if fqn_task_id in self.composite_to_inner_blueprint_map:
+                    # 1. Modify `task` to point to inner blueprint's end node as FF
+                    # 2. Modify start task of inner_blueprint, to have an SS dependency on THIS `task`
+                    inner_blueprint_id = self.composite_to_inner_blueprint_map[fqn_task_id]
+                    inner_blueprint = self.session.inner_blueprints[inner_blueprint_id]
 
-                    # Find start/end task of nested blueprint
+                    # Find start/end task of inner blueprint
                     start_task = None
                     end_task = None
-                    for t in nested_blueprint.tasks:
+                    for t in inner_blueprint.tasks:
                         if t.type == "system.start":
                             start_task = t
                         if t.type == "system.end":
@@ -404,11 +409,11 @@ class Orchestrator:
                         if start_task and end_task:
                             break
 
-                    fqn_nested_end_task_id = _create_global_id(nested_blueprint_id, end_task)
-                    fqn_nested_start_task_id = _create_global_id(nested_blueprint_id, start_task)
+                    fqn_inner_end_task_id = _create_global_id(inner_blueprint_id, end_task)
+                    fqn_inner_start_task_id = _create_global_id(inner_blueprint_id, start_task)
 
-                    dependencies_to_inject.append((fqn_task_id, fqn_nested_end_task_id, DependencyType.FF))
-                    dependencies_to_inject.append((fqn_nested_start_task_id, fqn_task_id, DependencyType.SS))
+                    dependencies_to_inject.append((fqn_task_id, fqn_inner_end_task_id, DependencyType.FF))
+                    dependencies_to_inject.append((fqn_inner_start_task_id, fqn_task_id, DependencyType.SS))
 
                 self.graph.add_node(fqn_task_id, task=task, blueprint_id=blueprint.id)
 
