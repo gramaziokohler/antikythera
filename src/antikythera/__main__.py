@@ -1,4 +1,5 @@
 import argparse
+import logging
 import sys
 import time
 import uuid
@@ -10,6 +11,8 @@ from antikythera.orchestrator import Orchestrator
 
 def main():
     """Main entry point for the Antikythera orchestrator."""
+    logging.basicConfig(level=logging.DEBUG, filename="orchestrator.log", filemode="a", format="%(asctime)s - %(levelname)s - %(message)s")
+
     parser = argparse.ArgumentParser(description="Antikythera")
     parser.add_argument("blueprint_file", help="Path to the blueprint JSON file.")
     parser.add_argument("--broker-host", default="127.0.0.1", help="MQTT broker host.")

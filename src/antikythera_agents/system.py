@@ -12,6 +12,13 @@ from antikythera_agents.cli import Colors
 
 @agent(type="system")
 class SystemAgent(Agent):
+    @tool(name="composite")
+    def composite(self, task: Task) -> Dict[str, Any]:
+        print(f"{Colors.OKBLUE}✅ [{task.id}][{task.type}] Composite trigger {Colors.ENDC}")
+
+        # Composite tasks need to return a clean dict of all expected output keys
+        return {k: None for k in task.outputs.keys()}
+
     @tool(name="start")
     def start_process(self, task: Task) -> Dict[str, Any]:
         print(f"{Colors.OKBLUE}🏃 [{task.id}][{task.type}] Starting...{Colors.ENDC}")
