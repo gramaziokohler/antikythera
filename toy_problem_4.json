@@ -24,7 +24,7 @@
     },
 
     {
-      "id": "A1",
+      "id": "X2",
       "type": "system.composite",
       "description": "Call nested blueprint",
       "inputs": {
@@ -43,13 +43,25 @@
     },
 
     {
+      "id": "X3",
+      "type": "user_interaction.user_output",
+      "description": "Print result",
+      "inputs": {
+        "result1": "str"
+      },
+      "depends_on": [
+        {"id": "X2"}
+      ]
+    },
+
+    {
       "id": "end",
       "type": "system.end",
       "outputs": {
         "process_end_time": "timestamp"
       },
       "depends_on": [
-        {"id": "A1"}
+        {"id": "X3"}
       ]
     }
   ]

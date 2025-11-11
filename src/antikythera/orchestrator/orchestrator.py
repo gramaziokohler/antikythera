@@ -352,6 +352,16 @@ class Orchestrator:
                 self.session_data[blueprint_id] = {}
             self.session_data[blueprint_id].update(processed_task.task.outputs)
 
+            # Handle outs from inner blueprints
+            if processed_task.task.type == "system.composite":
+                inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(blueprint_id, processed_task.task)]
+                inner_session_data = self.session_data.get(inner_blueprint_id, {})
+                if processed_task.blueprint_id not in self.session_data:
+                    self.session_data[processed_task.blueprint_id] = {}
+
+                for key in processed_task.task.outputs:
+                    self.session_data[processed_task.blueprint_id][key] = inner_session_data.get(key)
+
         self._schedule_tasks()
 
     def _preprocess_blueprint(self) -> None:
