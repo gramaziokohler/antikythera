@@ -195,7 +195,7 @@ This schema will evolve as the system matures.
 Agents communicate with the orchestrator via 4 types of messages sent over MQTT. The schema for these protocol messages are defined using Protocol Buffers (`protobuf`) and the `compas_pb` library for type-safe serialization of COMPAS objects:
 
 1. **Task Assignment**: The orchestrator sends a `TaskAssignmentMessage` when a task is ready to be executed.
-2. **Task Status Updates**: TBD
+2. **Task Status Updates**: When an agent begins executing a task it publishes a `TaskStatusUpdateMessage` so the orchestrator know the task is now actively running and who is responsible for it. After this, the agent may send additional status updates (e.g., progress reports) as needed.
 3. **Task Completion**: The agent sends a `TaskCompletionMessage` with the task result upon completion (success or failure).
 4. **Task Completion ACK**: The orchestrator sends a `TaskCompletionAckMessage` immediately after it accepts a `TaskCompletionMessage`. This acknowledgement is broadcast to all agents running the same task so the non-reporting agents can invalidate their local execution and return to the idle state without waiting for a timeout.
 
@@ -205,6 +205,7 @@ The complete protobuf schema is maintained in [`src/antikythera/proto/antikyther
 
 **Key message types:**
 - `TaskAssignmentMessage`: Sent by orchestrator to agents when tasks are ready
+- `TaskStatusUpdateMessage`: Sent by agents as soon as they start working on a task
 - `TaskCompletionMessage`: Sent by agents to orchestrator upon task completion
 - `TaskCompletionAckMessage`: Sent by orchestrator after recording task completion to signal that the task is closed for all agents
 - `TaskState`: Enum defining task lifecycle states
@@ -222,6 +223,13 @@ message TaskAssignmentMessage {
   repeated string output_keys = 4;                  // Optional: expected output keys (for validation)
   map<string, compas_pb.data.AnyData> params = 5;   // Optional: task-specific parameters (not from session data)
   google.protobuf.Timestamp timestamp = 6;          // Optional: assignment timestamp
+}
+
+message TaskStatusUpdateMessage {
+  string id = 1;                                    // Required: task identifier
+  TaskState state = 2;                              // Required: typically TASK_STATE_RUNNING when execution starts
+  string agent_id = 3;                              // Required: agent claiming the task
+  google.protobuf.Timestamp timestamp = 4;          // Optional: update emission time
 }
 
 message TaskCompletionMessage {
@@ -334,3 +342,14 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 * Two possible levels of agents (can both exist in Antikythera):
  - Type 1: Simple wrapper for some Python code (e.g. inverse_kinematics(config) -> Frame, forward_kinematics(Frame) -> config)
  - Type 2: Process-aware/model-aware/scene-aware: mindful agents
+
+
+- Model -> Element -> FabricationElement
+- Sequencer:
+  - sequence_the_model(model) -> list[FabItem]
+- FabItem:
+  - id: str
+  - geometry: compas.geometry.Geometry
+  - element_id | stock_id | other_things
+  - state: enum (NOT_STARTED, IN_PROGRESS, COMPLETED)
+  - fabrication_instructions: dict
