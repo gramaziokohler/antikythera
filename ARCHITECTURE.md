@@ -229,7 +229,8 @@ message TaskStatusUpdateMessage {
   string id = 1;                                    // Required: task identifier
   TaskState state = 2;                              // Required: typically TASK_STATE_RUNNING when execution starts
   string agent_id = 3;                              // Required: agent claiming the task
-  google.protobuf.Timestamp timestamp = 4;          // Optional: update emission time
+  compas_pb.data.AnyData data = 4;                  // Optional: any additional status data (e.g., progress)
+  google.protobuf.Timestamp timestamp = 5;          // Optional: update emission time
 }
 
 message TaskCompletionMessage {

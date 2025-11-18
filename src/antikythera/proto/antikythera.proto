@@ -40,8 +40,11 @@ message TaskStatusUpdateMessage {
   // Required: agent claiming or running the task
   string agent_id = 3;
 
+  // Optional: any additional status data (e.g., progress)
+  compas_pb.data.AnyData data = 4;
+
   // Optional: time the update was emitted
-  google.protobuf.Timestamp timestamp = 4;
+  google.protobuf.Timestamp timestamp = 5;
 }
 
 // Task completion message sent by agents to orchestrator
