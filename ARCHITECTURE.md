@@ -192,11 +192,12 @@ This schema will evolve as the system matures.
 
 ### Agent Communication Protocol
 
-Agents communicate with the orchestrator via 3 types of messages sent over MQTT. The schema for these protocol messages are defined using Protocol Buffers (`protobuf`) and the `compas_pb` library for type-safe serialization of COMPAS objects:
+Agents communicate with the orchestrator via 4 types of messages sent over MQTT. The schema for these protocol messages are defined using Protocol Buffers (`protobuf`) and the `compas_pb` library for type-safe serialization of COMPAS objects:
 
 1. **Task Assignment**: The orchestrator sends a `TaskAssignmentMessage` when a task is ready to be executed.
 2. **Task Status Updates**: TBD
 3. **Task Completion**: The agent sends a `TaskCompletionMessage` with the task result upon completion (success or failure).
+4. **Task Completion ACK**: The orchestrator sends a `TaskCompletionAckMessage` immediately after it accepts a `TaskCompletionMessage`. This acknowledgement is broadcast to all agents running the same task so the non-reporting agents can invalidate their local execution and return to the idle state without waiting for a timeout.
 
 **Protocol Buffer Definitions**
 
@@ -205,6 +206,7 @@ The complete protobuf schema is maintained in [`src/antikythera/proto/antikyther
 **Key message types:**
 - `TaskAssignmentMessage`: Sent by orchestrator to agents when tasks are ready
 - `TaskCompletionMessage`: Sent by agents to orchestrator upon task completion
+- `TaskCompletionAckMessage`: Sent by orchestrator after recording task completion to signal that the task is closed for all agents
 - `TaskState`: Enum defining task lifecycle states
 - `TaskError`: Error information for failed tasks
 
@@ -218,7 +220,7 @@ message TaskAssignmentMessage {
   string type = 2;                                  // Required: task type (determines which agent handles it)
   map<string, compas_pb.data.AnyData> inputs = 3;   // Optional: task inputs from blueprint session data
   repeated string output_keys = 4;                  // Optional: expected output keys (for validation)
-  map<string, compas_pb.data.AnyData> params = 5;  // Optional: task-specific parameters (not from session data)
+  map<string, compas_pb.data.AnyData> params = 5;   // Optional: task-specific parameters (not from session data)
   google.protobuf.Timestamp timestamp = 6;          // Optional: assignment timestamp
 }
 
@@ -226,10 +228,17 @@ message TaskCompletionMessage {
   
   string id = 1;                                    // Required: unique task identifier
   TaskState state = 2;                              // Required: current task state
-  map<string, compas_pb.data.AnyData> outputs = 3; // Optional: task outputs (only for succeeded tasks)
+  map<string, compas_pb.data.AnyData> outputs = 3;  // Optional: task outputs (only for succeeded tasks)
   TaskError error = 4;                              // Optional: error information (required for failed tasks)
   google.protobuf.Timestamp timestamp = 5;          // Optional: message timestamp
-  uint64 duration_ms = 6;                            // Optional: task execution duration in milliseconds
+  uint64 duration_ms = 6;                           // Optional: task execution duration in milliseconds
+}
+
+message TaskCompletionAckMessage {
+  string id = 1;                                    // Required: task identifier being acknowledged
+  TaskState state = 2;                              // Optional: final recorded state (SUCCEEDED/FAILED)
+  string accepted_agent_id = 3;                     // Optional: agent whose completion was accepted
+  google.protobuf.Timestamp timestamp = 4;          // Optional: time the orchestrator processed the completion
 }
 
 enum TaskState {
