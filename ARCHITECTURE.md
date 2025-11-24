@@ -25,6 +25,7 @@
 * `compas_pb`: Protocol Buffers integration for COMPAS used for serialization of messages in the Agent Communication Protocol.
 * `compas_model`: Model representation for fabricatable objects
 * `immudb`: Immutable database for persistent data storage, chosen for its append-only nature and data integrity guarantees
+* `FastAPI` + `uvicorn`: HTTP interface to the orchestrator service
 
 ### Integration Technologies
 * `compas_fab`: Handles tasks of type **Robotic Planning** (using Project Theseus, `wip_process` branch)
@@ -54,6 +55,15 @@ Each task is executed by an **agent**, either remote or local. The overall syste
 The orchestrator runs a single **blueprint** at a time. Each run of a blueprint is identified by a session identifier (`BSID`). Parallelism can be achieved inside the blueprint itself by using different agents. 
 
 The orchestrator loads a **blueprint** from a file or an API call, and will begin to execute it. The link between the JSON representation and the in-memory execution should not be lost during loading, because it is necessary to allow live modifications of the running graph. Modifications of the graph are append-only operations, so that the orchestrator can always keep track of the original graph. Edge-cases like the deletion of a node should be handled with care, to gracefully deal with loss of data dependency as well as case of a agent running a node while it is deleted.
+
+#### Orchestrator API
+
+The orchestrator API is exposed through a FastAPI application (`python -m antikythera`). The API accepts HTTP requests to control blueprint sessions:
+
+- `POST /blueprints/start`: Starts executing a blueprint. Payload mirrors the CLI arguments: `blueprint_file` (path to JSON blueprint), `broker_host`, and `broker_port`. The response returns the generated `session_id`.
+- `GET /blueprints`: Lists active sessions with their blueprint path, broker configuration, and start timestamp so that operators can track concurrent executions.
+
+Sessions remain active until the process receives a shutdown signal, at which point the API shuts down all orchestrators gracefully.
 
 ### Agents
 
@@ -354,3 +364,9 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
   - element_id | stock_id | other_things
   - state: enum (NOT_STARTED, IN_PROGRESS, COMPLETED)
   - fabrication_instructions: dict
+
+
+## TODOs
+
+- [ ] Implement compas.data support for parameters
+- [ ] 
