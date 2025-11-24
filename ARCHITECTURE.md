@@ -200,6 +200,31 @@ The blueprint is defined in a structured JSON format. The schema is under develo
 
 This schema will evolve as the system matures.
 
+#### Argument mapping
+
+Tasks can optionally declare an `argument_mapping` block to remap task-level input/output names to the names used in blueprint session data. This helps avoid key collisions and lets an agent-specific signature stay stable while the surrounding blueprint uses different data keys.
+
+```json
+{
+  "id": "calculate_ik",
+  "type": "moveit_planner.pnp_",
+  "inputs": {
+    "start_state": "compas_fab.robots.RobotCellState"
+  },
+  "outputs": {
+    "grasp_frame": "compas.geometry.Frame"
+  },
+  "argument_mapping": {
+    "inputs": {
+      "start_state": "some_blueprint_state_name"
+    },
+    "outputs": {
+      "grasp_frame": "framecito"
+    }
+  }
+}
+```
+
 ### Agent Communication Protocol
 
 Agents communicate with the orchestrator via 4 types of messages sent over MQTT. The schema for these protocol messages are defined using Protocol Buffers (`protobuf`) and the `compas_pb` library for type-safe serialization of COMPAS objects:

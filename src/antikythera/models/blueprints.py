@@ -54,6 +54,8 @@ class Task(Data):
         A list of dependencies on other tasks.
     params : Dict[str, Any], optional
         A dictionary of task-specific parameters.
+    argument_mapping : Dict[str, Dict[str, str]], optional
+        A dictionary to explicitly handle argument remapping configuration.
 
     """
 
@@ -67,6 +69,7 @@ class Task(Data):
             "outputs": self.outputs,
             "depends_on": self.depends_on,
             "params": self.params,
+            "argument_mapping": self.argument_mapping,
             "state": self.state,
         }
 
@@ -79,6 +82,7 @@ class Task(Data):
         outputs: Dict[str, Any] = None,
         depends_on: List[Dependency] = None,
         params: Dict[str, Any] = None,
+        argument_mapping: Dict[str, Dict[str, str]] = None,
         state: TaskState = TaskState.PENDING,
     ) -> None:
         super().__init__()
@@ -89,6 +93,7 @@ class Task(Data):
         self.outputs = outputs or {}
         self.depends_on = depends_on or []
         self.params = params or {}
+        self.argument_mapping = argument_mapping or {}
         self.state = state
 
     def __repr__(self):
@@ -197,7 +202,7 @@ class BlueprintSession(Data):
 
 def _parse_task(task_def: Dict[str, Any]) -> Task:
     """Parses a task definition dictionary into a Task object."""
-    known_fields = {"id", "type", "description", "depends_on", "params", "inputs", "outputs"}
+    known_fields = {"id", "type", "description", "depends_on", "params", "inputs", "outputs", "argument_mapping"}
     params = task_def.get("params", {})
     # Add any other unknown fields to params
     params.update({k: v for k, v in task_def.items() if k not in known_fields and not k.startswith("_")})
@@ -217,5 +222,6 @@ def _parse_task(task_def: Dict[str, Any]) -> Task:
         outputs=task_def.get("outputs", {}),
         depends_on=dependencies,
         params=params,
+        argument_mapping=task_def.get("argument_mapping", {}),
         state=TaskState.PENDING,
     )
