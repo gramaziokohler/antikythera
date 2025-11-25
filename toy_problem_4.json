@@ -33,6 +33,11 @@
       "outputs": {
           "result1": "str"
       },
+      "argument_mapping": {
+        "outputs": {
+          "result1": "something_else"
+        }
+      },
       "blueprint": {
         "static": "toy_problem_4_inner.json"
       },
@@ -47,7 +52,7 @@
       "type": "user_interaction.user_output",
       "description": "Print result",
       "inputs": {
-        "result1": "str"
+        "something_else": "str"
       },
       "depends_on": [
         {"id": "X2"}

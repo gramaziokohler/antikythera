@@ -305,6 +305,43 @@ class Orchestrator:
         """Stops the orchestrator."""
         self.task_completion_subscriber.unsubscribe()
 
+    def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
+        """Resolve task inputs from session data applying argument remapping."""
+        session_data = self.session_data.get(blueprint_id, {})
+        input_mapping = task.argument_mapping.get("inputs", {}) if task.argument_mapping else {}
+
+        inputs = {}
+        for key in task.inputs:
+            mapped_key = input_mapping.get(key) or key
+            inputs[key] = session_data.get(mapped_key)
+        return inputs
+
+    def _map_outputs_to_session(self, blueprint_id: str, task: Task) -> dict:
+        """Map task outputs to the names used in session data."""
+        output_mapping = task.argument_mapping.get("outputs", {}) if task.argument_mapping else {}
+        task_outputs = task.outputs or {}
+
+        outputs = {}
+        for key, value in task_outputs.items():
+            mapped_key = output_mapping.get(key) or key
+            outputs[mapped_key] = value
+
+        self.session_data[blueprint_id].update(outputs)
+
+        return outputs
+
+    def _map_outputs_to_outer_session(self, outer_blueprint_id: str, task: Task) -> dict:
+        inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(outer_blueprint_id, task)]
+        inner_session_data = self.session_data.get(inner_blueprint_id, {})
+
+        if outer_blueprint_id not in self.session_data:
+            self.session_data[outer_blueprint_id] = {}
+
+        for key in task.outputs:
+            mapped_key = task.argument_mapping.get("outputs", {}).get(key) or key
+            self.session_data[outer_blueprint_id][mapped_key] = inner_session_data.get(key)
+
+
     def _schedule_tasks(self) -> None:
         """Schedules tasks for execution."""
         pending_tasks = self.scheduler.get_pending_tasks()
@@ -317,9 +354,7 @@ class Orchestrator:
                 task.state = TaskState.PENDING
 
                 # Prepare inputs to pass to the task
-                inputs = {}
-                for key in task.inputs:
-                    inputs[key] = self.session_data.get(blueprint_id, {}).get(key)
+                inputs = self._map_inputs_from_session(blueprint_id, task)
 
                 # Handle inputs for inner blueprints
                 if task.type == "system.composite":
@@ -350,17 +385,11 @@ class Orchestrator:
 
             if blueprint_id not in self.session_data:
                 self.session_data[blueprint_id] = {}
-            self.session_data[blueprint_id].update(processed_task.task.outputs)
+            self._map_outputs_to_session(blueprint_id, processed_task.task)
 
             # Handle outs from inner blueprints
             if processed_task.task.type == "system.composite":
-                inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(blueprint_id, processed_task.task)]
-                inner_session_data = self.session_data.get(inner_blueprint_id, {})
-                if processed_task.blueprint_id not in self.session_data:
-                    self.session_data[processed_task.blueprint_id] = {}
-
-                for key in processed_task.task.outputs:
-                    self.session_data[processed_task.blueprint_id][key] = inner_session_data.get(key)
+                self._map_outputs_to_outer_session(blueprint_id, processed_task.task)
 
         self._schedule_tasks()
 

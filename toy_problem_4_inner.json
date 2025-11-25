@@ -36,7 +36,12 @@
       "type": "user_interaction.user_output",
       "description": "Print result",
       "inputs": {
-        "something": "str"
+        "bananas": "str"
+      },
+      "argument_mapping": {
+        "inputs": {
+          "bananas": "result1"
+        }
       },
       "depends_on": [
         {"id": "A1", "type": "FS"},
