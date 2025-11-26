@@ -17,9 +17,12 @@ from antikythera_agents.system import SystemAgent
 
 
 def _ensure_agents():
-    from antikythera.plugin import PLUGIN_MANAGER
+    _get_plugin_manager().discover_plugins()
 
-    PLUGIN_MANAGER.discover_plugins()
+
+def _get_plugin_manager():
+    from antikythera.plugin import PLUGIN_MANAGER
+    return PLUGIN_MANAGER
 
 
 class AgentLauncher:
@@ -109,17 +112,36 @@ class AgentLauncher:
         msg = Message({"id": task.id, "state": state, "outputs": outputs})
         self.task_completion_publisher.publish(msg)
 
+    def reload_agents(self):
+        print(f"{Colors.OKBLUE}Reloading agents...{Colors.ENDC}")
+
+        # Dispose of existing agents before reloading
+        for agent in self.agents.values():
+            try:
+                agent.dispose()
+            except Exception as e:
+                print(f"Error disposing agent during reload: {e}")
+
+        _get_plugin_manager().reload_plugins()
+        self._initialize_agents()
+
 
 def main():
     parser = argparse.ArgumentParser(description="Antikythera Agents")
     parser.add_argument("--broker-host", default="127.0.0.1", help="MQTT broker host.")
     parser.add_argument("--broker-port", type=int, default=1883, help="MQTT broker port.")
+    parser.add_argument("--dev", action="store_true", help="Enable hot reloading of agents.")
     args = parser.parse_args()
 
     print("Antikythera Agents starting up...")
     print(f"Connecting to MQTT broker at {args.broker_host}:{args.broker_port}")
     launcher = AgentLauncher(broker_host=args.broker_host, broker_port=args.broker_port)
     launcher.start()
+
+    if args.dev:
+        _get_plugin_manager().start_file_watcher(launcher.reload_agents)
+        print(f"{Colors.OKGREEN}Hot reloading enabled.{Colors.ENDC}")
+
     print("Agents are running and waiting for tasks. Press Ctrl+C to shut down.")
 
     try:
@@ -128,6 +150,8 @@ def main():
     except KeyboardInterrupt:
         print("\nShutting down agents...")
         launcher.stop()
+        if args.dev:
+            _get_plugin_manager().stop_file_watcher()
         print("Agents stopped.")
 
     print("Bye!")

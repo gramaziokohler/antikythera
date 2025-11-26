@@ -104,6 +104,18 @@ class SystemAgent(Agent):
         return {"slept_duration": duration}
 ```
 
+#### Development Mode
+
+The agent launcher supports a development mode that enables hot reloading of agents when their source code changes. This is useful for rapid development and testing of new agent capabilities.
+
+To enable development mode, start the launcher with the `--dev` flag:
+
+```bash
+python -m antikythera_agents --dev
+```
+
+When enabled, the system watches for changes in the source files of loaded agents and automatically reloads them without restarting the process.
+
 #### Error Handling and Recovery
 
 If a task ends up in a failed state, the orchestrator should be able to resume execution from that point. This topic is not yet addressed but will require tasks to define retry policies and idempotency, i.e. if a task can be run multiple times without side effects, and if they can be retried in case of failure. For the time being, a failed task will cause the orchestrator to stop the session.
