@@ -2,16 +2,20 @@ import argparse
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 from threading import Lock
 from typing import Dict
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import FastAPI
+from fastapi import HTTPException
+from pydantic import BaseModel
+from pydantic import Field
 
-from antikythera.models import Blueprint, BlueprintSession
+from antikythera.models import Blueprint
+from antikythera.models import BlueprintSession
 from antikythera.orchestrator import Orchestrator
 
 LOG = logging.getLogger(__name__)
@@ -124,7 +128,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000, help="API port.")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, filename="orchestrator.log", filemode="a", format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(level=logging.DEBUG, filename="orchestrator.log", filemode="a", format="%(asctime)s - %(levelname)s - %(message)s")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 

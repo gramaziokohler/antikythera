@@ -291,7 +291,7 @@ class Orchestrator:
         self.task_completion_subscriber.subscribe()
         # Session data is blueprint-namespaced
         # TODO: This should be replaced with a proper data store
-        self.session_data = {}
+        self.session_data = dict()
 
         self._preprocess_blueprint()
         self._build_graph()
@@ -299,11 +299,13 @@ class Orchestrator:
 
     def start(self) -> None:
         """Starts the orchestrator."""
+        LOG.info(f"Orchestrator session with id {self.session.bsid} started!")
         self._schedule_tasks()
 
     def stop(self) -> None:
         """Stops the orchestrator."""
         self.task_completion_subscriber.unsubscribe()
+        LOG.info(f"Execution of session id {self.session.bsid} completed!")
 
     def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
         """Resolve task inputs from session data applying argument remapping."""
@@ -341,7 +343,6 @@ class Orchestrator:
             mapped_key = task.argument_mapping.get("outputs", {}).get(key) or key
             self.session_data[outer_blueprint_id][mapped_key] = inner_session_data.get(key)
 
-
     def _schedule_tasks(self) -> None:
         """Schedules tasks for execution."""
         pending_tasks = self.scheduler.get_pending_tasks()
@@ -370,8 +371,21 @@ class Orchestrator:
                 # TODO: Verify if they actually started
                 task.state = TaskState.RUNNING
             except Exception as e:
-                print(f"Failed to start task {task.id}: {e}")
+                LOG.exception(f"Failed to start task {task.id}: {e}")
                 task.state = TaskState.FAILED
+
+    def _get_last_task(self) -> Task:
+        for node, data in self.graph.nodes(data=True):
+            if self.graph.degree_out(node) == 0:
+                return data["task"]
+
+        raise AssertionError("Clearly something went horribly wrong, no last task found!")
+
+    def _is_last_task_in_blueprint(self, processed_task: ProcessedTask) -> bool:
+        last_task = self._get_last_task()
+        last_task_fqn_id = _create_global_id(self.session.blueprint.id, last_task)
+        fqn_task_id = _create_global_id(processed_task.blueprint_id, processed_task.task)
+        return last_task_fqn_id == fqn_task_id
 
     def on_task_completed(self, message: Message) -> None:
         """Handles incoming task completion messages."""
@@ -391,7 +405,20 @@ class Orchestrator:
             if processed_task.task.type == "system.composite":
                 self._map_outputs_to_outer_session(blueprint_id, processed_task.task)
 
+            if self._is_last_task_in_blueprint(processed_task):
+                self.stop()
+
         self._schedule_tasks()
+
+    def _init_session_data_for_task(self, blueprint_id: str, task: Task) -> None:
+        # some tasks my have inputs that are static, serialized data values
+        # put those into session data before execution starts
+        for key, value in task.inputs.items():
+            if not isinstance(value, str):
+                if blueprint_id not in self.session_data:
+                    self.session_data[blueprint_id] = {}
+
+                self.session_data[blueprint_id][key] = value
 
     def _preprocess_blueprint(self) -> None:
         """Preprocesses the blueprint before execution to expand composite tasks."""
@@ -402,6 +429,8 @@ class Orchestrator:
             blueprint = blueprint_queue.get()
 
             for task in blueprint.tasks:
+                self._init_session_data_for_task(blueprint.id, task)
+
                 if task.type == "system.composite":
                     inner_blueprint = self._load_inner_blueprint(task)
                     self.session.inner_blueprints[inner_blueprint.id] = inner_blueprint

@@ -36,7 +36,8 @@
       "type": "user_interaction.user_output",
       "description": "Print result",
       "inputs": {
-        "result1": "str"
+        "result1": "str",
+        "frame_world_xy": {"dtype": "compas.geometry/Frame", "data": {"point": [0.0, 0.0, 0.0], "xaxis": [1.0, 0.0, 0.0], "yaxis": [0.0, 1.0, 0.0]}, "guid": "55982853-464f-49f0-a85a-f5a4a8b11de7"}
       },
       "depends_on": [
         {"id": "A1", "type": "FS"},

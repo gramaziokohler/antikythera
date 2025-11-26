@@ -1,10 +1,10 @@
-import json
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 
 from compas.data import Data
+from compas.data import json_load
 
 from .tasks import DependencyType
 from .tasks import TaskState
@@ -154,7 +154,7 @@ class Blueprint(Data):
             An instance of Blueprint.
         """
         with open(filepath, "r") as f:
-            data = json.load(f)
+            data = json_load(f)
 
         task_defs = data.get("tasks", [])
         tasks = [_parse_task(task_def) for task_def in task_defs]
