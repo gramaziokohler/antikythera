@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "id": "toy-problem-0",
+  "name": "Toy Problem 0",
+  "description": "Simplest possible blueprint",
+  "tasks": [
+    {
+      "id": "start",
+      "type": "system.start",
+      "outputs": {
+        "process_start_time": "timestamp"
+      }
+    },
+    {
+      "id": "A1",
+      "type": "system.sleep",
+      "description": "Sleep for 5 seconds",
+      "duration": 5,
+      "depends_on": [
+        {"id": "start"}
+      ]
+    },
+    {
+      "id": "A2",
+      "type": "user_interaction.user_output",
+      "description": "Print result",
+      "inputs": {
+        "process_start_time": "timestamp"
+      },
+      "depends_on": [
+        {"id": "A1"}
+      ]
+    },
+    {
+      "id": "end",
+      "type": "system.end",
+      "outputs": {
+        "process_end_time": "timestamp"
+      },
+      "depends_on": [
+        {"id": "A2"}
+      ]
+    }
+  ]
+}
