@@ -1,0 +1,52 @@
+{
+    "name": "Start Blueprint",
+    "nickname": "Start BP",
+    "category": "Antikythera",
+    "subcategory": "Orchestrator",
+    "description": "Start an Antikythera blueprint execution session.",
+    "exposure": 2,
+    "ghpython": {
+        "isAdvancedMode": true,
+        "iconDisplay": 0,
+        "inputParameters": [
+            {
+                "name": "blueprint_file",
+                "description": "Path to the blueprint JSON file.",
+                "typeHintID": "str"
+            },
+            {
+                "name": "broker_host",
+                "description": "MQTT broker host (default: 127.0.0.1).",
+                "typeHintID": "str",
+                "optional": true
+            },
+            {
+                "name": "broker_port",
+                "description": "MQTT broker port (default: 1883).",
+                "typeHintID": "int",
+                "optional": true
+            },
+            {
+                "name": "api_url",
+                "description": "Orchestrator API URL (default: http://localhost:8000).",
+                "typeHintID": "str",
+                "optional": true
+            },
+            {
+                "name": "start",
+                "description": "Set to True to trigger the request.",
+                "typeHintID": "bool"
+            }
+        ],
+        "outputParameters": [
+            {
+                "name": "response",
+                "description": "JSON response from the server."
+            },
+            {
+                "name": "session_id",
+                "description": "The session ID of the started blueprint."
+            }
+        ]
+    }
+}
