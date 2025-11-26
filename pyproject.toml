@@ -133,7 +133,7 @@ select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
 force-single-line = true
-known-first-party = ["antikythera"]
+known-first-party = ["antikythera", "antikythera_agents", "antikythera_ghpython"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
