@@ -291,7 +291,7 @@ class Orchestrator:
         self.task_completion_subscriber.subscribe()
         # Session data is blueprint-namespaced
         # TODO: This should be replaced with a proper data store
-        self.session_data = dict()
+        self.session_data = {}
 
         self._preprocess_blueprint()
         self._build_graph()
