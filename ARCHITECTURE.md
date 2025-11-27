@@ -129,6 +129,7 @@ The system uses a persistent data store to keep track of state. The data store i
 The data store contains two types of data, internal and external:
 * Orchestrator data, considered internal.
 * Blueprint session data, considered external and linked to a specific `BSID` (blueprint session identifier).
+* The data store also persistently stores "updloaded" blueprints which can be then referenced by their name/identified to start. 
 
 The global nature of blueprint session data is mitigated by the data dependencies defined in the **DAG**, i.e. by defining input and output data keys declaratively.
 
@@ -405,5 +406,12 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 
 ## TODOs
 
-- [ ] Implement compas.data support for parameters
-- [ ] 
+- [x] Implement compas.data support for parameters
+- [x] Swap Message usages with the relevant Protobuf messages + Implement TaskAckMessage
+- [ ] Poll mermaid diagram API call  
+- [ ] Add/Update blueprint to Antikythera
+
+...
+...
+- [ ] MQTT Log handler (Log Message)
+- [ ] Web UI + React Flow 
