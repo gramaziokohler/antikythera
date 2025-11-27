@@ -7,11 +7,14 @@ from queue import LifoQueue
 from queue import Queue
 
 from compas.datastructures import Graph
+
 from compas_eve import Message
 from compas_eve import Publisher
 from compas_eve import Subscriber
 from compas_eve import Topic
 from compas_eve.mqtt import MqttTransport
+
+from antikythera.orchestrator.storage import SessionStorage
 
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
@@ -289,9 +292,10 @@ class Orchestrator:
         self.task_start_publisher = Publisher(self.task_start, transport=self.transport)
         self.task_completion_subscriber = Subscriber(self.task_completed, self.on_task_completed, transport=self.transport)
         self.task_completion_subscriber.subscribe()
+
         # Session data is blueprint-namespaced
-        # TODO: This should be replaced with a proper data store
-        self.session_data = {}
+        self.session_storage = SessionStorage()
+        LOG.info(f"Initialized session storage for session BSID={self.session.bsid}")
 
         self._preprocess_blueprint()
         self._build_graph()
@@ -309,13 +313,12 @@ class Orchestrator:
 
     def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
         """Resolve task inputs from session data applying argument remapping."""
-        session_data = self.session_data.get(blueprint_id, {})
         input_mapping = task.argument_mapping.get("inputs", {}) if task.argument_mapping else {}
 
         inputs = {}
         for key in task.inputs:
             mapped_key = input_mapping.get(key) or key
-            inputs[key] = session_data.get(mapped_key)
+            inputs[key] = self.session_storage.get(blueprint_id, mapped_key)
         return inputs
 
     def _map_outputs_to_session(self, blueprint_id: str, task: Task) -> dict:
@@ -328,20 +331,23 @@ class Orchestrator:
             mapped_key = output_mapping.get(key) or key
             outputs[mapped_key] = value
 
-        self.session_data[blueprint_id].update(outputs)
+        # TODO: Should use set_all() here
+        # I implemented set_all in SessionStorage but commented it out for now
+        # because it throws a weird error:
+        # UNKNOWN:Error received from peer ipv6:%5B::1%5D:3322 {grpc_status:2, grpc_message:"no entries provided"}
+        # self.session_storage.set_all(blueprint_id, outputs)
+        for k, v in outputs.items():
+            self.session_storage.set(blueprint_id, k, v)
 
         return outputs
 
-    def _map_outputs_to_outer_session(self, outer_blueprint_id: str, task: Task) -> dict:
+    def _map_outputs_to_outer_session(self, outer_blueprint_id: str, task: Task):
         inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(outer_blueprint_id, task)]
-        inner_session_data = self.session_data.get(inner_blueprint_id, {})
-
-        if outer_blueprint_id not in self.session_data:
-            self.session_data[outer_blueprint_id] = {}
 
         for key in task.outputs:
             mapped_key = task.argument_mapping.get("outputs", {}).get(key) or key
-            self.session_data[outer_blueprint_id][mapped_key] = inner_session_data.get(key)
+            value = self.session_storage.get(inner_blueprint_id, key)
+            self.session_storage.set(outer_blueprint_id, mapped_key, value)
 
     def _schedule_tasks(self) -> None:
         """Schedules tasks for execution."""
@@ -360,9 +366,10 @@ class Orchestrator:
                 # Handle inputs for inner blueprints
                 if task.type == "system.composite":
                     inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(blueprint_id, task)]
-                    if inner_blueprint_id not in self.session_data:
-                        self.session_data[inner_blueprint_id] = {}
-                    self.session_data[inner_blueprint_id].update(inputs)
+                    # NOTE: See above for why set_all() is commented out
+                    # self.session_storage.set_all(inner_blueprint_id, inputs)
+                    for key, value in inputs.items():
+                        self.session_storage.set(inner_blueprint_id, key, value)
 
                 # TODO: Replace message with TaskStartMessage once compas_eve supports protobuf
                 self.task_start_publisher.publish(
@@ -397,8 +404,6 @@ class Orchestrator:
         for processed_task in processed_tasks:
             blueprint_id = processed_task.blueprint_id
 
-            if blueprint_id not in self.session_data:
-                self.session_data[blueprint_id] = {}
             self._map_outputs_to_session(blueprint_id, processed_task.task)
 
             # Handle outs from inner blueprints
@@ -415,10 +420,7 @@ class Orchestrator:
         # put those into session data before execution starts
         for key, value in task.inputs.items():
             if not isinstance(value, str):
-                if blueprint_id not in self.session_data:
-                    self.session_data[blueprint_id] = {}
-
-                self.session_data[blueprint_id][key] = value
+                self.session_storage.set(blueprint_id, key, value)
 
     def _preprocess_blueprint(self) -> None:
         """Preprocesses the blueprint before execution to expand composite tasks."""

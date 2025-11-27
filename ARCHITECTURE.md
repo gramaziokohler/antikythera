@@ -124,7 +124,7 @@ Initially, only very simple agents will be implemented to execute toy problems.
 
 ### Data store
 
-The system uses a persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
+The system uses a [`ImmuDB`](https://immudb.io/) as persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
 
 The data store contains two types of data, internal and external:
 * Orchestrator data, considered internal.
