@@ -148,3 +148,4 @@ scripts/
 *.pb.go
 *.pb.h
 *.pb.cc
+*.pyi

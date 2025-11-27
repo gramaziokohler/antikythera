@@ -7,21 +7,21 @@ from queue import LifoQueue
 from queue import Queue
 
 from compas.datastructures import Graph
-
-from compas_eve import Message
 from compas_eve import Publisher
 from compas_eve import Subscriber
 from compas_eve import Topic
+from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
-
-from antikythera.orchestrator.storage import SessionStorage
 
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import Dependency
 from antikythera.models import DependencyType
 from antikythera.models import Task
+from antikythera.models import TaskAssignmentMessage
+from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
+from antikythera.orchestrator.storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ class TaskScheduler:
         self.queue = LifoQueue()
         self._lock = threading.Lock()
 
-    def queue_message(self, message: Message) -> None:
+    def queue_message(self, message: TaskCompletionMessage) -> None:
         self.queue.put(message)
 
     def _are_ff_deps_fulfilled(self, dependencies) -> bool:
@@ -107,25 +107,25 @@ class TaskScheduler:
                 break
         return all_ff_succeeded
 
-    def _process_message(self, message: Message, task: Task, blueprint_id: str) -> None:
+    def _process_message(self, message: TaskCompletionMessage, task: Task, blueprint_id: str) -> ProcessedTask:
         # THIS METHOD MUTATES `task`
         # updated the task state according to the reported state in the message
         # create and return a ProcessedTask object
-        if message["state"] == TaskState.SUCCEEDED.value:
+        if message.state == TaskState.SUCCEEDED.value:
             task.state = TaskState.SUCCEEDED
-        elif message["state"] == TaskState.FAILED.value:
+        elif message.state == TaskState.FAILED.value:
             task.state = TaskState.FAILED
         else:
-            raise ValueError(f"Invalid task state: {message['state']}")
+            raise ValueError(f"Invalid task state: {message.state}")
 
         if task.outputs:
-            task.outputs = message["outputs"]
+            task.outputs = message.outputs
         else:
             task.outputs = {}
         return ProcessedTask(task_id=task.id, blueprint_id=blueprint_id, task=task)
 
     def process_queue(self) -> list[ProcessedTask]:
-        LOG.debug(f"processing queue: {[m.data['id'] for m in list(self.queue.queue)]}")
+        LOG.debug(f"processing queue: {[m.id for m in list(self.queue.queue)]}")
 
         processed_tasks = []
         put_back_to_queue = []
@@ -133,7 +133,7 @@ class TaskScheduler:
         while not self.queue.empty():
             message = self.queue.get()
 
-            task_id = message["id"]
+            task_id = message.id
             task = self.graph.node[task_id]["task"]
             blueprint_id = self.graph.node[task_id]["blueprint_id"]
 
@@ -285,7 +285,7 @@ class Orchestrator:
         self.composite_to_inner_blueprint_map: dict[str, str] = {}
         self.graph: Graph = None
 
-        self.transport = MqttTransport(host=broker_host, port=broker_port)
+        self.transport = MqttTransport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start = Topic("antikythera/task/start")
         self.task_completed = Topic("antikythera/task/completed")
 
@@ -371,9 +371,8 @@ class Orchestrator:
                     for key, value in inputs.items():
                         self.session_storage.set(inner_blueprint_id, key, value)
 
-                # TODO: Replace message with TaskStartMessage once compas_eve supports protobuf
                 self.task_start_publisher.publish(
-                    Message({"id": _create_global_id(blueprint_id, task), "type": task.type, "inputs": inputs, "outputs": task.outputs, "params": task.params})
+                    TaskAssignmentMessage(id=_create_global_id(blueprint_id, task), type=task.type, inputs=inputs, output_keys=task.outputs, params=task.params)
                 )
                 # TODO: Verify if they actually started
                 task.state = TaskState.RUNNING
@@ -394,7 +393,7 @@ class Orchestrator:
         fqn_task_id = _create_global_id(processed_task.blueprint_id, processed_task.task)
         return last_task_fqn_id == fqn_task_id
 
-    def on_task_completed(self, message: Message) -> None:
+    def on_task_completed(self, message: TaskCompletionMessage) -> None:
         """Handles incoming task completion messages."""
         LOG.info(f"task finished: {message}")
 
