@@ -4,16 +4,17 @@ import argparse
 import threading
 import time
 
-from compas_eve import Message
 from compas_eve import Publisher
 from compas_eve import Subscriber
 from compas_eve import Topic
+from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
 
 from antikythera.models import Task
+from antikythera.models import TaskAssignmentMessage
+from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
 from antikythera_agents.cli import Colors
-from antikythera_agents.system import SystemAgent
 
 
 def _ensure_agents():
@@ -22,6 +23,7 @@ def _ensure_agents():
 
 def _get_plugin_manager():
     from antikythera.plugin import PLUGIN_MANAGER
+
     return PLUGIN_MANAGER
 
 
@@ -29,7 +31,7 @@ class AgentLauncher:
     def __init__(self, broker_host="127.0.0.1", broker_port=1883):
         self.threads = []
         self.thread_lock = threading.Lock()
-        self.transport = MqttTransport(host=broker_host, port=broker_port)
+        self.transport = MqttTransport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start_subscriber = Subscriber(Topic("antikythera/task/start"), self.on_task_start, transport=self.transport)
         self.task_completion_publisher = Publisher(Topic("antikythera/task/completed"), transport=self.transport)
 
@@ -71,13 +73,13 @@ class AgentLauncher:
 
         print(f"Total agents initialized: {len(self.agents)}")
 
-    def on_task_start(self, message: Message) -> None:
+    def on_task_start(self, message: TaskAssignmentMessage) -> None:
         task = Task(
-            id=message["id"],
-            type=message["type"],
-            inputs=message["inputs"],
-            outputs=message["outputs"],
-            params=message["params"],
+            id=message.id,
+            type=message.type,
+            inputs=message.inputs,
+            outputs={key: None for key in message.output_keys},
+            params=message.params,
         )
 
         thread = threading.Thread(target=self._execute_task_wrapper, args=(task,))
@@ -102,14 +104,13 @@ class AgentLauncher:
 
         try:
             outputs = agent.execute_task(task)
-            state = TaskState.SUCCEEDED.value
+            state = TaskState.SUCCEEDED
         except Exception as e:
             print(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Agent Error: {e}{Colors.ENDC}")
-            state = TaskState.FAILED.value
+            state = TaskState.FAILED
             outputs = {"exception": str(e)}
 
-        # TODO: Replace Message with TaskCompletionMessage once compas_eve supports protobuf
-        msg = Message({"id": task.id, "state": state, "outputs": outputs})
+        msg = TaskCompletionMessage(id=task.id, state=state, outputs=outputs)
         self.task_completion_publisher.publish(msg)
 
     def reload_agents(self):
