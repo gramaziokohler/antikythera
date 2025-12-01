@@ -494,3 +494,13 @@ class Orchestrator:
                 self.graph.add_edge(to_task_id, from_task_id, type=dep_type)
 
         # NOTE: Perhaps we need to do transitive_reduction here
+
+    def to_mermaid_diagram(self, title="Blueprint") -> str:
+        """Generate a mermaid-syntax diagram representation of the blueprint session.
+
+        Returns
+        -------
+        str
+           Gantt chart representation of the blueprint session.
+        """
+        return self.scheduler.to_mermaid_diagram(title)

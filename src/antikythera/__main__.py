@@ -49,6 +49,11 @@ class SessionInfo(BaseModel):
     started_at: datetime
 
 
+class BlueprintDiagramResponse(BaseModel):
+    session_id: str
+    diagram: str
+
+
 app = FastAPI(title="Antikythera Orchestrator API")
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
@@ -108,6 +113,18 @@ def list_sessions() -> list[SessionInfo]:
             for sid, session in _sessions.items()
         ]
     return infos
+
+
+@app.get("/sessions/{session_id}/diagram", response_model=BlueprintDiagramResponse)
+def get_session_diagram(session_id: str) -> BlueprintDiagramResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    diagram = session.orchestrator.to_mermaid_diagram()
+    return BlueprintDiagramResponse(session_id=session_id, diagram=diagram)
 
 
 @app.on_event("shutdown")
