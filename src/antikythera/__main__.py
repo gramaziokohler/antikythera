@@ -218,7 +218,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000, help="API port.")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG, filename="orchestrator.log", filemode="a", format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(level=logging.DEBUG, filename="orchestrator.log", filemode="a", format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 
