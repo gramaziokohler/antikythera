@@ -53,7 +53,7 @@ class SessionStorage:
         self.close()
 
     def close(self):
-        self.client.logout()
+        # self.client.logout()
         self.client.shutdown()
 
     def _key(self, blueprint_id: str, key: str) -> bytes:
@@ -106,7 +106,7 @@ class BlueprintStorage:
         self.close()
 
     def close(self):
-        self.client.logout()
+        # self.client.logout()
         self.client.shutdown()
 
     def add_blueprint(self, blueprint: Blueprint) -> None:
