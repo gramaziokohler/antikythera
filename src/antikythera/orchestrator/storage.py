@@ -1,6 +1,5 @@
 import datetime
 import logging
-import os
 from typing import Any
 from typing import Optional
 from typing import cast
@@ -9,6 +8,7 @@ from compas.data import json_dumps
 from compas.data import json_loads
 from immudb import ImmudbClient
 
+from antikythera import config
 from antikythera.models import Blueprint
 
 LOG = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ LOG = logging.getLogger(__name__)
 def _create_immudb_client(db_name: str) -> ImmudbClient:
     client = ImmudbClient()
     try:
-        client.login(os.environ["IMMUDB_USER"], os.environ["IMMUDB_PASSWORD"])
+        client.login(config.IMMUDB_USER, config.IMMUDB_PASSWORD)
     except KeyError:
         LOG.exception("Environment variable for immudb credentials ('IMMUDB_USER' and 'IMMUDB_PASSWORD') not set")
         raise
@@ -37,7 +37,15 @@ class SessionStorage:
     SESSIONS_DB_NAME = "orchestrator_session"
 
     def __init__(self):
+        self.client: ImmudbClient = None  # type: ignore
+
+    def __enter__(self):
         self.client = _create_immudb_client(self.SESSIONS_DB_NAME)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.client.logout()
+        self.client.shutdown()
 
     def _key(self, blueprint_id: str, key: str) -> bytes:
         return f"{blueprint_id}:{key}".encode()
