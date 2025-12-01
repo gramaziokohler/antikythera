@@ -28,14 +28,14 @@ LOG = logging.getLogger(__name__)
 @dataclass
 class ActiveSession:
     orchestrator: Orchestrator
-    blueprint_file: str
+    blueprint_id: str
     broker_host: str
     broker_port: int
     started_at: datetime
 
 
 class StartBlueprintRequest(BaseModel):
-    blueprint_file: str = Field(..., description="Path to the blueprint JSON file.")
+    blueprint_id: str = Field(..., description="ID of the blueprint to start.")
     broker_host: str = Field("127.0.0.1", description="MQTT broker host.")
     broker_port: int = Field(1883, ge=1, le=65535, description="MQTT broker port.")
 
@@ -47,7 +47,7 @@ class StartBlueprintResponse(BaseModel):
 
 class SessionInfo(BaseModel):
     session_id: str
-    blueprint_file: str
+    blueprint_id: str
     broker_host: str
     broker_port: int
     started_at: datetime
@@ -70,23 +70,20 @@ class UploadBlueprintResponse(BaseModel):
 app = FastAPI(title="Antikythera Orchestrator API")
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
-_blueprint_storage: BlueprintStorage = BlueprintStorage()
 
 
-def _start_blueprint_session(payload: StartBlueprintRequest) -> str:
-    blueprint_path = Path(payload.blueprint_file).expanduser()
-    if not blueprint_path.is_file():
-        raise HTTPException(status_code=400, detail=f"Blueprint file '{blueprint_path}' does not exist.")
-
+def _start_blueprint_session(request: StartBlueprintRequest) -> str:
     try:
-        blueprint = Blueprint.from_file(str(blueprint_path))
+        with BlueprintStorage() as storage:
+            blueprint = storage.get_blueprint(request.blueprint_id)
+
     except Exception as exc:  # pragma: no cover - runtime safety
-        LOG.exception("Failed to load blueprint from %s", blueprint_path)
+        LOG.exception(f"Failed to load blueprint with id {request.blueprint_id}")
         raise HTTPException(status_code=400, detail=f"Failed to load blueprint: {exc}")
 
     session_id = uuid.uuid4().hex
     session = BlueprintSession(bsid=session_id, blueprint=blueprint)
-    orchestrator = Orchestrator(session, broker_host=payload.broker_host, broker_port=payload.broker_port)
+    orchestrator = Orchestrator(session, broker_host=request.broker_host, broker_port=request.broker_port)
 
     try:
         orchestrator.start()
@@ -98,9 +95,9 @@ def _start_blueprint_session(payload: StartBlueprintRequest) -> str:
     with _sessions_lock:
         _sessions[session_id] = ActiveSession(
             orchestrator=orchestrator,
-            blueprint_file=str(blueprint_path),
-            broker_host=payload.broker_host,
-            broker_port=payload.broker_port,
+            blueprint_id=request.blueprint_id,
+            broker_host=request.broker_host,
+            broker_port=request.broker_port,
             started_at=started_at,
         )
 
@@ -119,7 +116,7 @@ def list_sessions() -> list[SessionInfo]:
         infos = [
             SessionInfo(
                 session_id=sid,
-                blueprint_file=session.blueprint_file,
+                blueprint_id=session.blueprint_id,
                 broker_host=session.broker_host,
                 broker_port=session.broker_port,
                 started_at=session.started_at,
@@ -132,8 +129,8 @@ def list_sessions() -> list[SessionInfo]:
 @app.get("/blueprints", response_model=list[BlueprintInfo])
 def list_blueprints() -> list[BlueprintInfo]:
     try:
-        with _blueprint_storage:
-            blueprints_metadata = _blueprint_storage.list_blueprints()
+        with BlueprintStorage() as storage:
+            blueprints_metadata = storage.list_blueprints()
     except Exception as exc:
         LOG.exception("Failed to fetch blueprints from database")
         raise HTTPException(status_code=500, detail=f"Failed to fetch blueprints: {exc}")
@@ -193,17 +190,9 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
         LOG.exception("Failed to parse uploaded blueprint file. Make sure it's a valid JSON blueprint.")
         raise HTTPException(status_code=400, detail=f"Failed to parse blueprint file: {exc}")
 
-    global _blueprint_storage
-    if _blueprint_storage is None:
-        try:
-            _blueprint_storage = BlueprintStorage()
-        except Exception as exc:
-            LOG.exception("Failed to initialize BlueprintStorage")
-            raise HTTPException(status_code=500, detail=f"Database not available: {exc}")
-
     try:
-        with _blueprint_storage:
-            _blueprint_storage.add_blueprint(blueprint)
+        with BlueprintStorage() as storage:
+            storage.add_blueprint(blueprint)
     except Exception as exc:
         LOG.exception("Failed to save blueprint to database")
         raise HTTPException(status_code=500, detail=f"Failed to save blueprint: {exc}")
@@ -218,7 +207,7 @@ def shutdown() -> None:
             try:
                 session.orchestrator.stop()
             except Exception:  # pragma: no cover - best-effort shutdown
-                LOG.exception("Failed to stop orchestrator for blueprint %s", session.blueprint_file)
+                LOG.exception(f"Failed to stop orchestrator for blueprint {session.blueprint_id}")
         _sessions.clear()
 
 
