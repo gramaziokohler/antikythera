@@ -21,7 +21,9 @@ from antikythera.models import Task
 from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
-from antikythera.orchestrator.storage import SessionStorage
+
+from .storage import BlueprintStorage
+from .storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
 
@@ -295,6 +297,7 @@ class Orchestrator:
 
         # Session data is blueprint-namespaced
         self.session_storage = SessionStorage()
+        self.blueprint_storage = BlueprintStorage()
         LOG.info(f"Initialized session storage for session BSID={self.session.bsid}")
 
         self._preprocess_blueprint()
@@ -309,7 +312,7 @@ class Orchestrator:
     def stop(self) -> None:
         """Stops the orchestrator."""
         self.task_completion_subscriber.unsubscribe()
-        self.session_storage.close()
+        # self.session_storage.close()
         LOG.info(f"Execution of session id {self.session.bsid} completed!")
 
     def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
@@ -443,8 +446,13 @@ class Orchestrator:
 
     def _load_inner_blueprint(self, task: Task) -> Blueprint:
         # TODO: Support dynamic blueprint loading
-        # TODO: Load blueprints from some kind of storage
-        return Blueprint.from_file(task.params["blueprint"]["static"])
+        assert "blueprint" in task.params
+
+        if "static" not in task.params["blueprint"]:
+            raise NotImplementedError("Only static inner blueprints are supported at the moment.")
+
+        blueprint_id = task.params["blueprint"]["static"]
+        return self.blueprint_storage.get_blueprint(blueprint_id)
 
     def _build_graph(self) -> None:
         """Builds a dependency graph from the loaded blueprint."""
