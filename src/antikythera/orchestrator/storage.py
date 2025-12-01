@@ -75,7 +75,15 @@ class BlueprintStorage:
     BLUEPRINTS_DB_NAME = "orchestrator_blueprints"
 
     def __init__(self):
+        self.client: ImmudbClient = None  # type: ignore
+
+    def __enter__(self):
         self.client = _create_immudb_client(self.BLUEPRINTS_DB_NAME)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.client.logout()
+        self.client.shutdown()
 
     def add_blueprint(self, blueprint: Blueprint) -> None:
         """Store a blueprint with searchable metadata.

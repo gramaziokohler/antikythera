@@ -132,7 +132,8 @@ def list_sessions() -> list[SessionInfo]:
 @app.get("/blueprints", response_model=list[BlueprintInfo])
 def list_blueprints() -> list[BlueprintInfo]:
     try:
-        blueprints_metadata = _blueprint_storage.list_blueprints()
+        with _blueprint_storage:
+            blueprints_metadata = _blueprint_storage.list_blueprints()
     except Exception as exc:
         LOG.exception("Failed to fetch blueprints from database")
         raise HTTPException(status_code=500, detail=f"Failed to fetch blueprints: {exc}")
@@ -189,7 +190,7 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
             Path(tmp_file_path).unlink(missing_ok=True)
 
     except Exception as exc:
-        LOG.exception("Failed to parse uploaded blueprint file")
+        LOG.exception("Failed to parse uploaded blueprint file. Make sure it's a valid JSON blueprint.")
         raise HTTPException(status_code=400, detail=f"Failed to parse blueprint file: {exc}")
 
     global _blueprint_storage
@@ -201,7 +202,8 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
             raise HTTPException(status_code=500, detail=f"Database not available: {exc}")
 
     try:
-        _blueprint_storage.add_blueprint(blueprint)
+        with _blueprint_storage:
+            _blueprint_storage.add_blueprint(blueprint)
     except Exception as exc:
         LOG.exception("Failed to save blueprint to database")
         raise HTTPException(status_code=500, detail=f"Failed to save blueprint: {exc}")
