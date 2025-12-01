@@ -39,7 +39,7 @@
         }
       },
       "blueprint": {
-        "static": "toy_problem_4_inner.json"
+        "static": "TP4_PnP"
       },
 
       "depends_on": [

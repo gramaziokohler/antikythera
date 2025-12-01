@@ -36,6 +36,7 @@ def _create_immudb_client(db_name: str) -> ImmudbClient:
         client.createDatabase(db_name.encode())
     client.useDatabase(db_name.encode())
 
+    LOG.debug(f"Connected to immudb database '{db_name}' as user '{config.IMMUDB_USER}'")
     return client
 
 
@@ -118,7 +119,8 @@ class BlueprintStorage:
         else:
             index_data = []
 
-        index_data.append(blueprint.id)
+        if blueprint.id not in index_data:
+            index_data.append(blueprint.id)
 
         # Store metadata and serialized blueprint separately as blueprints may be large
         # and we might just want to query metadata
