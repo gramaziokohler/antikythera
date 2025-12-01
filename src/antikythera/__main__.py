@@ -1,5 +1,6 @@
 import argparse
 import logging
+import tempfile
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -7,16 +8,19 @@ from datetime import timezone
 from pathlib import Path
 from threading import Lock
 from typing import Dict
+from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi import HTTPException
+from fastapi import UploadFile
 from pydantic import BaseModel
 from pydantic import Field
 
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.orchestrator import Orchestrator
+from antikythera.orchestrator.storage import BlueprintStorage
 
 LOG = logging.getLogger(__name__)
 
@@ -49,9 +53,24 @@ class SessionInfo(BaseModel):
     started_at: datetime
 
 
+class BlueprintInfo(BaseModel):
+    id: str
+    name: str
+    version: str
+    description: Optional[str]
+    task_count: int
+    uploaded_at: datetime
+
+
+class UploadBlueprintResponse(BaseModel):
+    blueprint_id: str
+    message: str
+
+
 app = FastAPI(title="Antikythera Orchestrator API")
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
+_blueprint_storage: BlueprintStorage = BlueprintStorage()
 
 
 def _start_blueprint_session(payload: StartBlueprintRequest) -> str:
@@ -94,7 +113,7 @@ def start_blueprint(payload: StartBlueprintRequest) -> StartBlueprintResponse:
     return StartBlueprintResponse(session_id=session_id, message="Blueprint execution started.")
 
 
-@app.get("/blueprints", response_model=list[SessionInfo])
+@app.get("/sessions", response_model=list[SessionInfo])
 def list_sessions() -> list[SessionInfo]:
     with _sessions_lock:
         infos = [
@@ -108,6 +127,86 @@ def list_sessions() -> list[SessionInfo]:
             for sid, session in _sessions.items()
         ]
     return infos
+
+
+@app.get("/blueprints", response_model=list[BlueprintInfo])
+def list_blueprints() -> list[BlueprintInfo]:
+    try:
+        blueprints_metadata = _blueprint_storage.list_blueprints()
+    except Exception as exc:
+        LOG.exception("Failed to fetch blueprints from database")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch blueprints: {exc}")
+
+    blueprint_infos = [
+        BlueprintInfo(
+            id=metadata["id"],
+            name=metadata["name"],
+            version=metadata["version"],
+            description=metadata.get("description"),
+            task_count=metadata["task_count"],
+            uploaded_at=datetime.fromisoformat(metadata["uploaded_at"]),
+        )
+        for metadata in blueprints_metadata
+    ]
+
+    return blueprint_infos
+
+
+@app.post("/blueprints/upload", response_model=UploadBlueprintResponse, status_code=201)
+async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
+    """Upload a blueprint JSON file to the database.
+
+    Parameters
+    ----------
+    file : UploadFile
+        The blueprint JSON file to upload.
+
+    Returns
+    -------
+    UploadBlueprintResponse
+        Response containing the blueprint ID and success message.
+
+    Raises
+    ------
+    HTTPException
+        If the file is not a JSON file or cannot be parsed.
+    """
+    if not file.filename or not file.filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail="Only JSON files are accepted.")
+
+    try:
+        content = await file.read()
+
+        # Create a temporary file to use Blueprint.from_file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp_file:
+            tmp_file.write(content.decode())
+            tmp_file_path = tmp_file.name
+
+        try:
+            blueprint = Blueprint.from_file(tmp_file_path)
+        finally:
+            # Clean up temp file
+            Path(tmp_file_path).unlink(missing_ok=True)
+
+    except Exception as exc:
+        LOG.exception("Failed to parse uploaded blueprint file")
+        raise HTTPException(status_code=400, detail=f"Failed to parse blueprint file: {exc}")
+
+    global _blueprint_storage
+    if _blueprint_storage is None:
+        try:
+            _blueprint_storage = BlueprintStorage()
+        except Exception as exc:
+            LOG.exception("Failed to initialize BlueprintStorage")
+            raise HTTPException(status_code=500, detail=f"Database not available: {exc}")
+
+    try:
+        _blueprint_storage.add_blueprint(blueprint)
+    except Exception as exc:
+        LOG.exception("Failed to save blueprint to database")
+        raise HTTPException(status_code=500, detail=f"Failed to save blueprint: {exc}")
+
+    return UploadBlueprintResponse(blueprint_id=blueprint.id, message="Blueprint uploaded successfully.")
 
 
 @app.on_event("shutdown")
