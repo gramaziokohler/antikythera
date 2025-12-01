@@ -34,11 +34,11 @@ class SessionStorage:
         except KeyError:
             return None
 
-    def set(self, blueprint_id: str, key: str, value : Any) -> None:
+    def set(self, blueprint_id: str, key: str, value: Any) -> None:
         full_key = self._key(blueprint_id, key)
         json_value = json_dumps(value)
         self.client.set(full_key, json_value.encode())
-    
+
     def set_all(self, blueprint_id: str, data: dict[str, Any]) -> None:
         all_data = {}
         for key, value in data.items():
@@ -49,11 +49,11 @@ class SessionStorage:
         prefix = f"{blueprint_id}:".encode()
         # TODO: Handle pagination if more than 1000 keys
         results = self.client.scan(b"", prefix, False, 1000)
-        
+
         data = {}
         for key, value in results.items():
             decoded_key = key.decode()
             if decoded_key.startswith(f"{blueprint_id}:"):
-                clean_key = decoded_key[len(blueprint_id)+1:]
+                clean_key = decoded_key[len(blueprint_id) + 1 :]
                 data[clean_key] = json_loads(value.decode())
         return data
