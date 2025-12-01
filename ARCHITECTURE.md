@@ -52,7 +52,7 @@ The **orchestrator** is in charge of coordinating the execution of a **blueprint
 
 Each task is executed by an **agent**, either remote or local. The overall system has location transparency, so agents can be running in one or more machines in the same or different networks.
 
-The orchestrator runs a single **blueprint** at a time. Each run of a blueprint is identified by a session identifier (`BSID`). Parallelism can be achieved inside the blueprint itself by using different agents. 
+The orchestrator runs a single **blueprint** at a time. Each run of a blueprint is identified by a session identifier (`BSID`). A session has a state (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED`). Parallelism can be achieved inside the blueprint itself by using different agents. 
 
 The orchestrator loads a **blueprint** from a file or an API call, and will begin to execute it. The link between the JSON representation and the in-memory execution should not be lost during loading, because it is necessary to allow live modifications of the running graph. Modifications of the graph are append-only operations, so that the orchestrator can always keep track of the original graph. Edge-cases like the deletion of a node should be handled with care, to gracefully deal with loss of data dependency as well as case of a agent running a node while it is deleted.
 
@@ -62,6 +62,8 @@ The orchestrator API is exposed through a FastAPI application (`python -m antiky
 
 - `POST /blueprints/start`: Starts executing a blueprint. Payload mirrors the CLI arguments: `blueprint_file` (path to JSON blueprint), `broker_host`, and `broker_port`. The response returns the generated `session_id`.
 - `GET /blueprints`: Lists active sessions with their blueprint path, broker configuration, and start timestamp so that operators can track concurrent executions.
+- `GET /sessions/{session_id}/diagram`: Returns a Mermaid diagram representing the current execution state of the session.
+- `GET /sessions/{session_id}/data`: Returns the session data (inputs/outputs) stored for the session.
 
 Sessions remain active until the process receives a shutdown signal, at which point the API shuts down all orchestrators gracefully.
 
@@ -408,7 +410,8 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 
 - [x] Implement compas.data support for parameters
 - [x] Swap Message usages with the relevant Protobuf messages + Implement TaskAckMessage
-- [ ] Poll mermaid diagram API call  
+- [x] Poll mermaid diagram API call  
+- [x] Include session state in API (started, finished)
 - [ ] Add/Update blueprint to Antikythera
 
 ...

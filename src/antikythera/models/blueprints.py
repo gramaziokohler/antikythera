@@ -2,6 +2,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+from enum import StrEnum
 
 from compas.data import Data
 from compas.data import json_load
@@ -167,6 +168,16 @@ class Blueprint(Data):
         )
 
 
+class BlueprintSessionState(StrEnum):
+    """Enumeration of possible blueprint session states."""
+
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    STOPPED = "STOPPED"
+
+
 class BlueprintSession(Data):
     """Represents a session of the execution of a blueprint.
 
@@ -186,6 +197,7 @@ class BlueprintSession(Data):
             "bsid": self.bsid,
             "blueprint": self.blueprint,
             "inner_blueprints": self.inner_blueprints,
+            "state": self.state,
         }
 
     def __init__(
@@ -193,11 +205,13 @@ class BlueprintSession(Data):
         bsid: str,
         blueprint: Blueprint,
         inner_blueprints: Dict[str, Blueprint] = None,
+        state: BlueprintSessionState = BlueprintSessionState.PENDING,
     ) -> None:
         super().__init__()
         self.bsid = bsid
         self.blueprint = blueprint
         self.inner_blueprints = inner_blueprints or {}
+        self.state = state
 
 
 def _parse_task(task_def: Dict[str, Any]) -> Task:

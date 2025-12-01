@@ -11,6 +11,7 @@ from typing import Dict
 from typing import Optional
 
 import uvicorn
+from compas.data import json_dumps
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import UploadFile
@@ -51,6 +52,19 @@ class SessionInfo(BaseModel):
     broker_host: str
     broker_port: int
     started_at: datetime
+    state: str
+
+
+class BlueprintDiagramResponse(BaseModel):
+    session_id: str
+    diagram: str
+    state: str
+
+
+class SessionDataResponse(BaseModel):
+    session_id: str
+    data: str
+    state: str
 
 
 class BlueprintInfo(BaseModel):
@@ -120,6 +134,7 @@ def list_sessions() -> list[SessionInfo]:
                 broker_host=session.broker_host,
                 broker_port=session.broker_port,
                 started_at=session.started_at,
+                state=session.orchestrator.session.state,
             )
             for sid, session in _sessions.items()
         ]
@@ -198,6 +213,33 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
         raise HTTPException(status_code=500, detail=f"Failed to save blueprint: {exc}")
 
     return UploadBlueprintResponse(blueprint_id=blueprint.id, message="Blueprint uploaded successfully.")
+
+
+@app.get("/sessions/{session_id}/diagram", response_model=BlueprintDiagramResponse)
+def get_session_diagram(session_id: str) -> BlueprintDiagramResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    diagram = session.orchestrator.to_mermaid_diagram()
+    return BlueprintDiagramResponse(session_id=session_id, diagram=diagram, state=session.orchestrator.session.state)
+
+
+@app.get("/sessions/{session_id}/data", response_model=SessionDataResponse)
+def get_session_data(session_id: str) -> SessionDataResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Retrieve data for the main blueprint of the session
+    blueprint_id = session.orchestrator.session.blueprint.id
+    data = session.orchestrator.session_storage.get_all(blueprint_id)
+
+    return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=session.orchestrator.session.state)
 
 
 @app.on_event("shutdown")

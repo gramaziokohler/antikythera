@@ -15,6 +15,7 @@ from compas_eve.mqtt import MqttTransport
 
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
+from antikythera.models import BlueprintSessionState
 from antikythera.models import Dependency
 from antikythera.models import DependencyType
 from antikythera.models import Task
@@ -306,13 +307,19 @@ class Orchestrator:
 
     def start(self) -> None:
         """Starts the orchestrator."""
+        self.session.state = BlueprintSessionState.RUNNING
         LOG.info(f"Orchestrator session with id {self.session.bsid} started!")
         self._schedule_tasks()
 
     def stop(self) -> None:
         """Stops the orchestrator."""
         self.task_completion_subscriber.unsubscribe()
-        # self.session_storage.close()
+        try:
+            self.session_storage.close()
+        except Exception as exc:
+            LOG.error(f"Error closing session storage: {exc}")
+        if self.session.state == BlueprintSessionState.RUNNING:
+            self.session.state = BlueprintSessionState.STOPPED
         LOG.info(f"Execution of session id {self.session.bsid} completed!")
 
     def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
@@ -383,6 +390,7 @@ class Orchestrator:
             except Exception as e:
                 LOG.exception(f"Failed to start task {task.id}: {e}")
                 task.state = TaskState.FAILED
+                self.session.state = BlueprintSessionState.FAILED
 
     def _get_last_task(self) -> Task:
         for node, data in self.graph.nodes(data=True):
@@ -414,6 +422,7 @@ class Orchestrator:
                 self._map_outputs_to_outer_session(blueprint_id, processed_task.task)
 
             if self._is_last_task_in_blueprint(processed_task):
+                self.session.state = BlueprintSessionState.COMPLETED
                 self.stop()
 
         self._schedule_tasks()
@@ -503,3 +512,13 @@ class Orchestrator:
                 self.graph.add_edge(to_task_id, from_task_id, type=dep_type)
 
         # NOTE: Perhaps we need to do transitive_reduction here
+
+    def to_mermaid_diagram(self, title="Blueprint") -> str:
+        """Generate a mermaid-syntax diagram representation of the blueprint session.
+
+        Returns
+        -------
+        str
+           Gantt chart representation of the blueprint session.
+        """
+        return self.scheduler.to_mermaid_diagram(title)

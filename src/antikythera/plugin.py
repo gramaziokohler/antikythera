@@ -115,7 +115,7 @@ class _PluginManager:
 
             try:
                 obj = plugin.load()  # side-effect import
-                
+
                 # If the entry point points to a module, obj is the module
                 if hasattr(obj, "__file__"):
                     module = obj
@@ -127,7 +127,7 @@ class _PluginManager:
 
                 if module_name:
                     self._loaded_modules.add(module_name)
-                
+
                 if module and hasattr(module, "__file__") and module.__file__:
                     file_path = os.path.realpath(module.__file__)
                     self._module_files.add(file_path)

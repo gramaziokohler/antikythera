@@ -79,6 +79,19 @@ class SessionStorage:
             all_data[bytes(self._key(blueprint_id, key))] = json_dumps(value).encode()
         self.client.setAll(all_data)
 
+    def get_all(self, blueprint_id: str) -> dict[str, Any]:
+        prefix = f"{blueprint_id}:".encode()
+        # TODO: Handle pagination if more than 1000 keys
+        results = self.client.scan(b"", prefix, False, 1000)
+
+        data = {}
+        for key, value in results.items():
+            decoded_key = key.decode()
+            if decoded_key.startswith(f"{blueprint_id}:"):
+                clean_key = decoded_key[len(blueprint_id) + 1 :]
+                data[clean_key] = json_loads(value.decode())
+        return data
+
 
 class BlueprintStorage:
     BLUEPRINTS_DB_NAME = "orchestrator_blueprints"
