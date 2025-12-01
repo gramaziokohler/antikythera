@@ -314,10 +314,11 @@ class Orchestrator:
     def stop(self) -> None:
         """Stops the orchestrator."""
         self.task_completion_subscriber.unsubscribe()
-        try:
-            self.session_storage.close()
-        except Exception as exc:
-            LOG.error(f"Error closing session storage: {exc}")
+        # NOTE: for now don't close session storage until we figure out how to better handle it on the API
+        # try:
+        #     self.session_storage.close()
+        # except Exception as exc:
+        #     LOG.error(f"Error closing session storage: {exc}")
         if self.session.state == BlueprintSessionState.RUNNING:
             self.session.state = BlueprintSessionState.STOPPED
         LOG.info(f"Execution of session id {self.session.bsid} completed!")
