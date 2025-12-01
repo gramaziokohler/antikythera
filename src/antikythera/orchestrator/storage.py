@@ -14,6 +14,12 @@ from antikythera.models import Blueprint
 LOG = logging.getLogger(__name__)
 
 
+class RequestedBlueprintNotFound(Exception):
+    """Raised when a requested blueprint is not found in storage."""
+
+    pass
+
+
 def _create_immudb_client(db_name: str) -> ImmudbClient:
     client = ImmudbClient()
     try:
@@ -37,13 +43,15 @@ class SessionStorage:
     SESSIONS_DB_NAME = "orchestrator_session"
 
     def __init__(self):
-        self.client: ImmudbClient = None  # type: ignore
+        self.client = _create_immudb_client(self.SESSIONS_DB_NAME)
 
     def __enter__(self):
-        self.client = _create_immudb_client(self.SESSIONS_DB_NAME)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def close(self):
         self.client.logout()
         self.client.shutdown()
 
@@ -75,13 +83,15 @@ class BlueprintStorage:
     BLUEPRINTS_DB_NAME = "orchestrator_blueprints"
 
     def __init__(self):
-        self.client: ImmudbClient = None  # type: ignore
+        self.client = _create_immudb_client(self.BLUEPRINTS_DB_NAME)
 
     def __enter__(self):
-        self.client = _create_immudb_client(self.BLUEPRINTS_DB_NAME)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def close(self):
         self.client.logout()
         self.client.shutdown()
 
@@ -134,7 +144,7 @@ class BlueprintStorage:
             }
         )
 
-    def get_blueprint(self, blueprint_id: str) -> Optional[Blueprint]:
+    def get_blueprint(self, blueprint_id: str) -> Blueprint:
         """Retrieve a blueprint by its ID.
 
         Parameters
@@ -150,13 +160,13 @@ class BlueprintStorage:
         blueprint_key = f"blueprint:{blueprint_id}".encode()
         try:
             match = self.client.get(blueprint_key)
-            bytes_value = match.value
-            return json_loads(bytes_value.decode())  # type: ignore
-        except KeyError:
-            LOG.debug(f"Blueprint {blueprint_id} not found in database")
-            return None
-        except Exception:
-            LOG.exception(f"Failed to retrieve blueprint {blueprint_id}")
+            if not match:
+                LOG.exception(f"Blueprint {blueprint_id} not found in database")
+                raise RequestedBlueprintNotFound(f"Blueprint {blueprint_id} not found")
+
+            return json_loads(match.value.decode())  # type: ignore
+        except Exception as ex:
+            LOG.exception(f"Failed to retrieve blueprint {blueprint_id} - {ex}")
             raise
 
     def list_blueprints(self) -> list[dict[str, Any]]:
