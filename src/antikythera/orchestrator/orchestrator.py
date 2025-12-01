@@ -309,6 +309,7 @@ class Orchestrator:
     def stop(self) -> None:
         """Stops the orchestrator."""
         self.task_completion_subscriber.unsubscribe()
+        self.session_storage.close()
         LOG.info(f"Execution of session id {self.session.bsid} completed!")
 
     def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
