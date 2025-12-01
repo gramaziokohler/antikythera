@@ -109,6 +109,7 @@ class BlueprintStorage:
         blueprint_value = json_dumps(blueprint).encode()
         blueprint_index_value = json_dumps(index_data).encode()
 
+        # do it all in a single transaction
         self.client.setAll(
             {
                 index_key: blueprint_index_value,
