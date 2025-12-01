@@ -1,7 +1,8 @@
 compas >= 2,<3
 compas_eve >= 2,<3
 compas_pb >= 0.4.4,<1
-watchdog
-immudb-py
 fastapi >= 0.111,<1
+immudb-py
+python-dotenv
 uvicorn >= 0.25,<1
+watchdog
