@@ -1,3 +1,4 @@
+import logging
 from abc import ABC
 from contextlib import contextmanager
 from typing import Any
@@ -23,6 +24,7 @@ class Agent(ABC):
         """
         self._tools = get_agent_tools(self.__class__)
         self._initialized = True
+        self.logger = logging.getLogger(f"{self.__class__.__module__}.{self.__class__.__name__}")
 
     def dispose(self):
         """Clean up resources and perform shutdown operations.
@@ -84,6 +86,7 @@ class Agent(ABC):
                 result = tool_method(self, task)
                 return result or {}
             except Exception as e:
+                self.logger.exception(f"Tool '{tool_name}' execution failed")
                 raise RuntimeError(f"Tool '{tool_name}' execution failed: {str(e)}") from e
 
     def _get_tool_for_task(self, task: Task) -> str:

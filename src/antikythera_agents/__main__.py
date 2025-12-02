@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import threading
 import time
+
+from mqtthandler import MQTTHandler
 
 from compas_eve import Publisher
 from compas_eve import Subscriber
@@ -15,6 +18,9 @@ from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
 from antikythera_agents.cli import Colors
+
+
+MQTT_LOG_TOPIC = "antikythera/logs"
 
 
 def _ensure_agents():
@@ -140,8 +146,20 @@ def main():
     launcher.start()
 
     if args.dev:
+        
         _get_plugin_manager().start_file_watcher(launcher.reload_agents)
         print(f"{Colors.OKGREEN}Hot reloading enabled.{Colors.ENDC}")
+
+        # Configure MQTT logging
+        handler = MQTTHandler(args.broker_host, MQTT_LOG_TOPIC, port=args.broker_port)
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        handler.setFormatter(formatter)
+
+        agent_logger = logging.getLogger("antikythera_agents")
+        agent_logger.addHandler(handler)
+        agent_logger.setLevel(logging.DEBUG)
+
+        print(f"{Colors.OKGREEN}MQTT logging handler configured on {MQTT_LOG_TOPIC}.{Colors.ENDC}")
 
     print("Agents are running and waiting for tasks. Press Ctrl+C to shut down.")
 
