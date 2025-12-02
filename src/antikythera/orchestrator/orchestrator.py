@@ -194,6 +194,9 @@ class TaskScheduler:
 
         return dependencies
 
+    def _create_mermaid_task_id(self, blueprint_id: str, task: Task) -> str:
+        return _create_global_id(blueprint_id, task).replace(".", "_")
+
     def to_mermaid_diagram(self, title="Blueprint") -> str:
         """Generate a mermaid-syntax diagram representation of the blueprint session.
 
@@ -227,7 +230,7 @@ class TaskScheduler:
                 task_state = "🏃"
             else:
                 task_state = "?"
-            task_label = f"{task_state} [{_create_global_id(blueprint_id, task)}] {task.type}"
+            task_label = f"{task_state} [{self._create_mermaid_task_id(blueprint_id, task)}] {task.type}"
             return task_label
 
         def append_node(previous, current):
@@ -239,7 +242,7 @@ class TaskScheduler:
 
             for node_in in self.graph.neighbors_in(current):
                 task_in = self.graph.node[node_in]["task"]
-                dependencies_list.append(_create_global_id(blueprint_id, task_in))
+                dependencies_list.append(self._create_mermaid_task_id(blueprint_id, task_in))
 
             if dependencies_list:
                 dependencies = "after " + " ".join(dependencies_list)
@@ -255,7 +258,7 @@ class TaskScheduler:
             if task.type == "system.start" and dependencies == "":
                 dependencies = datetime.date.today().isoformat()
 
-            result.append("  {:40}   : {}{}, {}, {}".format(task_label, milestone, _create_global_id(blueprint_id, task), dependencies, duration))
+            result.append("  {:40}   : {}{}, {}, {}".format(task_label, milestone, self._create_mermaid_task_id(blueprint_id, task), dependencies, duration))
 
         root_node = None
         for node in self.graph.nodes():
@@ -522,4 +525,6 @@ class Orchestrator:
         str
            Gantt chart representation of the blueprint session.
         """
-        return self.scheduler.to_mermaid_diagram(title)
+        diagram = self.scheduler.to_mermaid_diagram(title)
+        LOG.debug(f"diagram: {diagram}")
+        return diagram
