@@ -23,6 +23,7 @@ from antikythera.models import BlueprintSession
 from antikythera.orchestrator import Orchestrator
 from antikythera.orchestrator.storage import BlueprintStorage
 from antikythera.orchestrator.storage import RequestedBlueprintNotFound
+from antikythera.orchestrator.storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
 
@@ -253,14 +254,25 @@ def get_session_data(session_id: str) -> SessionDataResponse:
     with _sessions_lock:
         session = _sessions.get(session_id)
 
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    if session:
+        # Retrieve data for the main blueprint of the session
+        blueprint_id = session.orchestrator.session.blueprint.id
+        data = session.orchestrator.session_storage.get_all(blueprint_id)
+        state = session.orchestrator.session.state
+        return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)
 
-    # Retrieve data for the main blueprint of the session
-    blueprint_id = session.orchestrator.session.blueprint.id
-    data = session.orchestrator.session_storage.get_all(blueprint_id)
+    # If session is not in memory, try to load from storage
+    with SessionStorage() as storage:
+        session_info = storage.get_session_info(session_id)
+        if not session_info:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=session.orchestrator.session.state)
+        blueprint_id = session_info["blueprint_id"]
+        state = session_info["state"]
+        data = storage.get_all(blueprint_id)
+
+        return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)
+
 
 
 @app.on_event("shutdown")

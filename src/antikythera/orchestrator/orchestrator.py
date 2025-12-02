@@ -301,6 +301,14 @@ class Orchestrator:
 
         # Session data is blueprint-namespaced
         self.session_storage = SessionStorage()
+
+        existing_session = self.session_storage.get_session_info(self.session.bsid)
+        if existing_session:
+            self.session.state = BlueprintSessionState(existing_session["state"])
+            LOG.info(f"Resuming session {self.session.bsid} with state {self.session.state}")
+        else:
+            self.session_storage.register_session(self.session.bsid, self.session.blueprint.id)
+
         self.blueprint_storage = BlueprintStorage()
         LOG.info(f"Initialized session storage for session BSID={self.session.bsid}")
 
@@ -311,6 +319,7 @@ class Orchestrator:
     def start(self) -> None:
         """Starts the orchestrator."""
         self.session.state = BlueprintSessionState.RUNNING
+        self.session_storage.update_session_state(self.session.bsid, self.session.state)
         LOG.info(f"Orchestrator session with id {self.session.bsid} started!")
         self._schedule_tasks()
 
@@ -324,6 +333,7 @@ class Orchestrator:
         #     LOG.error(f"Error closing session storage: {exc}")
         if self.session.state == BlueprintSessionState.RUNNING:
             self.session.state = BlueprintSessionState.STOPPED
+            self.session_storage.update_session_state(self.session.bsid, self.session.state)
         LOG.info(f"Execution of session id {self.session.bsid} completed!")
 
     def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
@@ -395,6 +405,7 @@ class Orchestrator:
                 LOG.exception(f"Failed to start task {task.id}: {e}")
                 task.state = TaskState.FAILED
                 self.session.state = BlueprintSessionState.FAILED
+                self.session_storage.update_session_state(self.session.bsid, self.session.state)
 
     def _get_last_task(self) -> Task:
         for node, data in self.graph.nodes(data=True):
@@ -427,6 +438,7 @@ class Orchestrator:
 
             if self._is_last_task_in_blueprint(processed_task):
                 self.session.state = BlueprintSessionState.COMPLETED
+                self.session_storage.update_session_state(self.session.bsid, self.session.state)
                 self.stop()
 
         self._schedule_tasks()

@@ -411,7 +411,6 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [x] Implement compas.data support for parameters
 - [x] Swap Message usages with the relevant Protobuf messages + Implement TaskAckMessage
 - [x] Poll mermaid diagram API call  
-- [x] Include session state in API (started, finished)
 - [ ] Add/Update blueprint to Antikythera
 
 ...

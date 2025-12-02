@@ -11,6 +11,7 @@ from immudb.datatypes import DeleteKeysRequest
 
 from antikythera import config
 from antikythera.models import Blueprint
+from antikythera.models import BlueprintSessionState
 
 LOG = logging.getLogger(__name__)
 
@@ -62,12 +63,12 @@ class SessionStorage:
 
     def get(self, blueprint_id: str, key: str) -> Optional[Any]:
         full_key = self._key(blueprint_id, key)
-        try:
-            match = self.client.get(full_key)
-            bytes_value = match.value
-            return json_loads(bytes_value.decode())
-        except KeyError:
+        match = self.client.get(full_key)
+        if match is None:
             return None
+
+        bytes_value = match.value
+        return json_loads(bytes_value.decode())
 
     def set(self, blueprint_id: str, key: str, value: Any) -> None:
         full_key = self._key(blueprint_id, key)
@@ -92,6 +93,31 @@ class SessionStorage:
                 clean_key = decoded_key[len(blueprint_id) + 1 :]
                 data[clean_key] = json_loads(value.decode())
         return data
+
+    def _session_key(self, session_id: str) -> bytes:
+        return f"session:{session_id}".encode()
+
+    def register_session(self, session_id: str, blueprint_id: str) -> None:
+        key = self._session_key(session_id)
+        value = {"blueprint_id": blueprint_id, "state": BlueprintSessionState.PENDING.value}
+        self.client.set(key, json_dumps(value).encode())
+
+    def update_session_state(self, session_id: str, state: str) -> None:
+        key = self._session_key(session_id)
+        match = self.client.get(key)
+        if match is None:
+            return
+
+        data = json_loads(match.value.decode())
+        data["state"] = state
+        self.client.set(key, json_dumps(data).encode())
+
+    def get_session_info(self, session_id: str) -> Optional[dict]:
+        key = self._session_key(session_id)
+        match = self.client.get(key)
+        if match is None:
+            return None
+        return json_loads(match.value.decode())
 
 
 class BlueprintStorage:
