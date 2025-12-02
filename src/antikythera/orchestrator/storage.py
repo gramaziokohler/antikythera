@@ -7,6 +7,7 @@ from typing import cast
 from compas.data import json_dumps
 from compas.data import json_loads
 from immudb import ImmudbClient
+from immudb.datatypes import DeleteKeysRequest
 
 from antikythera import config
 from antikythera.models import Blueprint
@@ -210,3 +211,47 @@ class BlueprintStorage:
                 found_blueprints.append(metadata)
 
         return found_blueprints
+
+    def remove_blueprint(self, blueprint_id: str) -> None:
+        """Remove a blueprint from the database.
+
+        Parameters
+        ----------
+        blueprint_id : str
+            The ID of the blueprint to remove.
+
+        Raises
+        ------
+        RequestedBlueprintNotFound
+            If the blueprint with the given ID is not found.
+        """
+        LOG.debug(f"Removing blueprint {blueprint_id} from immudb")
+
+        # First verify the blueprint exists
+        blueprint_key = f"blueprint:{blueprint_id}".encode()
+        match = self.client.get(blueprint_key)
+        if not match:
+            LOG.error(f"Blueprint {blueprint_id} not found in database")
+            raise RequestedBlueprintNotFound(f"Blueprint {blueprint_id} not found")
+
+        # Remove from index
+        index_key = b"blueprint:index"
+        match = self.client.get(index_key)
+        if match:
+            index_data = json_loads(match.value.decode())
+            index_data = cast(list[str], index_data)
+
+            if blueprint_id in index_data:
+                index_data.remove(blueprint_id)
+                # Update the index
+                blueprint_index_value = json_dumps(index_data).encode()
+                self.client.set(index_key, blueprint_index_value)
+        else:
+            LOG.warning("Blueprint index not found, skipping index update")
+
+        # Delete the blueprint and metadata keys
+        metadata_key = f"metadata:{blueprint_id}".encode()
+        delete_request = DeleteKeysRequest(keys=[metadata_key, blueprint_key])
+        self.client.delete(delete_request)
+
+        LOG.info(f"Blueprint {blueprint_id} deleted")

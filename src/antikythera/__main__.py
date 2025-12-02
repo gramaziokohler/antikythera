@@ -15,7 +15,6 @@ from compas.data import json_dumps
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -23,6 +22,7 @@ from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.orchestrator import Orchestrator
 from antikythera.orchestrator.storage import BlueprintStorage
+from antikythera.orchestrator.storage import RequestedBlueprintNotFound
 
 LOG = logging.getLogger(__name__)
 
@@ -78,6 +78,11 @@ class BlueprintInfo(BaseModel):
 
 
 class UploadBlueprintResponse(BaseModel):
+    blueprint_id: str
+    message: str
+
+
+class DeleteBlueprintResponse(BaseModel):
     blueprint_id: str
     message: str
 
@@ -214,6 +219,21 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
         raise HTTPException(status_code=500, detail=f"Failed to save blueprint: {exc}")
 
     return UploadBlueprintResponse(blueprint_id=blueprint.id, message="Blueprint uploaded successfully.")
+
+
+@app.delete("/blueprints/{blueprint_id}", response_model=DeleteBlueprintResponse)
+def delete_blueprint(blueprint_id: str) -> DeleteBlueprintResponse:
+    try:
+        with BlueprintStorage() as storage:
+            storage.remove_blueprint(blueprint_id)
+    except RequestedBlueprintNotFound as exc:
+        LOG.warning(f"Blueprint {blueprint_id} not found: {exc}")
+        raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} not found")
+    except Exception as exc:
+        LOG.exception(f"Failed to delete blueprint {blueprint_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete blueprint: {exc}")
+
+    return DeleteBlueprintResponse(blueprint_id=blueprint_id, message="Blueprint deleted successfully.")
 
 
 @app.get("/sessions/{session_id}/diagram", response_model=BlueprintDiagramResponse)
