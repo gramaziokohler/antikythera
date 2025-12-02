@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "id": "TP5",
+  "name": "Toy Problem 5",
+  "description": "Pick and place blueprints",
+  "tasks": [
+    {
+      "id": "start",
+      "type": "system.start",
+      "outputs": {
+        "process_start_time": "timestamp"
+      }
+    },
+
+    {
+      "id": "X1",
+      "type": "system.composite",
+      "description": "Pick and Place",
+      "inputs": {
+          "something": "str"
+      },
+      "outputs": {
+          "result1": "str"
+      },
+      "blueprint": {
+        "static": "toy_problem_5_inner_pnp.json"
+      },
+      "depends_on": [
+        {"id": "start"}
+      ]
+    },
+
+    {
+      "id": "end",
+      "type": "system.end",
+      "outputs": {
+        "process_end_time": "timestamp"
+      },
+      "depends_on": [
+        {"id": "X1"}
+      ]
+    }
+  ]
+}

@@ -1,32 +1,43 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import threading
 import time
 
-from compas_eve import Message
+from mqtthandler import MQTTHandler
+
 from compas_eve import Publisher
 from compas_eve import Subscriber
 from compas_eve import Topic
+from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
 
 from antikythera.models import Task
+from antikythera.models import TaskAssignmentMessage
+from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
 from antikythera_agents.cli import Colors
-from antikythera_agents.system import SystemAgent
+
+
+MQTT_LOG_TOPIC = "antikythera/logs"
 
 
 def _ensure_agents():
+    _get_plugin_manager().discover_plugins()
+
+
+def _get_plugin_manager():
     from antikythera.plugin import PLUGIN_MANAGER
 
-    PLUGIN_MANAGER.discover_plugins()
+    return PLUGIN_MANAGER
 
 
 class AgentLauncher:
     def __init__(self, broker_host="127.0.0.1", broker_port=1883):
         self.threads = []
         self.thread_lock = threading.Lock()
-        self.transport = MqttTransport(host=broker_host, port=broker_port)
+        self.transport = MqttTransport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start_subscriber = Subscriber(Topic("antikythera/task/start"), self.on_task_start, transport=self.transport)
         self.task_completion_publisher = Publisher(Topic("antikythera/task/completed"), transport=self.transport)
 
@@ -68,13 +79,13 @@ class AgentLauncher:
 
         print(f"Total agents initialized: {len(self.agents)}")
 
-    def on_task_start(self, message: Message) -> None:
+    def on_task_start(self, message: TaskAssignmentMessage) -> None:
         task = Task(
-            id=message["id"],
-            type=message["type"],
-            inputs=message["inputs"],
-            outputs=message["outputs"],
-            params=message["params"],
+            id=message.id,
+            type=message.type,
+            inputs=message.inputs,
+            outputs={key: None for key in message.output_keys},
+            params=message.params,
         )
 
         thread = threading.Thread(target=self._execute_task_wrapper, args=(task,))
@@ -99,27 +110,57 @@ class AgentLauncher:
 
         try:
             outputs = agent.execute_task(task)
-            state = TaskState.SUCCEEDED.value
+            state = TaskState.SUCCEEDED
         except Exception as e:
             print(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Agent Error: {e}{Colors.ENDC}")
-            state = TaskState.FAILED.value
+            state = TaskState.FAILED
             outputs = {"exception": str(e)}
 
-        # TODO: Replace Message with TaskCompletionMessage once compas_eve supports protobuf
-        msg = Message({"id": task.id, "state": state, "outputs": outputs})
+        msg = TaskCompletionMessage(id=task.id, state=state, outputs=outputs)
         self.task_completion_publisher.publish(msg)
+
+    def reload_agents(self):
+        print(f"{Colors.OKBLUE}Reloading agents...{Colors.ENDC}")
+
+        # Dispose of existing agents before reloading
+        for agent in self.agents.values():
+            try:
+                agent.dispose()
+            except Exception as e:
+                print(f"Error disposing agent during reload: {e}")
+
+        _get_plugin_manager().reload_plugins()
+        self._initialize_agents()
 
 
 def main():
     parser = argparse.ArgumentParser(description="Antikythera Agents")
     parser.add_argument("--broker-host", default="127.0.0.1", help="MQTT broker host.")
     parser.add_argument("--broker-port", type=int, default=1883, help="MQTT broker port.")
+    parser.add_argument("--dev", action="store_true", help="Enable hot reloading of agents.")
     args = parser.parse_args()
 
     print("Antikythera Agents starting up...")
     print(f"Connecting to MQTT broker at {args.broker_host}:{args.broker_port}")
     launcher = AgentLauncher(broker_host=args.broker_host, broker_port=args.broker_port)
     launcher.start()
+
+    if args.dev:
+        
+        _get_plugin_manager().start_file_watcher(launcher.reload_agents)
+        print(f"{Colors.OKGREEN}Hot reloading enabled.{Colors.ENDC}")
+
+        # Configure MQTT logging
+        handler = MQTTHandler(args.broker_host, MQTT_LOG_TOPIC, port=args.broker_port)
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        handler.setFormatter(formatter)
+
+        agent_logger = logging.getLogger("antikythera_agents")
+        agent_logger.addHandler(handler)
+        agent_logger.setLevel(logging.DEBUG)
+
+        print(f"{Colors.OKGREEN}MQTT logging handler configured on {MQTT_LOG_TOPIC}.{Colors.ENDC}")
+
     print("Agents are running and waiting for tasks. Press Ctrl+C to shut down.")
 
     try:
@@ -128,6 +169,8 @@ def main():
     except KeyboardInterrupt:
         print("\nShutting down agents...")
         launcher.stop()
+        if args.dev:
+            _get_plugin_manager().stop_file_watcher()
         print("Agents stopped.")
 
     print("Bye!")

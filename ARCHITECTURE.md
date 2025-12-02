@@ -25,6 +25,7 @@
 * `compas_pb`: Protocol Buffers integration for COMPAS used for serialization of messages in the Agent Communication Protocol.
 * `compas_model`: Model representation for fabricatable objects
 * `immudb`: Immutable database for persistent data storage, chosen for its append-only nature and data integrity guarantees
+* `FastAPI` + `uvicorn`: HTTP interface to the orchestrator service
 
 ### Integration Technologies
 * `compas_fab`: Handles tasks of type **Robotic Planning** (using Project Theseus, `wip_process` branch)
@@ -51,9 +52,20 @@ The **orchestrator** is in charge of coordinating the execution of a **blueprint
 
 Each task is executed by an **agent**, either remote or local. The overall system has location transparency, so agents can be running in one or more machines in the same or different networks.
 
-The orchestrator runs a single **blueprint** at a time. Each run of a blueprint is identified by a session identifier (`BSID`). Parallelism can be achieved inside the blueprint itself by using different agents. 
+The orchestrator runs a single **blueprint** at a time. Each run of a blueprint is identified by a session identifier (`BSID`). A session has a state (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED`). Parallelism can be achieved inside the blueprint itself by using different agents. 
 
 The orchestrator loads a **blueprint** from a file or an API call, and will begin to execute it. The link between the JSON representation and the in-memory execution should not be lost during loading, because it is necessary to allow live modifications of the running graph. Modifications of the graph are append-only operations, so that the orchestrator can always keep track of the original graph. Edge-cases like the deletion of a node should be handled with care, to gracefully deal with loss of data dependency as well as case of a agent running a node while it is deleted.
+
+#### Orchestrator API
+
+The orchestrator API is exposed through a FastAPI application (`python -m antikythera`). The API accepts HTTP requests to control blueprint sessions:
+
+- `POST /blueprints/start`: Starts executing a blueprint. Payload mirrors the CLI arguments: `blueprint_file` (path to JSON blueprint), `broker_host`, and `broker_port`. The response returns the generated `session_id`.
+- `GET /blueprints`: Lists active sessions with their blueprint path, broker configuration, and start timestamp so that operators can track concurrent executions.
+- `GET /sessions/{session_id}/diagram`: Returns a Mermaid diagram representing the current execution state of the session.
+- `GET /sessions/{session_id}/data`: Returns the session data (inputs/outputs) stored for the session.
+
+Sessions remain active until the process receives a shutdown signal, at which point the API shuts down all orchestrators gracefully.
 
 ### Agents
 
@@ -94,6 +106,18 @@ class SystemAgent(Agent):
         return {"slept_duration": duration}
 ```
 
+#### Development Mode
+
+The agent launcher supports a development mode that enables hot reloading of agents when their source code changes. This is useful for rapid development and testing of new agent capabilities.
+
+To enable development mode, start the launcher with the `--dev` flag:
+
+```bash
+python -m antikythera_agents --dev
+```
+
+When enabled, the system watches for changes in the source files of loaded agents and automatically reloads them without restarting the process.
+
 #### Error Handling and Recovery
 
 If a task ends up in a failed state, the orchestrator should be able to resume execution from that point. This topic is not yet addressed but will require tasks to define retry policies and idempotency, i.e. if a task can be run multiple times without side effects, and if they can be retried in case of failure. For the time being, a failed task will cause the orchestrator to stop the session.
@@ -102,11 +126,12 @@ Initially, only very simple agents will be implemented to execute toy problems.
 
 ### Data store
 
-The system uses a persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
+The system uses a [`ImmuDB`](https://immudb.io/) as persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
 
 The data store contains two types of data, internal and external:
 * Orchestrator data, considered internal.
 * Blueprint session data, considered external and linked to a specific `BSID` (blueprint session identifier).
+* The data store also persistently stores "updloaded" blueprints which can be then referenced by their name/identified to start. 
 
 The global nature of blueprint session data is mitigated by the data dependencies defined in the **DAG**, i.e. by defining input and output data keys declaratively.
 
@@ -190,13 +215,39 @@ The blueprint is defined in a structured JSON format. The schema is under develo
 
 This schema will evolve as the system matures.
 
+#### Argument mapping
+
+Tasks can optionally declare an `argument_mapping` block to remap task-level input/output names to the names used in blueprint session data. This helps avoid key collisions and lets an agent-specific signature stay stable while the surrounding blueprint uses different data keys.
+
+```json
+{
+  "id": "calculate_ik",
+  "type": "moveit_planner.pnp_",
+  "inputs": {
+    "start_state": "compas_fab.robots.RobotCellState"
+  },
+  "outputs": {
+    "grasp_frame": "compas.geometry.Frame"
+  },
+  "argument_mapping": {
+    "inputs": {
+      "start_state": "some_blueprint_state_name"
+    },
+    "outputs": {
+      "grasp_frame": "framecito"
+    }
+  }
+}
+```
+
 ### Agent Communication Protocol
 
-Agents communicate with the orchestrator via 3 types of messages sent over MQTT. The schema for these protocol messages are defined using Protocol Buffers (`protobuf`) and the `compas_pb` library for type-safe serialization of COMPAS objects:
+Agents communicate with the orchestrator via 4 types of messages sent over MQTT. The schema for these protocol messages are defined using Protocol Buffers (`protobuf`) and the `compas_pb` library for type-safe serialization of COMPAS objects:
 
 1. **Task Assignment**: The orchestrator sends a `TaskAssignmentMessage` when a task is ready to be executed.
-2. **Task Status Updates**: TBD
+2. **Task Status Updates**: When an agent begins executing a task it publishes a `TaskStatusUpdateMessage` so the orchestrator know the task is now actively running and who is responsible for it. After this, the agent may send additional status updates (e.g., progress reports) as needed.
 3. **Task Completion**: The agent sends a `TaskCompletionMessage` with the task result upon completion (success or failure).
+4. **Task Completion ACK**: The orchestrator sends a `TaskCompletionAckMessage` immediately after it accepts a `TaskCompletionMessage`. This acknowledgement is broadcast to all agents running the same task so the non-reporting agents can invalidate their local execution and return to the idle state without waiting for a timeout.
 
 **Protocol Buffer Definitions**
 
@@ -204,7 +255,9 @@ The complete protobuf schema is maintained in [`src/antikythera/proto/antikyther
 
 **Key message types:**
 - `TaskAssignmentMessage`: Sent by orchestrator to agents when tasks are ready
+- `TaskStatusUpdateMessage`: Sent by agents as soon as they start working on a task
 - `TaskCompletionMessage`: Sent by agents to orchestrator upon task completion
+- `TaskCompletionAckMessage`: Sent by orchestrator after recording task completion to signal that the task is closed for all agents
 - `TaskState`: Enum defining task lifecycle states
 - `TaskError`: Error information for failed tasks
 
@@ -218,18 +271,33 @@ message TaskAssignmentMessage {
   string type = 2;                                  // Required: task type (determines which agent handles it)
   map<string, compas_pb.data.AnyData> inputs = 3;   // Optional: task inputs from blueprint session data
   repeated string output_keys = 4;                  // Optional: expected output keys (for validation)
-  map<string, compas_pb.data.AnyData> params = 5;  // Optional: task-specific parameters (not from session data)
+  map<string, compas_pb.data.AnyData> params = 5;   // Optional: task-specific parameters (not from session data)
   google.protobuf.Timestamp timestamp = 6;          // Optional: assignment timestamp
+}
+
+message TaskStatusUpdateMessage {
+  string id = 1;                                    // Required: task identifier
+  TaskState state = 2;                              // Required: typically TASK_STATE_RUNNING when execution starts
+  string agent_id = 3;                              // Required: agent claiming the task
+  compas_pb.data.AnyData data = 4;                  // Optional: any additional status data (e.g., progress)
+  google.protobuf.Timestamp timestamp = 5;          // Optional: update emission time
 }
 
 message TaskCompletionMessage {
   
   string id = 1;                                    // Required: unique task identifier
   TaskState state = 2;                              // Required: current task state
-  map<string, compas_pb.data.AnyData> outputs = 3; // Optional: task outputs (only for succeeded tasks)
+  map<string, compas_pb.data.AnyData> outputs = 3;  // Optional: task outputs (only for succeeded tasks)
   TaskError error = 4;                              // Optional: error information (required for failed tasks)
   google.protobuf.Timestamp timestamp = 5;          // Optional: message timestamp
-  uint64 duration_ms = 6;                            // Optional: task execution duration in milliseconds
+  uint64 duration_ms = 6;                           // Optional: task execution duration in milliseconds
+}
+
+message TaskCompletionAckMessage {
+  string id = 1;                                    // Required: task identifier being acknowledged
+  TaskState state = 2;                              // Optional: final recorded state (SUCCEEDED/FAILED)
+  string accepted_agent_id = 3;                     // Optional: agent whose completion was accepted
+  google.protobuf.Timestamp timestamp = 4;          // Optional: time the orchestrator processed the completion
 }
 
 enum TaskState {
@@ -317,15 +385,35 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 
 - **M1 (Toy problem 1):** author a trivial blueprint composed by 3 tasks (A1, A2, B1) + 1 start and 1 end task. A1 and A2 depend on START, B1 depends on A1 and A2, END depends on B1. A1 will wait for user input on the terminal (or any other input method) and define one output data key. A2 will be a "sleep 5 seconds" task, B1 will define a data input on the output key generated by A1 and print it.
 - **M2 (Toy problem 2):**: author a blueprint for robotic pick and place of a single element using a 6-DoF robot (ABB GoFa robot model) composed by 7 tasks: A1: plan trajectory, A2: move/execute trajectory, A3: actuate gripper, A4: plan trajectory, A5: move/execute trajectory. All tasks are sequential and depend on the previous one. START and END are placed at the start and end of the blueprint respectively. The `move/execute trajectory` tasks should implement `needs_approval`. This means, there are 3 new agent types: `compas_fab.plan_trajectory` (used to calculate approach and retract trajectories), `compas_rrc.move_to_trajectory` and `compas_rrc.actuate_gripper`.
-- **M3 (Toy problem 3):**: Add `compas_model` to the trivial blueprint, including element ids referenced from tasks.
 - **M4 (Toy problem 4):**: Inner blueprints using `system.composite` (static): 1) Implement static inner blueprint and agent, 2) Inputs and Outputs of inner blueprints.
-
-
-* Next steps:
- - Write blueprint
- - Implent toy problem 2
+- **M5 (Toy problem 5):** Pick and place for a single element using a 6-DoF robot with inner blueprints. Tasks: 1) `Plan Pick` and `Plan Place` for `MoveIt` planner agent. 2) For next Milestote: Model is read-only and globally accessible inside inner blueprints, but the element sequencer will assign additional information: current element id + list of state (built/not built) of all elements.
+- **M6 (Toy problem 6):**: Add `compas_model` to M5, including element ids referenced from tasks and dynamic inner blueprint expansion based on calls to some kind of sequencer (sequencing the model's elements).
 
 
 * Two possible levels of agents (can both exist in Antikythera):
  - Type 1: Simple wrapper for some Python code (e.g. inverse_kinematics(config) -> Frame, forward_kinematics(Frame) -> config)
  - Type 2: Process-aware/model-aware/scene-aware: mindful agents
+
+
+- Model -> Element -> FabricationElement
+- Sequencer:
+  - sequence_the_model(model) -> list[FabItem]
+- FabItem:
+  - id: str
+  - geometry: compas.geometry.Geometry
+  - element_id | stock_id | other_things
+  - state: enum (NOT_STARTED, IN_PROGRESS, COMPLETED)
+  - fabrication_instructions: dict
+
+
+## TODOs
+
+- [x] Implement compas.data support for parameters
+- [x] Swap Message usages with the relevant Protobuf messages + Implement TaskAckMessage
+- [x] Poll mermaid diagram API call  
+- [ ] Add/Update blueprint to Antikythera
+
+...
+...
+- [ ] MQTT Log handler (Log Message)
+- [ ] Web UI + React Flow 

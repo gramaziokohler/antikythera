@@ -5,7 +5,7 @@ from compas_invocations2 import build
 from compas_invocations2 import docs
 from compas_invocations2 import style
 from compas_invocations2 import tests
-from invoke import Collection
+from invoke.collection import Collection
 
 import compas_pb
 from compas_pb.invocations import generate_proto_classes

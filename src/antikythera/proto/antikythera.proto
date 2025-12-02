@@ -29,6 +29,24 @@ message TaskAssignmentMessage {
   google.protobuf.Timestamp timestamp = 6;
 }
 
+// Task status update sent by agents when they start executing a task
+message TaskStatusUpdateMessage {
+  // Required: task identifier
+  string id = 1;
+
+  // Required: current task state (typically TASK_STATE_RUNNING when execution starts)
+  TaskState state = 2;
+
+  // Required: agent claiming or running the task
+  string agent_id = 3;
+
+  // Optional: any additional status data (e.g., progress)
+  compas_pb.data.AnyData data = 4;
+
+  // Optional: time the update was emitted
+  google.protobuf.Timestamp timestamp = 5;
+}
+
 // Task completion message sent by agents to orchestrator
 message TaskCompletionMessage {
   // Required: unique task identifier
@@ -49,6 +67,21 @@ message TaskCompletionMessage {
 
   // Optional: task execution duration in milliseconds
   uint64 duration_ms = 6;
+}
+
+// Task completion acknowledgement sent by orchestrator after recording a completion
+message TaskCompletionAckMessage {
+  // Required: task identifier being acknowledged
+  string id = 1;
+
+  // Optional: final recorded state (SUCCEEDED / FAILED)
+  TaskState state = 2;
+
+  // Optional: agent whose completion was accepted
+  string accepted_agent_id = 3;
+
+  // Optional: time the orchestrator processed the completion
+  google.protobuf.Timestamp timestamp = 4;
 }
 
 enum TaskState {

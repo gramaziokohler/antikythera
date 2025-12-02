@@ -51,11 +51,31 @@ def taskassignment_from_pb(pb: antikythera_pb2.TaskAssignmentMessage) -> TaskAss
     )
 
 
+TASK_STATE_TO_PB = {
+    TaskState.PENDING: antikythera_pb2.TaskState.TASK_STATE_PENDING,
+    TaskState.READY: antikythera_pb2.TaskState.TASK_STATE_READY,
+    TaskState.RUNNING: antikythera_pb2.TaskState.TASK_STATE_RUNNING,
+    TaskState.SUCCEEDED: antikythera_pb2.TaskState.TASK_STATE_SUCCEEDED,
+    TaskState.FAILED: antikythera_pb2.TaskState.TASK_STATE_FAILED,
+}
+
+TASK_STATE_FROM_PB = {v: k for k, v in TASK_STATE_TO_PB.items()}
+
+
+def _task_state_to_pb(state: TaskState) -> antikythera_pb2.TaskState:
+    return TASK_STATE_TO_PB.get(state, antikythera_pb2.TaskState.TASK_STATE_UNSPECIFIED)
+
+
+def _task_state_from_pb(pb_state: antikythera_pb2.TaskState) -> TaskState:
+    return TASK_STATE_FROM_PB.get(pb_state, TaskState.UNSPECIFIED)
+
+
 @pb_serializer(TaskCompletionMessage)
 def taskcompletion_to_pb(message: TaskCompletionMessage) -> antikythera_pb2.TaskCompletionMessage:
     pb = antikythera_pb2.TaskCompletionMessage()
+
     pb.id = message.id
-    pb.state = message.state.value
+    pb.state = _task_state_to_pb(message.state)
     if message.outputs:
         for k, v in message.outputs.items():
             pb.outputs[k].CopyFrom(_serializer_any(v))
@@ -85,7 +105,7 @@ def taskcompletion_from_pb(pb: antikythera_pb2.TaskCompletionMessage) -> TaskCom
 
     return TaskCompletionMessage(
         id=pb.id,
-        state=TaskState(pb.state),
+        state=_task_state_from_pb(pb.state),
         outputs=outputs if outputs else None,
         error=error,
         timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,

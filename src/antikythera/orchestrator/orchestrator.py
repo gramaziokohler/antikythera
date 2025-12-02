@@ -7,18 +7,24 @@ from queue import LifoQueue
 from queue import Queue
 
 from compas.datastructures import Graph
-from compas_eve import Message
 from compas_eve import Publisher
 from compas_eve import Subscriber
 from compas_eve import Topic
+from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
 
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
+from antikythera.models import BlueprintSessionState
 from antikythera.models import Dependency
 from antikythera.models import DependencyType
 from antikythera.models import Task
+from antikythera.models import TaskAssignmentMessage
+from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
+
+from .storage import BlueprintStorage
+from .storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
 
@@ -87,7 +93,7 @@ class TaskScheduler:
         self.queue = LifoQueue()
         self._lock = threading.Lock()
 
-    def queue_message(self, message: Message) -> None:
+    def queue_message(self, message: TaskCompletionMessage) -> None:
         self.queue.put(message)
 
     def _are_ff_deps_fulfilled(self, dependencies) -> bool:
@@ -104,25 +110,25 @@ class TaskScheduler:
                 break
         return all_ff_succeeded
 
-    def _process_message(self, message: Message, task: Task, blueprint_id: str) -> None:
+    def _process_message(self, message: TaskCompletionMessage, task: Task, blueprint_id: str) -> ProcessedTask:
         # THIS METHOD MUTATES `task`
         # updated the task state according to the reported state in the message
         # create and return a ProcessedTask object
-        if message["state"] == TaskState.SUCCEEDED.value:
+        if message.state == TaskState.SUCCEEDED.value:
             task.state = TaskState.SUCCEEDED
-        elif message["state"] == TaskState.FAILED.value:
+        elif message.state == TaskState.FAILED.value:
             task.state = TaskState.FAILED
         else:
-            raise ValueError(f"Invalid task state: {message['state']}")
+            raise ValueError(f"Invalid task state: {message.state}")
 
         if task.outputs:
-            task.outputs = message["outputs"]
+            task.outputs = message.outputs
         else:
             task.outputs = {}
         return ProcessedTask(task_id=task.id, blueprint_id=blueprint_id, task=task)
 
     def process_queue(self) -> list[ProcessedTask]:
-        LOG.debug(f"processing queue: {[m.data['id'] for m in list(self.queue.queue)]}")
+        LOG.debug(f"processing queue: {[m.id for m in list(self.queue.queue)]}")
 
         processed_tasks = []
         put_back_to_queue = []
@@ -130,7 +136,7 @@ class TaskScheduler:
         while not self.queue.empty():
             message = self.queue.get()
 
-            task_id = message["id"]
+            task_id = message.id
             task = self.graph.node[task_id]["task"]
             blueprint_id = self.graph.node[task_id]["blueprint_id"]
 
@@ -188,6 +194,9 @@ class TaskScheduler:
 
         return dependencies
 
+    def _create_mermaid_task_id(self, blueprint_id: str, task: Task) -> str:
+        return _create_global_id(blueprint_id, task).replace(".", "_")
+
     def to_mermaid_diagram(self, title="Blueprint") -> str:
         """Generate a mermaid-syntax diagram representation of the blueprint session.
 
@@ -221,7 +230,7 @@ class TaskScheduler:
                 task_state = "🏃"
             else:
                 task_state = "?"
-            task_label = f"{task_state} [{_create_global_id(blueprint_id, task)}] {task.type}"
+            task_label = f"{task_state} [{self._create_mermaid_task_id(blueprint_id, task)}] {task.type}"
             return task_label
 
         def append_node(previous, current):
@@ -233,7 +242,7 @@ class TaskScheduler:
 
             for node_in in self.graph.neighbors_in(current):
                 task_in = self.graph.node[node_in]["task"]
-                dependencies_list.append(_create_global_id(blueprint_id, task_in))
+                dependencies_list.append(self._create_mermaid_task_id(blueprint_id, task_in))
 
             if dependencies_list:
                 dependencies = "after " + " ".join(dependencies_list)
@@ -249,7 +258,7 @@ class TaskScheduler:
             if task.type == "system.start" and dependencies == "":
                 dependencies = datetime.date.today().isoformat()
 
-            result.append("  {:40}   : {}{}, {}, {}".format(task_label, milestone, _create_global_id(blueprint_id, task), dependencies, duration))
+            result.append("  {:40}   : {}{}, {}, {}".format(task_label, milestone, self._create_mermaid_task_id(blueprint_id, task), dependencies, duration))
 
         root_node = None
         for node in self.graph.nodes():
@@ -282,16 +291,26 @@ class Orchestrator:
         self.composite_to_inner_blueprint_map: dict[str, str] = {}
         self.graph: Graph = None
 
-        self.transport = MqttTransport(host=broker_host, port=broker_port)
+        self.transport = MqttTransport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start = Topic("antikythera/task/start")
         self.task_completed = Topic("antikythera/task/completed")
 
         self.task_start_publisher = Publisher(self.task_start, transport=self.transport)
         self.task_completion_subscriber = Subscriber(self.task_completed, self.on_task_completed, transport=self.transport)
         self.task_completion_subscriber.subscribe()
+
         # Session data is blueprint-namespaced
-        # TODO: This should be replaced with a proper data store
-        self.session_data = {}
+        self.session_storage = SessionStorage()
+
+        existing_session = self.session_storage.get_session_info(self.session.bsid)
+        if existing_session:
+            self.session.state = BlueprintSessionState(existing_session["state"])
+            LOG.info(f"Resuming session {self.session.bsid} with state {self.session.state}")
+        else:
+            self.session_storage.register_session(self.session.bsid, self.session.blueprint.id)
+
+        self.blueprint_storage = BlueprintStorage()
+        LOG.info(f"Initialized session storage for session BSID={self.session.bsid}")
 
         self._preprocess_blueprint()
         self._build_graph()
@@ -299,11 +318,61 @@ class Orchestrator:
 
     def start(self) -> None:
         """Starts the orchestrator."""
+        self.session.state = BlueprintSessionState.RUNNING
+        self.session_storage.update_session_state(self.session.bsid, self.session.state)
+        LOG.info(f"Orchestrator session with id {self.session.bsid} started!")
         self._schedule_tasks()
 
     def stop(self) -> None:
         """Stops the orchestrator."""
         self.task_completion_subscriber.unsubscribe()
+        # NOTE: for now don't close session storage until we figure out how to better handle it on the API
+        # try:
+        #     self.session_storage.close()
+        # except Exception as exc:
+        #     LOG.error(f"Error closing session storage: {exc}")
+        if self.session.state == BlueprintSessionState.RUNNING:
+            self.session.state = BlueprintSessionState.STOPPED
+            self.session_storage.update_session_state(self.session.bsid, self.session.state)
+        LOG.info(f"Execution of session id {self.session.bsid} completed!")
+
+    def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
+        """Resolve task inputs from session data applying argument remapping."""
+        input_mapping = task.argument_mapping.get("inputs", {}) if task.argument_mapping else {}
+
+        inputs = {}
+        for key in task.inputs:
+            mapped_key = input_mapping.get(key) or key
+            inputs[key] = self.session_storage.get(blueprint_id, mapped_key)
+        return inputs
+
+    def _map_outputs_to_session(self, blueprint_id: str, task: Task) -> dict:
+        """Map task outputs to the names used in session data."""
+        output_mapping = task.argument_mapping.get("outputs", {}) if task.argument_mapping else {}
+        task_outputs = task.outputs or {}
+
+        outputs = {}
+        for key, value in task_outputs.items():
+            mapped_key = output_mapping.get(key) or key
+            outputs[mapped_key] = value
+
+        # TODO: Should use set_all() here
+        # I implemented set_all in SessionStorage but commented it out for now
+        # because it throws a weird error:
+        # UNKNOWN:Error received from peer ipv6:%5B::1%5D:3322 {grpc_status:2, grpc_message:"no entries provided"}
+        # self.session_storage.set_all(blueprint_id, outputs)
+        for k, v in outputs.items():
+            self.session_storage.set(blueprint_id, k, v)
+
+        return outputs
+
+    def _map_outputs_to_outer_session(self, outer_blueprint_id: str, task: Task):
+        inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(outer_blueprint_id, task)]
+
+        for key in task.outputs:
+            mapped_key = task.argument_mapping.get("outputs", {}).get(key) or key
+            value = self.session_storage.get(inner_blueprint_id, key)
+            self.session_storage.set(outer_blueprint_id, mapped_key, value)
 
     def _schedule_tasks(self) -> None:
         """Schedules tasks for execution."""
@@ -317,28 +386,41 @@ class Orchestrator:
                 task.state = TaskState.PENDING
 
                 # Prepare inputs to pass to the task
-                inputs = {}
-                for key in task.inputs:
-                    inputs[key] = self.session_data.get(blueprint_id, {}).get(key)
+                inputs = self._map_inputs_from_session(blueprint_id, task)
 
                 # Handle inputs for inner blueprints
                 if task.type == "system.composite":
                     inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(blueprint_id, task)]
-                    if inner_blueprint_id not in self.session_data:
-                        self.session_data[inner_blueprint_id] = {}
-                    self.session_data[inner_blueprint_id].update(inputs)
+                    # NOTE: See above for why set_all() is commented out
+                    # self.session_storage.set_all(inner_blueprint_id, inputs)
+                    for key, value in inputs.items():
+                        self.session_storage.set(inner_blueprint_id, key, value)
 
-                # TODO: Replace message with TaskStartMessage once compas_eve supports protobuf
                 self.task_start_publisher.publish(
-                    Message({"id": _create_global_id(blueprint_id, task), "type": task.type, "inputs": inputs, "outputs": task.outputs, "params": task.params})
+                    TaskAssignmentMessage(id=_create_global_id(blueprint_id, task), type=task.type, inputs=inputs, output_keys=task.outputs, params=task.params)
                 )
                 # TODO: Verify if they actually started
                 task.state = TaskState.RUNNING
             except Exception as e:
-                print(f"Failed to start task {task.id}: {e}")
+                LOG.exception(f"Failed to start task {task.id}: {e}")
                 task.state = TaskState.FAILED
+                self.session.state = BlueprintSessionState.FAILED
+                self.session_storage.update_session_state(self.session.bsid, self.session.state)
 
-    def on_task_completed(self, message: Message) -> None:
+    def _get_last_task(self) -> Task:
+        for node, data in self.graph.nodes(data=True):
+            if self.graph.degree_out(node) == 0:
+                return data["task"]
+
+        raise AssertionError("Clearly something went horribly wrong, no last task found!")
+
+    def _is_last_task_in_blueprint(self, processed_task: ProcessedTask) -> bool:
+        last_task = self._get_last_task()
+        last_task_fqn_id = _create_global_id(self.session.blueprint.id, last_task)
+        fqn_task_id = _create_global_id(processed_task.blueprint_id, processed_task.task)
+        return last_task_fqn_id == fqn_task_id
+
+    def on_task_completed(self, message: TaskCompletionMessage) -> None:
         """Handles incoming task completion messages."""
         LOG.info(f"task finished: {message}")
 
@@ -348,21 +430,25 @@ class Orchestrator:
         for processed_task in processed_tasks:
             blueprint_id = processed_task.blueprint_id
 
-            if blueprint_id not in self.session_data:
-                self.session_data[blueprint_id] = {}
-            self.session_data[blueprint_id].update(processed_task.task.outputs)
+            self._map_outputs_to_session(blueprint_id, processed_task.task)
 
             # Handle outs from inner blueprints
             if processed_task.task.type == "system.composite":
-                inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(blueprint_id, processed_task.task)]
-                inner_session_data = self.session_data.get(inner_blueprint_id, {})
-                if processed_task.blueprint_id not in self.session_data:
-                    self.session_data[processed_task.blueprint_id] = {}
+                self._map_outputs_to_outer_session(blueprint_id, processed_task.task)
 
-                for key in processed_task.task.outputs:
-                    self.session_data[processed_task.blueprint_id][key] = inner_session_data.get(key)
+            if self._is_last_task_in_blueprint(processed_task):
+                self.session.state = BlueprintSessionState.COMPLETED
+                self.session_storage.update_session_state(self.session.bsid, self.session.state)
+                self.stop()
 
         self._schedule_tasks()
+
+    def _init_session_data_for_task(self, blueprint_id: str, task: Task) -> None:
+        # some tasks my have inputs that are static, serialized data values
+        # put those into session data before execution starts
+        for key, value in task.inputs.items():
+            if not isinstance(value, str):
+                self.session_storage.set(blueprint_id, key, value)
 
     def _preprocess_blueprint(self) -> None:
         """Preprocesses the blueprint before execution to expand composite tasks."""
@@ -373,6 +459,8 @@ class Orchestrator:
             blueprint = blueprint_queue.get()
 
             for task in blueprint.tasks:
+                self._init_session_data_for_task(blueprint.id, task)
+
                 if task.type == "system.composite":
                     inner_blueprint = self._load_inner_blueprint(task)
                     self.session.inner_blueprints[inner_blueprint.id] = inner_blueprint
@@ -383,8 +471,13 @@ class Orchestrator:
 
     def _load_inner_blueprint(self, task: Task) -> Blueprint:
         # TODO: Support dynamic blueprint loading
-        # TODO: Load blueprints from some kind of storage
-        return Blueprint.from_file(task.params["blueprint"]["static"])
+        assert "blueprint" in task.params
+
+        if "static" not in task.params["blueprint"]:
+            raise NotImplementedError("Only static inner blueprints are supported at the moment.")
+
+        blueprint_id = task.params["blueprint"]["static"]
+        return self.blueprint_storage.get_blueprint(blueprint_id)
 
     def _build_graph(self) -> None:
         """Builds a dependency graph from the loaded blueprint."""
@@ -435,3 +528,13 @@ class Orchestrator:
                 self.graph.add_edge(to_task_id, from_task_id, type=dep_type)
 
         # NOTE: Perhaps we need to do transitive_reduction here
+
+    def to_mermaid_diagram(self, title="Blueprint") -> str:
+        """Generate a mermaid-syntax diagram representation of the blueprint session.
+
+        Returns
+        -------
+        str
+           Gantt chart representation of the blueprint session.
+        """
+        return self.scheduler.to_mermaid_diagram(title)

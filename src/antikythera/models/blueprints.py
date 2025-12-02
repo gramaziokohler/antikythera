@@ -1,10 +1,11 @@
-import json
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+from enum import StrEnum
 
 from compas.data import Data
+from compas.data import json_load
 
 from .tasks import DependencyType
 from .tasks import TaskState
@@ -54,6 +55,8 @@ class Task(Data):
         A list of dependencies on other tasks.
     params : Dict[str, Any], optional
         A dictionary of task-specific parameters.
+    argument_mapping : Dict[str, Dict[str, str]], optional
+        A dictionary to explicitly handle argument remapping configuration.
 
     """
 
@@ -67,6 +70,7 @@ class Task(Data):
             "outputs": self.outputs,
             "depends_on": self.depends_on,
             "params": self.params,
+            "argument_mapping": self.argument_mapping,
             "state": self.state,
         }
 
@@ -79,6 +83,7 @@ class Task(Data):
         outputs: Dict[str, Any] = None,
         depends_on: List[Dependency] = None,
         params: Dict[str, Any] = None,
+        argument_mapping: Dict[str, Dict[str, str]] = None,
         state: TaskState = TaskState.PENDING,
     ) -> None:
         super().__init__()
@@ -89,6 +94,7 @@ class Task(Data):
         self.outputs = outputs or {}
         self.depends_on = depends_on or []
         self.params = params or {}
+        self.argument_mapping = argument_mapping or {}
         self.state = state
 
     def __repr__(self):
@@ -149,7 +155,7 @@ class Blueprint(Data):
             An instance of Blueprint.
         """
         with open(filepath, "r") as f:
-            data = json.load(f)
+            data = json_load(f)
 
         task_defs = data.get("tasks", [])
         tasks = [_parse_task(task_def) for task_def in task_defs]
@@ -160,6 +166,16 @@ class Blueprint(Data):
             description=data.get("description"),
             tasks=tasks,
         )
+
+
+class BlueprintSessionState(StrEnum):
+    """Enumeration of possible blueprint session states."""
+
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    STOPPED = "STOPPED"
 
 
 class BlueprintSession(Data):
@@ -181,6 +197,7 @@ class BlueprintSession(Data):
             "bsid": self.bsid,
             "blueprint": self.blueprint,
             "inner_blueprints": self.inner_blueprints,
+            "state": self.state,
         }
 
     def __init__(
@@ -188,16 +205,18 @@ class BlueprintSession(Data):
         bsid: str,
         blueprint: Blueprint,
         inner_blueprints: Dict[str, Blueprint] = None,
+        state: BlueprintSessionState = BlueprintSessionState.PENDING,
     ) -> None:
         super().__init__()
         self.bsid = bsid
         self.blueprint = blueprint
         self.inner_blueprints = inner_blueprints or {}
+        self.state = state
 
 
 def _parse_task(task_def: Dict[str, Any]) -> Task:
     """Parses a task definition dictionary into a Task object."""
-    known_fields = {"id", "type", "description", "depends_on", "params", "inputs", "outputs"}
+    known_fields = {"id", "type", "description", "depends_on", "params", "inputs", "outputs", "argument_mapping"}
     params = task_def.get("params", {})
     # Add any other unknown fields to params
     params.update({k: v for k, v in task_def.items() if k not in known_fields and not k.startswith("_")})
@@ -217,5 +236,6 @@ def _parse_task(task_def: Dict[str, Any]) -> Task:
         outputs=task_def.get("outputs", {}),
         depends_on=dependencies,
         params=params,
+        argument_mapping=task_def.get("argument_mapping", {}),
         state=TaskState.PENDING,
     )

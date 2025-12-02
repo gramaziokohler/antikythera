@@ -1,8 +1,8 @@
 {
   "version": "1.0",
-  "id": "PnP",
-  "name": "Toy Problem 4 - Nested blueprint",
-  "description": "Nested blueprints using composite",
+  "id": "TP4_PnP",
+  "name": "Toy Problem 4 - Inner blueprint",
+  "description": "Inner blueprints using composite",
   "tasks": [
     {
       "id": "start",
@@ -36,7 +36,12 @@
       "type": "user_interaction.user_output",
       "description": "Print result",
       "inputs": {
-        "something": "str"
+        "bananas": "str"
+      },
+      "argument_mapping": {
+        "inputs": {
+          "bananas": "result1"
+        }
       },
       "depends_on": [
         {"id": "A1", "type": "FS"},
