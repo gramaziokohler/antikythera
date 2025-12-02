@@ -525,6 +525,4 @@ class Orchestrator:
         str
            Gantt chart representation of the blueprint session.
         """
-        diagram = self.scheduler.to_mermaid_diagram(title)
-        LOG.debug(f"diagram: {diagram}")
-        return diagram
+        return self.scheduler.to_mermaid_diagram(title)
