@@ -3,6 +3,7 @@ import math
 from typing import Any
 from typing import Dict
 from typing import Optional
+import pathlib
 
 from antikythera.models import Task
 
@@ -36,7 +37,7 @@ CONNECTION_TIMEOUT = 5
 DISCONNECTION_TIMEOUT = 2
 
 
-@agent(type="moveit_planner")
+# @agent(type="moveit_planner")
 class MoveItPlannerAgent(Agent):
     def __init__(self, ros_host: str = "localhost", ros_port: int = 9090):
         super().__init__()
