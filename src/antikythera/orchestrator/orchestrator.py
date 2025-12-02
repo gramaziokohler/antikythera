@@ -22,7 +22,9 @@ from antikythera.models import Task
 from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
-from antikythera.orchestrator.storage import SessionStorage
+
+from .storage import BlueprintStorage
+from .storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
 
@@ -192,6 +194,9 @@ class TaskScheduler:
 
         return dependencies
 
+    def _create_mermaid_task_id(self, blueprint_id: str, task: Task) -> str:
+        return _create_global_id(blueprint_id, task).replace(".", "_")
+
     def to_mermaid_diagram(self, title="Blueprint") -> str:
         """Generate a mermaid-syntax diagram representation of the blueprint session.
 
@@ -225,7 +230,7 @@ class TaskScheduler:
                 task_state = "🏃"
             else:
                 task_state = "?"
-            task_label = f"{task_state} [{_create_global_id(blueprint_id, task)}] {task.type}"
+            task_label = f"{task_state} [{self._create_mermaid_task_id(blueprint_id, task)}] {task.type}"
             return task_label
 
         def append_node(previous, current):
@@ -237,7 +242,7 @@ class TaskScheduler:
 
             for node_in in self.graph.neighbors_in(current):
                 task_in = self.graph.node[node_in]["task"]
-                dependencies_list.append(_create_global_id(blueprint_id, task_in))
+                dependencies_list.append(self._create_mermaid_task_id(blueprint_id, task_in))
 
             if dependencies_list:
                 dependencies = "after " + " ".join(dependencies_list)
@@ -253,7 +258,7 @@ class TaskScheduler:
             if task.type == "system.start" and dependencies == "":
                 dependencies = datetime.date.today().isoformat()
 
-            result.append("  {:40}   : {}{}, {}, {}".format(task_label, milestone, _create_global_id(blueprint_id, task), dependencies, duration))
+            result.append("  {:40}   : {}{}, {}, {}".format(task_label, milestone, self._create_mermaid_task_id(blueprint_id, task), dependencies, duration))
 
         root_node = None
         for node in self.graph.nodes():
@@ -296,6 +301,7 @@ class Orchestrator:
 
         # Session data is blueprint-namespaced
         self.session_storage = SessionStorage()
+        self.blueprint_storage = BlueprintStorage()
         LOG.info(f"Initialized session storage for session BSID={self.session.bsid}")
 
         self._preprocess_blueprint()
@@ -311,6 +317,11 @@ class Orchestrator:
     def stop(self) -> None:
         """Stops the orchestrator."""
         self.task_completion_subscriber.unsubscribe()
+        # NOTE: for now don't close session storage until we figure out how to better handle it on the API
+        # try:
+        #     self.session_storage.close()
+        # except Exception as exc:
+        #     LOG.error(f"Error closing session storage: {exc}")
         if self.session.state == BlueprintSessionState.RUNNING:
             self.session.state = BlueprintSessionState.STOPPED
         LOG.info(f"Execution of session id {self.session.bsid} completed!")
@@ -448,8 +459,13 @@ class Orchestrator:
 
     def _load_inner_blueprint(self, task: Task) -> Blueprint:
         # TODO: Support dynamic blueprint loading
-        # TODO: Load blueprints from some kind of storage
-        return Blueprint.from_file(task.params["blueprint"]["static"])
+        assert "blueprint" in task.params
+
+        if "static" not in task.params["blueprint"]:
+            raise NotImplementedError("Only static inner blueprints are supported at the moment.")
+
+        blueprint_id = task.params["blueprint"]["static"]
+        return self.blueprint_storage.get_blueprint(blueprint_id)
 
     def _build_graph(self) -> None:
         """Builds a dependency graph from the loaded blueprint."""
@@ -509,4 +525,6 @@ class Orchestrator:
         str
            Gantt chart representation of the blueprint session.
         """
-        return self.scheduler.to_mermaid_diagram(title)
+        diagram = self.scheduler.to_mermaid_diagram(title)
+        LOG.debug(f"diagram: {diagram}")
+        return diagram

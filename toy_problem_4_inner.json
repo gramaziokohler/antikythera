@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "id": "PnP",
+  "id": "TP4_PnP",
   "name": "Toy Problem 4 - Inner blueprint",
   "description": "Inner blueprints using composite",
   "tasks": [

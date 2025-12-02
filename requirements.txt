@@ -5,4 +5,5 @@ fastapi >= 0.111,<1
 immudb-py
 python-dotenv
 uvicorn >= 0.25,<1
+python-multipart
 watchdog
