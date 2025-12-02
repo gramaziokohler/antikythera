@@ -83,18 +83,6 @@ class UploadBlueprintResponse(BaseModel):
 
 
 app = FastAPI(title="Antikythera Orchestrator API")
-
-# TODO: not to do. do redirection like Gonzalo said.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite default dev server
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers
-)
-
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
 
