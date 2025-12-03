@@ -1,8 +1,16 @@
-from enum import StrEnum
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+
+try:
+    from enum import StrEnum
+except ImportError:
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        pass
+
 
 from compas.data import Data
 from compas.data import json_load
