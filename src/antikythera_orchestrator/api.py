@@ -39,6 +39,7 @@ class StartBlueprintRequest(BaseModel):
     blueprint_id: str = Field(..., description="ID of the blueprint to start.")
     broker_host: str = Field("127.0.0.1", description="MQTT broker host.")
     broker_port: int = Field(1883, ge=1, le=65535, description="MQTT broker port.")
+    params: Dict[str, str] = Field(default_factory=dict, description="Arbitrary parameters for the session.")
 
 
 class StartBlueprintResponse(BaseModel):
@@ -101,7 +102,7 @@ def _start_blueprint_session(request: StartBlueprintRequest) -> str:
         raise HTTPException(status_code=400, detail=f"Failed to load blueprint: {exc}")
 
     session_id = uuid.uuid4().hex
-    session = BlueprintSession(bsid=session_id, blueprint=blueprint)
+    session = BlueprintSession(bsid=session_id, blueprint=blueprint, params=request.params)
     orchestrator = Orchestrator(session, broker_host=request.broker_host, broker_port=request.broker_port)
 
     try:

@@ -206,6 +206,7 @@ class BlueprintSession(Data):
             "blueprint": self.blueprint,
             "inner_blueprints": self.inner_blueprints,
             "state": self.state,
+            "params": self.params,
         }
 
     def __init__(
@@ -214,12 +215,14 @@ class BlueprintSession(Data):
         blueprint: Blueprint,
         inner_blueprints: Dict[str, Blueprint] = None,
         state: BlueprintSessionState = BlueprintSessionState.PENDING,
+        params: Dict[str, str] = None,
     ) -> None:
         super().__init__()
         self.bsid = bsid
         self.blueprint = blueprint
         self.inner_blueprints = inner_blueprints or {}
         self.state = state
+        self.params = params or {}
 
 
 def _parse_task(task_def: Dict[str, Any]) -> Task:

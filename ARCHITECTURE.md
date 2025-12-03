@@ -60,7 +60,7 @@ The orchestrator loads a **blueprint** from a file or an API call, and will begi
 
 The orchestrator API is exposed through a FastAPI application (`python -m antikythera_orchestrator`). The API accepts HTTP requests to control blueprint sessions:
 
-- `POST /blueprints/start`: Starts executing a blueprint. Payload mirrors the CLI arguments: `blueprint_file` (path to JSON blueprint), `broker_host`, and `broker_port`. The response returns the generated `session_id`.
+- `POST /blueprints/start`: Starts executing a blueprint. Payload mirrors the CLI arguments: `blueprint_id` (id to stored blueprint), `broker_host`, `broker_port`, and `params` (arbitrary parameters for the session). The response returns the generated `session_id`.
 - `GET /blueprints`: Lists active sessions with their blueprint path, broker configuration, and start timestamp so that operators can track concurrent executions.
 - `GET /sessions/{session_id}/diagram`: Returns a Mermaid diagram representing the current execution state of the session.
 - `GET /sessions/{session_id}/data`: Returns the session data (inputs/outputs) stored for the session.
@@ -131,7 +131,8 @@ The system uses a [`ImmuDB`](https://immudb.io/) as persistent data store to kee
 The data store contains two types of data, internal and external:
 * Orchestrator data, considered internal.
 * Blueprint session data, considered external and linked to a specific `BSID` (blueprint session identifier).
-* The data store also persistently stores "updloaded" blueprints which can be then referenced by their name/identified to start. 
+* The data store also persistently stores "uploaded" blueprints which can be then referenced by their name/identified to start. 
+* Models (see `compas_model`) are stored using a key like `model:{model_id}`.
 
 The global nature of blueprint session data is mitigated by the data dependencies defined in the **DAG**, i.e. by defining input and output data keys declaratively.
 
@@ -424,8 +425,12 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [x] Poll mermaid diagram API call  
 - [x] Add/Update blueprint to Antikythera
 - [x] MQTT Log handler (Log Message)
+- [x] Move orchestrator to antikythera_orchestrator package as well as system agents
+- [ ] Implement sequencer for dynamic Blueprint expansion 
+- [ ] Add model to tool-context
 - [ ] Implement and use Task status and ack messages
 - [ ] Implement Agent starts with a configuration file
-- [ ] Implement sequencer for dynamic Blueprint expansion 
+- [ ] Fix `StrEnum` problem on python 3.9
+- [ ] PoC Grasshopper components: if inputs have values, treat them as params
 ...
 - [ ] Web UI + React Flow 

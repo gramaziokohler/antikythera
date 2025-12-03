@@ -22,6 +22,12 @@ class RequestedBlueprintNotFound(Exception):
     pass
 
 
+class RequestedModelNotFound(Exception):
+    """Raised when a requested model is not found in storage."""
+
+    pass
+
+
 def _create_immudb_client(db_name: str) -> ImmudbClient:
     client = ImmudbClient()
     try:
@@ -281,3 +287,60 @@ class BlueprintStorage:
         self.client.delete(delete_request)
 
         LOG.info(f"Blueprint {blueprint_id} deleted")
+
+
+class ModelStorage:
+    MODELS_DB_NAME = "orchestrator_models"
+
+    def __init__(self):
+        self.client = _create_immudb_client(self.MODELS_DB_NAME)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def close(self):
+        # self.client.logout()
+        self.client.shutdown()
+
+    def add_model(self, model_id: str, model: Any) -> None:
+        """Store a model.
+
+        Parameters
+        ----------
+        model_id : str
+            The ID of the model.
+        model : Any
+            The model to store (must be COMPAS serializable).
+        """
+        LOG.debug(f"Storing model {model_id} in immudb")
+        key = f"model:{model_id}".encode()
+        value = json_dumps(model).encode()
+        self.client.set(key, value)
+
+    def get_model(self, model_id: str) -> Any:
+        """Retrieve a model by its ID.
+
+        Parameters
+        ----------
+        model_id : str
+            The ID of the model to retrieve.
+
+        Returns
+        -------
+        Any
+            The model if found.
+        """
+        key = f"model:{model_id}".encode()
+        try:
+            match = self.client.get(key)
+            if not match:
+                LOG.error(f"Model {model_id} not found in database")
+                raise RequestedModelNotFound(f"Model {model_id} not found")
+
+            return json_loads(match.value.decode())
+        except Exception as ex:
+            LOG.exception(f"Failed to retrieve model {model_id} - {ex}")
+            raise
