@@ -411,9 +411,10 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [x] Implement compas.data support for parameters
 - [x] Swap Message usages with the relevant Protobuf messages + Implement TaskAckMessage
 - [x] Poll mermaid diagram API call  
-- [ ] Add/Update blueprint to Antikythera
-
+- [x] Add/Update blueprint to Antikythera
+- [x] MQTT Log handler (Log Message)
+- [ ] Implement and use Task status and ack messages
+- [ ] Implement Agent starts with a configuration file
+- [ ] Implement sequencer for dynamic Blueprint expansion 
 ...
-...
-- [ ] MQTT Log handler (Log Message)
 - [ ] Web UI + React Flow 
