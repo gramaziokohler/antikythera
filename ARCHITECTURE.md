@@ -58,7 +58,7 @@ The orchestrator loads a **blueprint** from a file or an API call, and will begi
 
 #### Orchestrator API
 
-The orchestrator API is exposed through a FastAPI application (`python -m antikythera`). The API accepts HTTP requests to control blueprint sessions:
+The orchestrator API is exposed through a FastAPI application (`python -m antikythera_orchestrator`). The API accepts HTTP requests to control blueprint sessions:
 
 - `POST /blueprints/start`: Starts executing a blueprint. Payload mirrors the CLI arguments: `blueprint_file` (path to JSON blueprint), `broker_host`, and `broker_port`. The response returns the generated `session_id`.
 - `GET /blueprints`: Lists active sessions with their blueprint path, broker configuration, and start timestamp so that operators can track concurrent executions.
@@ -368,11 +368,18 @@ The project follows these coding guidelines:
 
 The Antikythera project is organized as follows:
 
-- **`antikythera/`**: Core package containing the orchestrator implementation
-  - **`orchestrator/`**: Main orchestration engine components
+- **`antikythera/`**: Core package containing data models and schemas
   - **`models/`**: Data models and schemas
 
+- **`antikythera_orchestrator/`**: Main orchestration engine components and API
+  - **`orchestrator/`**: Orchestrator implementation
+  - **`storage/`**: Persistence layer
+  - **`system_agents.py`**: Built-in system agents (start, end, sleep, composite)
+  - **`api.py`**: FastAPI application implementation
+  - **`__main__.py`**: Application entry point
+
 - **`antikythera_agents/`**: Built-in agent implementations
+  - **`launcher.py`**: Agent launcher and manager
 
 ### Extension Points
 

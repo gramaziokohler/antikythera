@@ -32,12 +32,12 @@ classifiers = [
 ]
 
 [project.entry-points.'antikythera.agents']
-system = 'antikythera_agents.system'
+system = 'antikythera_orchestrator.system_agents'
 interaction = 'antikythera_agents.user_interaction'
 moveit = 'antikythera_agents.moveit'
 
 [project.scripts]
-antikythera = "antikythera.__main__:main"
+antikythera = "antikythera_orchestrator.__main__:main"
 antikythera-agents = "antikythera_agents.__main__:main"
 
 [project.entry-points.'compas_pb.plugins']
@@ -133,7 +133,7 @@ select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
 force-single-line = true
-known-first-party = ["antikythera", "antikythera_agents", "antikythera_ghpython"]
+known-first-party = ["antikythera", "antikythera_agents", "antikythera_ghpython", "antikythera_orchestrator"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

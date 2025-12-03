@@ -1,8 +1,8 @@
+from enum import StrEnum
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-from enum import StrEnum
 
 from compas.data import Data
 from compas.data import json_load
