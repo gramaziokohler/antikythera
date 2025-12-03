@@ -348,6 +348,10 @@ In the ideal long-term vision, an LLM-based frontend will enable definition of b
 
 The expansion from prototypical blueprints to more deterministic or algorithmic results will be handled by MCP tools, maintaining a separation between high-level blueprint definition and low-level execution details.
 
+### Proof-of-Concept: Grasshopper components
+
+A set of Grasshopper components could be developed to allow visual programming of blueprints. This would serve as a good blueprint-prototyping alternative to the JSON format, especially for users familiar with visual programming paradigms.
+
 ---
 
 ## Development
@@ -412,7 +416,7 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [x] Swap Message usages with the relevant Protobuf messages + Implement TaskAckMessage
 - [x] Poll mermaid diagram API call  
 - [ ] Add/Update blueprint to Antikythera
-
+  
 ...
 ...
 - [ ] MQTT Log handler (Log Message)
