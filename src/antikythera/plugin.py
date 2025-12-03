@@ -4,11 +4,11 @@ import sys
 import threading
 import time
 import warnings
-
 from typing import Callable
 from typing import Set
-from watchdog.observers import Observer
+
 from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 if sys.version_info < (3, 10):
     # in Python < 3.10, entry_points has a different API than in later versions

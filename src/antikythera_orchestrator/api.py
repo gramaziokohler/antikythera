@@ -1,4 +1,3 @@
-import argparse
 import logging
 import tempfile
 import uuid
@@ -10,7 +9,6 @@ from threading import Lock
 from typing import Dict
 from typing import Optional
 
-import uvicorn
 from compas.data import json_dumps
 from fastapi import FastAPI
 from fastapi import HTTPException
@@ -20,10 +18,10 @@ from pydantic import Field
 
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
-from antikythera.orchestrator import Orchestrator
-from antikythera.orchestrator.storage import BlueprintStorage
-from antikythera.orchestrator.storage import RequestedBlueprintNotFound
-from antikythera.orchestrator.storage import SessionStorage
+from antikythera_orchestrator.orchestrator import Orchestrator
+from antikythera_orchestrator.storage import BlueprintStorage
+from antikythera_orchestrator.storage import RequestedBlueprintNotFound
+from antikythera_orchestrator.storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
 
@@ -274,7 +272,6 @@ def get_session_data(session_id: str) -> SessionDataResponse:
         return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)
 
 
-
 @app.on_event("shutdown")
 def shutdown() -> None:
     with _sessions_lock:
@@ -284,18 +281,3 @@ def shutdown() -> None:
             except Exception:  # pragma: no cover - best-effort shutdown
                 LOG.exception(f"Failed to stop orchestrator for blueprint {session.blueprint_id}")
         _sessions.clear()
-
-
-def main() -> None:
-    """Entrypoint that launches the FastAPI server."""
-    parser = argparse.ArgumentParser(description="Antikythera Orchestrator API")
-    parser.add_argument("--host", default="0.0.0.0", help="API host.")
-    parser.add_argument("--port", type=int, default=8000, help="API port.")
-    args = parser.parse_args()
-
-    logging.basicConfig(level=logging.DEBUG, filename="orchestrator.log", filemode="a", format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
-    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
-
-
-if __name__ == "__main__":
-    main()

@@ -1,37 +1,30 @@
-import time
+# ruff: noqa
 import math
 from typing import Any
 from typing import Dict
 from typing import Optional
-import pathlib
 
-from antikythera.models import Task
-
-from antikythera_agents.base_agent import Agent
-from antikythera_agents.decorators import agent
-from antikythera_agents.decorators import tool
-from compas.data import json_load, json_dump
+from compas.data import json_dump
+from compas.data import json_load
+from compas.datastructures import Mesh
 from compas.geometry import Box
 from compas.geometry import Frame
 from compas.geometry import Point
-from compas.geometry import Vector
-from compas.geometry import Shape
-from compas.geometry import Box
-from compas.geometry import Transformation
 from compas.geometry import Scale
-from compas.datastructures import Mesh
-
-from compas_robots import Configuration
-from compas_fab.backends import RosClient
+from compas.geometry import Shape
+from compas.geometry import Transformation
+from compas.geometry import Vector
 from compas_fab.backends import MoveItPlanner
+from compas_fab.backends import RosClient
 from compas_fab.robots import FrameTarget
-from compas_fab.robots import FrameWaypoints
-from compas_fab.robots import ConfigurationTarget
-from compas_fab.robots import TargetMode
 from compas_fab.robots import RigidBody
-from compas_fab.robots import JointTrajectory
 from compas_fab.robots import RobotCellState
+from compas_fab.robots import TargetMode
 from compas_timber.model import TimberModel
+
+from antikythera.models import Task
+from antikythera_agents.base_agent import Agent
+from antikythera_agents.decorators import tool
 
 CONNECTION_TIMEOUT = 5
 DISCONNECTION_TIMEOUT = 2
@@ -51,7 +44,6 @@ class MoveItPlannerAgent(Agent):
         self.ensure_hardcoded_model()
 
         self.logger.info(f"[MoveItPlannerAgent] Initialized with ROS at {ros_host}:{ros_port}. Connected={self.ros_client.is_connected}")
-
 
     def dispose(self):
         self.ros_client.close(DISCONNECTION_TIMEOUT)

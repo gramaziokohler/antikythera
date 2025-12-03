@@ -4,9 +4,8 @@ from typing import Any
 from typing import Dict
 
 from antikythera.models import Task
-
-from antikythera_agents.cli import Colors
 from antikythera_agents.base_agent import Agent
+from antikythera_agents.cli import Colors
 from antikythera_agents.decorators import agent
 from antikythera_agents.decorators import tool
 
