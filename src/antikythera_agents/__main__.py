@@ -5,20 +5,18 @@ import logging
 import threading
 import time
 
-from mqtthandler import MQTTHandler
-
 from compas_eve import Publisher
 from compas_eve import Subscriber
 from compas_eve import Topic
 from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
+from mqtthandler import MQTTHandler
 
 from antikythera.models import Task
 from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
 from antikythera_agents.cli import Colors
-
 
 MQTT_LOG_TOPIC = "antikythera/logs"
 
