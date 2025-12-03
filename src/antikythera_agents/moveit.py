@@ -45,7 +45,6 @@ class MoveItPlannerAgent(Agent):
 
         self.logger.info(f"[MoveItPlannerAgent] Initialized with ROS at {ros_host}:{ros_port}. Connected={self.ros_client.is_connected}")
 
-
     def dispose(self):
         self.ros_client.close(DISCONNECTION_TIMEOUT)
         return super().dispose()

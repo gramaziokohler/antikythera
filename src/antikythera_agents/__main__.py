@@ -144,7 +144,6 @@ def main():
     launcher.start()
 
     if args.dev:
-        
         _get_plugin_manager().start_file_watcher(launcher.reload_agents)
         print(f"{Colors.OKGREEN}Hot reloading enabled.{Colors.ENDC}")
 

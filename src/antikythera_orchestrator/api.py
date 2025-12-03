@@ -272,7 +272,6 @@ def get_session_data(session_id: str) -> SessionDataResponse:
         return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)
 
 
-
 @app.on_event("shutdown")
 def shutdown() -> None:
     with _sessions_lock:
