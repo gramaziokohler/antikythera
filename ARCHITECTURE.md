@@ -374,9 +374,12 @@ The Antikythera project is organized as follows:
 - **`antikythera_orchestrator/`**: Main orchestration engine components and API
   - **`orchestrator/`**: Orchestrator implementation
   - **`storage/`**: Persistence layer
-  - **`__main__.py`**: FastAPI application entry point
+  - **`system_agents.py`**: Built-in system agents (start, end, sleep, composite)
+  - **`api.py`**: FastAPI application implementation
+  - **`__main__.py`**: Application entry point
 
 - **`antikythera_agents/`**: Built-in agent implementations
+  - **`launcher.py`**: Agent launcher and manager
 
 ### Extension Points
 
