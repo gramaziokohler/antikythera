@@ -1,0 +1,40 @@
+{
+  "version": "1.0",
+  "id": "TP6-inner",
+  "name": "Toy Problem 6 Inner",
+  "description": "Inner blueprint for Toy Problem 6 to print element guids",
+  "tasks": [
+    {
+      "id": "start",
+      "type": "system.start",
+      "outputs": {
+        "process_start_time": "timestamp"
+      }
+    },
+    {
+      "id": "A1",
+      "type": "user_interaction.user_output",
+      "description": "Print element ID",
+      "inputs": {
+        "element_id": "str"
+      },
+      "depends_on": [
+        {
+          "id": "start"
+        }
+      ]
+    },
+    {
+      "id": "end",
+      "type": "system.end",
+      "outputs": {
+        "process_end_time": "timestamp"
+      },
+      "depends_on": [
+        {
+          "id": "A1"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "id": "TP6",
+  "name": "Toy Problem 6",
+  "description": "Model and basic element sequencer",
+  "tasks": [
+    {
+      "id": "start",
+      "type": "system.start",
+      "outputs": {
+        "process_start_time": "timestamp"
+      }
+    },
+    {
+      "id": "X1",
+      "type": "system.composite",
+      "description": "Process element",
+      "blueprint": {
+        "dynamic": {
+          "blueprint": "TP6-inner",
+          "sequencer": "basic_sequencer"
+        }
+      },
+      "depends_on": [
+        {
+          "id": "start"
+        }
+      ]
+    },
+    {
+      "id": "end",
+      "type": "system.end",
+      "outputs": {
+        "process_end_time": "timestamp"
+      },
+      "depends_on": [
+        {
+          "id": "X1"
+        }
+      ]
+    }
+  ]
+}
