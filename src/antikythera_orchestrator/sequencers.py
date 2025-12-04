@@ -47,19 +47,21 @@ class BasicSequencer(Sequencer):
         original_dependencies = task.depends_on
 
         for i, element in enumerate(elements):
-            element_id = self._get_element_id(element, i)
+            element_id = str(element.guid)
             new_task_id = f"{task.id}_{i}"
 
             new_task_params = task.params.copy()
             new_task_params["blueprint"] = {"static": inner_blueprint_name}
-            new_task_params["element_id"] = element_id
+
+            new_task_inputs = task.inputs.copy()
+            new_task_inputs["element_id"] = element_id
 
             new_task = Task(
                 id=new_task_id,
                 type=SystemTaskType.COMPOSITE,
                 description=f"{task.description} - {element_id}",
                 params=new_task_params,
-                inputs=task.inputs.copy(),
+                inputs=new_task_inputs,
                 outputs=task.outputs.copy(),
                 depends_on=[],
             )
@@ -73,14 +75,6 @@ class BasicSequencer(Sequencer):
             previous_task_id = new_task_id
         
         return new_tasks
-
-    def _get_element_id(self, element, index: int) -> str:
-        element_id = getattr(element, "id", None)
-        if element_id is None and isinstance(element, dict):
-            element_id = element.get("id")
-        if element_id is None:
-            element_id = str(index)
-        return element_id
 
     def _update_blueprint_tasks(self, blueprint: Blueprint, original_task: Task, new_tasks: List[Task]) -> None:
         new_blueprint_tasks = []
