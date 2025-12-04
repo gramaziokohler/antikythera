@@ -55,7 +55,7 @@ class BasicSequencer(Sequencer):
             new_task_params["blueprint"]["dynamic"]["expanded"] = True
 
             new_task_inputs = task.inputs.copy()
-            new_task_inputs["element_id"] = element_id
+            new_task_inputs["element"] = {"element_id": element_id}
 
             new_task = Task(
                 id=new_task_id,

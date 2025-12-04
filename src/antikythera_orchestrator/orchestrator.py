@@ -448,6 +448,7 @@ class Orchestrator:
         # some tasks my have inputs that are static, serialized data values
         # put those into session data before execution starts
         for key, value in task.inputs.items():
+            # NOTE: this is problematic for the situations in which you actually want to have strings as the actual value
             if not isinstance(value, str):
                 self.session_storage.set(blueprint_id, key, value)
 

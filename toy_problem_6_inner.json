@@ -16,7 +16,7 @@
       "type": "user_interaction.user_output",
       "description": "Print element ID",
       "inputs": {
-        "element_id": "str"
+        "element": "dict"
       },
       "depends_on": [
         {

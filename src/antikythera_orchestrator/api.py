@@ -265,9 +265,14 @@ def get_session_data(session_id: str) -> SessionDataResponse:
         session = _sessions.get(session_id)
 
     if session:
-        # Retrieve data for the main blueprint of the session
+        storage = session.orchestrator.session_storage
+        # Retrieve data for all blueprints of the session
         blueprint_id = session.orchestrator.session.blueprint.id
-        data = session.orchestrator.session_storage.get_all(blueprint_id)
+        inner_blueprint_ids = session.orchestrator.session.inner_blueprints.keys()
+        data = {
+            "main_blueprint": storage.get_all(blueprint_id),
+            "inner_blueprints": {blueprint_id: storage.get_all(blueprint_id) for blueprint_id in inner_blueprint_ids}
+        }
         state = session.orchestrator.session.state
         return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)
 
