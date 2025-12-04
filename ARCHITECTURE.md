@@ -60,10 +60,22 @@ The orchestrator loads a **blueprint** from a file or an API call, and will begi
 
 The orchestrator API is exposed through a FastAPI application (`python -m antikythera_orchestrator`). The API accepts HTTP requests to control blueprint sessions:
 
+**Blueprints**
+- `GET /blueprints`: Lists all available blueprints in the storage.
+- `POST /blueprints/upload`: Uploads a new blueprint JSON file.
+- `GET /blueprints/{blueprint_id}`: Retrieves a blueprint by ID. If the blueprint is active in a session, returns the expanded version.
+- `DELETE /blueprints/{blueprint_id}`: Deletes a blueprint from storage.
 - `POST /blueprints/start`: Starts executing a blueprint. Payload mirrors the CLI arguments: `blueprint_id` (id to stored blueprint), `broker_host`, `broker_port`, and `params` (arbitrary parameters for the session). The response returns the generated `session_id`.
-- `GET /blueprints`: Lists active sessions with their blueprint path, broker configuration, and start timestamp so that operators can track concurrent executions.
+
+**Sessions**
+- `GET /sessions`: Lists active sessions with their blueprint path, broker configuration, and start timestamp.
+- `GET /sessions/{session_id}`: Returns full details of a session, including the blueprint and parameters.
 - `GET /sessions/{session_id}/diagram`: Returns a Mermaid diagram representing the current execution state of the session.
 - `GET /sessions/{session_id}/data`: Returns the session data (inputs/outputs) stored for the session.
+
+**Models**
+- `POST /models/upload`: Uploads a `compas_model` JSON file.
+- `GET /models/{model_id}`: Retrieves a model by ID.
 
 Sessions remain active until the process receives a shutdown signal, at which point the API shuts down all orchestrators gracefully.
 
