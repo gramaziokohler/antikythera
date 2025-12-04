@@ -269,10 +269,7 @@ def get_session_data(session_id: str) -> SessionDataResponse:
         # Retrieve data for all blueprints of the session
         blueprint_id = session.orchestrator.session.blueprint.id
         inner_blueprint_ids = session.orchestrator.session.inner_blueprints.keys()
-        data = {
-            "main_blueprint": storage.get_all(blueprint_id),
-            "inner_blueprints": {blueprint_id: storage.get_all(blueprint_id) for blueprint_id in inner_blueprint_ids}
-        }
+        data = {"main_blueprint": storage.get_all(blueprint_id), "inner_blueprints": {blueprint_id: storage.get_all(blueprint_id) for blueprint_id in inner_blueprint_ids}}
         state = session.orchestrator.session.state
         return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)
 
@@ -315,7 +312,7 @@ async def upload_model(file: UploadFile) -> UploadModelResponse:
         content = await file.read()
 
         # Parse JSON to ensure validity and extract ID
-        model_data : Model = json_loads(content.decode())
+        model_data: Model = json_loads(content.decode())
 
         model_id = f"{Path(file.filename).stem}_{str(model_data.guid)[0:8]}"
 
@@ -393,6 +390,9 @@ def get_blueprint(blueprint_id: str):
         for session in _sessions.values():
             if session.blueprint_id == blueprint_id:
                 # Found active session with this blueprint
+                # NOTE: this is tricky since if there's several sessions with the same blueprint (from previous runs) which are finished
+                # thie finised one will be returned, potentially ignoring the currently active one.
+                # TODO: made get_session_blueprint instead, maybe remove this section and always get from storage?
                 blueprint = session.orchestrator.session.blueprint
                 break
 
@@ -408,6 +408,37 @@ def get_blueprint(blueprint_id: str):
             raise HTTPException(status_code=500, detail=f"Failed to retrieve blueprint: {exc}")
 
     return Response(content=json_dumps(blueprint), media_type="application/json")
+
+
+@app.get("/sessions/{session_id}/blueprint")
+def get_session_blueprint(session_id: str):
+    # Check active sessions
+    with _sessions_lock:
+        session_wrapper = _sessions.get(session_id)
+        if session_wrapper:
+            return Response(
+                content=json_dumps(session_wrapper.orchestrator.session.blueprint),
+                media_type="application/json",
+            )
+
+    # Check storage
+    with SessionStorage() as session_storage:
+        session_info = session_storage.get_session_info(session_id)
+        if not session_info:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        blueprint_id = session_info["blueprint_id"]
+
+        try:
+            with BlueprintStorage() as bp_storage:
+                blueprint = bp_storage.get_blueprint(blueprint_id)
+        except RequestedBlueprintNotFound:
+            raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} for session {session_id} not found")
+        except Exception as exc:
+            LOG.exception(f"Failed to retrieve blueprint {blueprint_id} for session {session_id}")
+            raise HTTPException(status_code=500, detail=f"Failed to retrieve session blueprint: {exc}")
+
+        return Response(content=json_dumps(blueprint), media_type="application/json")
 
 
 @app.get("/sessions/{session_id}")
