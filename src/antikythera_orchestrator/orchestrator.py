@@ -23,9 +23,9 @@ from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
 
+from .sequencers import BasicSequencer
 from .storage import BlueprintStorage
 from .storage import SessionStorage
-from .sequencers import BasicSequencer
 
 LOG = logging.getLogger(__name__)
 
@@ -510,7 +510,6 @@ class Orchestrator:
             return blueprint
 
         raise NotImplementedError("Inner blueprint should be defined either as static or dynamic.")
-
 
     def _build_graph(self) -> None:
         """Builds a dependency graph from the loaded blueprint."""

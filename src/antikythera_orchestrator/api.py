@@ -12,7 +12,6 @@ from typing import Optional
 from compas.data import json_dumps
 from compas.data import json_loads
 from compas_model.models import Model
-
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Response

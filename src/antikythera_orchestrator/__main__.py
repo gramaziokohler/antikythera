@@ -1,6 +1,6 @@
 import argparse
-import logging
 import copy
+import logging
 
 import uvicorn
 from uvicorn.config import LOGGING_CONFIG
@@ -21,22 +21,11 @@ def main() -> None:
     log_config = copy.deepcopy(LOGGING_CONFIG)
     log_config["formatters"]["default"]["fmt"] = "%(levelname)s:\t%(message)s"
     log_config["formatters"]["access"]["fmt"] = "%(levelname)s:\t%(message)s"
-    
-    # Ensure antikythera_orchestrator logs are shown
-    log_config["loggers"]["antikythera_orchestrator"] = {
-        "handlers": ["default"],
-        "level": "DEBUG" if args.dev else "INFO",
-        "propagate": False
-    }
 
-    uvicorn.run(
-        "antikythera_orchestrator.api:app", 
-        host=args.host, 
-        port=args.port, 
-        log_level="debug" if args.dev else "info", 
-        reload=args.dev,
-        log_config=log_config
-    )
+    # Ensure antikythera_orchestrator logs are shown
+    log_config["loggers"]["antikythera_orchestrator"] = {"handlers": ["default"], "level": "DEBUG" if args.dev else "INFO", "propagate": False}
+
+    uvicorn.run("antikythera_orchestrator.api:app", host=args.host, port=args.port, log_level="debug" if args.dev else "info", reload=args.dev, log_config=log_config)
 
 
 if __name__ == "__main__":

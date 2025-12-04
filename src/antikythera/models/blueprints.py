@@ -16,8 +16,8 @@ from compas.data import Data
 from compas.data import json_load
 
 from .tasks import DependencyType
-from .tasks import TaskState
 from .tasks import SystemTaskType
+from .tasks import TaskState
 
 
 class Dependency(Data):

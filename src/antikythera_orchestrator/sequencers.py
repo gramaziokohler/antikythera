@@ -5,8 +5,8 @@ from typing import List
 
 from antikythera.models import Blueprint
 from antikythera.models import Dependency
-from antikythera.models import Task
 from antikythera.models import SystemTaskType
+from antikythera.models import Task
 from antikythera_orchestrator.storage import ModelStorage
 
 if TYPE_CHECKING:
