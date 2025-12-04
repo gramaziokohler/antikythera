@@ -504,9 +504,21 @@ class Orchestrator:
             blueprint_id = task.params["blueprint"]["static"]
             return self.blueprint_storage.get_blueprint(blueprint_id)
         if "dynamic" in task.params["blueprint"]:
+            # Get data from the expanded dynamic blueprint task data
             blueprint_id = task.params["blueprint"]["dynamic"]["blueprint_id"]
+            element = task.params["blueprint"]["dynamic"]["element"]
+
+            # The expanded ID is used to avoid ID collisions
+            # because multiple elements are processed with the same base blueprint
+            # but different instances of it
+            expanded_blueprint_id = f"{blueprint_id}_{task.id}"
+
             blueprint = self.blueprint_storage.get_blueprint(blueprint_id)
-            blueprint.id = f"{blueprint_id}_{task.id}"
+            blueprint.id = expanded_blueprint_id
+
+            # We need to store an input param into the expanded blueprint to pass on the element details
+            self.session_storage.set(expanded_blueprint_id, "element", element)
+
             return blueprint
 
         raise NotImplementedError("Inner blueprint should be defined either as static or dynamic.")

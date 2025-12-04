@@ -1,5 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
+from copy import deepcopy
 from typing import TYPE_CHECKING
 from typing import List
 
@@ -50,22 +51,18 @@ class BasicSequencer(Sequencer):
             element_id = str(element.guid)
             new_task_id = f"{task.id}_{i}"
 
-            new_task_params = task.params.copy()
+            new_task_params = deepcopy(task.params)
             new_task_params["blueprint"]["dynamic"]["blueprint_id"] = inner_blueprint_id
+            new_task_params["blueprint"]["dynamic"]["element"] = {"element_id": element_id}
             new_task_params["blueprint"]["dynamic"]["expanded"] = True
-
-            new_task_inputs = task.inputs.copy()
-
-            # NOTE: this doesn't quite work, since it's put on the session storage and is being overriden for each task (AKA input names are shared blueprint-wide!)
-            new_task_inputs["element"] = {"element_id": element_id}
 
             new_task = Task(
                 id=new_task_id,
                 type=SystemTaskType.COMPOSITE,
                 description=f"{task.description} - {element_id}",
                 params=new_task_params,
-                inputs=new_task_inputs,
-                outputs=task.outputs.copy(),
+                inputs=deepcopy(task.inputs),
+                outputs=deepcopy(task.outputs),
                 depends_on=[],
             )
 
