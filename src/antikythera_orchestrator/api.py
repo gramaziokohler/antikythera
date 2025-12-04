@@ -98,6 +98,11 @@ class UploadModelResponse(BaseModel):
     message: str
 
 
+class DeleteModelResponse(BaseModel):
+    model_id: str
+    message: str
+
+
 app = FastAPI(title="Antikythera Orchestrator API")
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
@@ -328,6 +333,55 @@ async def upload_model(file: UploadFile) -> UploadModelResponse:
         raise HTTPException(status_code=500, detail=f"Failed to save model: {exc}")
 
     return UploadModelResponse(model_id=model_id, message="Model uploaded successfully.")
+
+
+@app.get("/models", response_model=list[str])
+def list_models() -> list[str]:
+    """List all available model IDs.
+
+    Returns
+    -------
+    list[str]
+        A list of model IDs.
+    """
+    try:
+        with ModelStorage() as storage:
+            return storage.list_models()
+    except Exception as exc:
+        LOG.exception("Failed to fetch models from database")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch models: {exc}")
+
+
+@app.delete("/models/{model_id}", response_model=DeleteModelResponse)
+def delete_model(model_id: str) -> DeleteModelResponse:
+    """Delete a model from the database.
+
+    Parameters
+    ----------
+    model_id : str
+        The ID of the model to delete.
+
+    Returns
+    -------
+    DeleteModelResponse
+        Response containing the model ID and success message.
+
+    Raises
+    ------
+    HTTPException
+        If the model is not found or cannot be deleted.
+    """
+    try:
+        with ModelStorage() as storage:
+            storage.remove_model(model_id)
+    except RequestedModelNotFound as exc:
+        LOG.warning(f"Model {model_id} not found: {exc}")
+        raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
+    except Exception as exc:
+        LOG.exception(f"Failed to delete model {model_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete model: {exc}")
+
+    return DeleteModelResponse(model_id=model_id, message="Model deleted successfully.")
 
 
 @app.get("/models/{model_id}")

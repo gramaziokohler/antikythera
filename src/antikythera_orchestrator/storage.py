@@ -316,9 +316,24 @@ class ModelStorage:
             The model to store (must be COMPAS serializable).
         """
         LOG.debug(f"Storing model {model_id} in immudb")
+
+        # Update index
+        index_key = b"model:index"
+        match = self.client.get(index_key)
+        if match:
+            index_data = json_loads(match.value.decode())
+            index_data = cast(list[str], index_data)
+        else:
+            index_data = []
+
+        if model_id not in index_data:
+            index_data.append(model_id)
+
         key = f"model:{model_id}".encode()
         value = json_dumps(model).encode()
-        self.client.set(key, value)
+        index_value = json_dumps(index_data).encode()
+
+        self.client.setAll({key: value, index_key: index_value})
 
     def get_model(self, model_id: str) -> Any:
         """Retrieve a model by its ID.
@@ -344,3 +359,61 @@ class ModelStorage:
         except Exception as ex:
             LOG.exception(f"Failed to retrieve model {model_id} - {ex}")
             raise
+
+    def list_models(self) -> list[str]:
+        """List all available model IDs in the database.
+
+        Returns
+        -------
+        list[str]
+            A list of model IDs.
+        """
+        index_key = b"model:index"
+        match = self.client.get(index_key)
+        if match:
+            index_data = json_loads(match.value.decode())
+            return cast(list[str], index_data)
+        return []
+
+    def remove_model(self, model_id: str) -> None:
+        """Remove a model from the database.
+
+        Parameters
+        ----------
+        model_id : str
+            The ID of the model to remove.
+
+        Raises
+        ------
+        RequestedModelNotFound
+            If the model with the given ID is not found.
+        """
+        LOG.debug(f"Removing model {model_id} from immudb")
+
+        # First verify the model exists
+        key = f"model:{model_id}".encode()
+        match = self.client.get(key)
+        if not match:
+            LOG.error(f"Model {model_id} not found in database")
+            raise RequestedModelNotFound(f"Model {model_id} not found")
+
+        # Remove from index
+        index_key = b"model:index"
+        match = self.client.get(index_key)
+        if match:
+            index_data = json_loads(match.value.decode())
+            index_data = cast(list[str], index_data)
+
+            if model_id in index_data:
+                index_data.remove(model_id)
+                # Update the index
+                index_value = json_dumps(index_data).encode()
+                self.client.set(index_key, index_value)
+        else:
+            LOG.warning("Model index not found, skipping index update")
+
+        # Delete the model key
+        delete_request = DeleteKeysRequest(keys=[key])
+        self.client.delete(delete_request)
+
+        LOG.info(f"Model {model_id} deleted")
