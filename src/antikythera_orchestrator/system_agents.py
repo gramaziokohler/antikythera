@@ -38,4 +38,4 @@ class SystemAgent(Agent):
         print(f"{Colors.OKBLUE}😴 [{task.id}][{task.type}] Sleeping for {duration}s...{Colors.ENDC}")
         time.sleep(duration)
         print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Finished sleeping.{Colors.ENDC}")
-        return None
+        return {}

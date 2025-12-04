@@ -124,6 +124,12 @@ If a task ends up in a failed state, the orchestrator should be able to resume e
 
 Initially, only very simple agents will be implemented to execute toy problems.
 
+### Sequencers
+
+Sequencers are responsible for the dynamic expansion of blueprints. When a `system.composite` task is marked as `dynamic`, a sequencer is invoked to generate a set of tasks that replace the original composite task. This allows for data-driven blueprint generation, where the structure of the process depends on the input data (e.g., the number of elements in a model).
+
+The `Sequencer` abstract base class defines the interface for all sequencers. The `BasicSequencer` is a concrete implementation that iterates over the elements of a model and creates a linear chain of static composite tasks, one for each element.
+
 ### Data store
 
 The system uses a [`ImmuDB`](https://immudb.io/) as persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
@@ -379,6 +385,7 @@ The Antikythera project is organized as follows:
 - **`antikythera_orchestrator/`**: Main orchestration engine components and API
   - **`orchestrator/`**: Orchestrator implementation
   - **`storage/`**: Persistence layer
+  - **`sequencers.py`**: Logic for dynamic blueprint expansion
   - **`system_agents.py`**: Built-in system agents (start, end, sleep, composite)
   - **`api.py`**: FastAPI application implementation
   - **`__main__.py`**: Application entry point
@@ -426,7 +433,7 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [x] Add/Update blueprint to Antikythera
 - [x] MQTT Log handler (Log Message)
 - [x] Move orchestrator to antikythera_orchestrator package as well as system agents
-- [ ] Implement sequencer for dynamic Blueprint expansion 
+- [x] Implement sequencer for dynamic Blueprint expansion 
 - [ ] Add model to tool-context
 - [ ] Implement and use Task status and ack messages
 - [ ] Implement Agent starts with a configuration file

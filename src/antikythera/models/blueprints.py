@@ -17,6 +17,7 @@ from compas.data import json_load
 
 from .tasks import DependencyType
 from .tasks import TaskState
+from .tasks import SystemTaskType
 
 
 class Dependency(Data):
@@ -107,6 +108,18 @@ class Task(Data):
 
     def __repr__(self):
         return f"Task(id={self.id}, type={self.type}, dependencies={self.depends_on})"
+
+    @property
+    def is_composite(self) -> bool:
+        return self.type == SystemTaskType.COMPOSITE
+
+    @property
+    def is_start(self) -> bool:
+        return self.type == SystemTaskType.START
+
+    @property
+    def is_end(self) -> bool:
+        return self.type == SystemTaskType.END
 
 
 class Blueprint(Data):

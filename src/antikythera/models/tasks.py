@@ -36,6 +36,15 @@ class TaskState(StrEnum):
     FAILED = "FAILED"  # TASK_STATE_FAILED
 
 
+class SystemTaskType(StrEnum):
+    """Enumeration of system task types."""
+
+    START = "system.start"
+    END = "system.end"
+    SLEEP = "system.sleep"
+    COMPOSITE = "system.composite"
+
+
 class TaskError(Data):
     """Task error information."""
 

@@ -25,6 +25,7 @@ from antikythera.models import TaskState
 
 from .storage import BlueprintStorage
 from .storage import SessionStorage
+from .sequencers import BasicSequencer
 
 LOG = logging.getLogger(__name__)
 
@@ -250,12 +251,12 @@ class TaskScheduler:
                 dependencies = ""
 
             milestone = ""
-            if task.type in ("system.start", "system.end"):
+            if task.is_start or task.is_end:
                 milestone = "milestone, "
                 duration = "0d"
             else:
                 duration = "1d"
-            if task.type == "system.start" and dependencies == "":
+            if task.is_start and dependencies == "":
                 dependencies = datetime.date.today().isoformat()
 
             result.append("  {:40}   : {}{}, {}, {}".format(task_label, milestone, self._create_mermaid_task_id(blueprint_id, task), dependencies, duration))
@@ -389,7 +390,7 @@ class Orchestrator:
                 inputs = self._map_inputs_from_session(blueprint_id, task)
 
                 # Handle inputs for inner blueprints
-                if task.type == "system.composite":
+                if task.is_composite:
                     inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(blueprint_id, task)]
                     # NOTE: See above for why set_all() is commented out
                     # self.session_storage.set_all(inner_blueprint_id, inputs)
@@ -433,7 +434,7 @@ class Orchestrator:
             self._map_outputs_to_session(blueprint_id, processed_task.task)
 
             # Handle outs from inner blueprints
-            if processed_task.task.type == "system.composite":
+            if processed_task.task.is_composite:
                 self._map_outputs_to_outer_session(blueprint_id, processed_task.task)
 
             if self._is_last_task_in_blueprint(processed_task):
@@ -450,6 +451,26 @@ class Orchestrator:
             if not isinstance(value, str):
                 self.session_storage.set(blueprint_id, key, value)
 
+    def _expand_dynamic_tasks(self, blueprint: Blueprint) -> None:
+        expanded_something = True
+        while expanded_something:
+            expanded_something = False
+            # Iterate over a copy of tasks to allow modification of the blueprint
+            for task in list(blueprint.tasks):
+                if task.is_composite and "blueprint" in task.params and "dynamic" in task.params["blueprint"]:
+                    sequencer_name = task.params["blueprint"]["dynamic"]["sequencer"]
+
+                    # TODO: Use a registry or factory
+                    if sequencer_name == "basic_sequencer":
+                        sequencer = BasicSequencer(self.session)
+                    else:
+                        raise ValueError(f"Unknown sequencer: {sequencer_name}")
+
+                    blueprint = sequencer.expand(task, blueprint)
+                    expanded_something = True
+                    # Break to restart the loop with the modified blueprint
+                    break
+
     def _preprocess_blueprint(self) -> None:
         """Preprocesses the blueprint before execution to expand composite tasks."""
         blueprint_queue = Queue()
@@ -458,13 +479,16 @@ class Orchestrator:
         while not blueprint_queue.empty():
             blueprint = blueprint_queue.get()
 
+            self._expand_dynamic_tasks(blueprint)
+
             for task in blueprint.tasks:
                 self._init_session_data_for_task(blueprint.id, task)
 
-                if task.type == "system.composite":
+                if task.is_composite:
                     inner_blueprint = self._load_inner_blueprint(task)
-                    self.session.inner_blueprints[inner_blueprint.id] = inner_blueprint
-                    blueprint_queue.put(inner_blueprint)
+                    if inner_blueprint.id not in self.session.inner_blueprints:
+                        self.session.inner_blueprints[inner_blueprint.id] = inner_blueprint
+                        blueprint_queue.put(inner_blueprint)
 
                     fqn_task_id = _create_global_id(blueprint.id, task)
                     self.composite_to_inner_blueprint_map[fqn_task_id] = inner_blueprint.id
@@ -505,9 +529,9 @@ class Orchestrator:
                     start_task = None
                     end_task = None
                     for t in inner_blueprint.tasks:
-                        if t.type == "system.start":
+                        if t.is_start:
                             start_task = t
-                        if t.type == "system.end":
+                        if t.is_end:
                             end_task = t
                         if start_task and end_task:
                             break
