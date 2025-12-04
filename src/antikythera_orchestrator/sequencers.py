@@ -55,6 +55,8 @@ class BasicSequencer(Sequencer):
             new_task_params["blueprint"]["dynamic"]["expanded"] = True
 
             new_task_inputs = task.inputs.copy()
+
+            # NOTE: this doesn't quite work, since it's put on the session storage and is being overriden for each task (AKA input names are shared blueprint-wide!)
             new_task_inputs["element"] = {"element_id": element_id}
 
             new_task = Task(
@@ -74,7 +76,7 @@ class BasicSequencer(Sequencer):
 
             new_tasks.append(new_task)
             previous_task_id = new_task_id
-        
+
         return new_tasks
 
     def _update_blueprint_tasks(self, blueprint: Blueprint, original_task: Task, new_tasks: List[Task]) -> None:
