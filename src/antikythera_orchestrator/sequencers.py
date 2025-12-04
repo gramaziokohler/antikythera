@@ -41,7 +41,7 @@ class BasicSequencer(Sequencer):
 
         return list(model.elements())
 
-    def _create_element_tasks(self, task: Task, elements: List, inner_blueprint_name: str) -> List[Task]:
+    def _create_element_tasks(self, task: Task, elements: List, inner_blueprint_id: str) -> List[Task]:
         new_tasks = []
         previous_task_id = None
         original_dependencies = task.depends_on
@@ -51,7 +51,8 @@ class BasicSequencer(Sequencer):
             new_task_id = f"{task.id}_{i}"
 
             new_task_params = task.params.copy()
-            new_task_params["blueprint"] = {"static": inner_blueprint_name}
+            new_task_params["blueprint"]["dynamic"]["blueprint_id"] = inner_blueprint_id
+            new_task_params["blueprint"]["dynamic"]["expanded"] = True
 
             new_task_inputs = task.inputs.copy()
             new_task_inputs["element_id"] = element_id

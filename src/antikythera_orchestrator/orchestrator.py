@@ -457,8 +457,11 @@ class Orchestrator:
             expanded_something = False
             # Iterate over a copy of tasks to allow modification of the blueprint
             for task in list(blueprint.tasks):
-                if task.is_composite and "blueprint" in task.params and "dynamic" in task.params["blueprint"]:
-                    sequencer_name = task.params["blueprint"]["dynamic"]["sequencer"]
+                blueprint_params = task.params.get("blueprint") or {}
+                dynamic_params = blueprint_params.get("dynamic") or {}
+                is_expanded = dynamic_params.get("expanded", False)
+                if task.is_composite and not is_expanded:
+                    sequencer_name = dynamic_params["sequencer"]
 
                     # TODO: Use a registry or factory
                     if sequencer_name == "basic_sequencer":
@@ -485,23 +488,28 @@ class Orchestrator:
                 self._init_session_data_for_task(blueprint.id, task)
 
                 if task.is_composite:
+                    LOG.debug(f"Loading inner blueprint for composite task {task.id} in blueprint {blueprint.id}")
                     inner_blueprint = self._load_inner_blueprint(task)
-                    if inner_blueprint.id not in self.session.inner_blueprints:
-                        self.session.inner_blueprints[inner_blueprint.id] = inner_blueprint
-                        blueprint_queue.put(inner_blueprint)
+                    self.session.inner_blueprints[inner_blueprint.id] = inner_blueprint
+                    blueprint_queue.put(inner_blueprint)
 
                     fqn_task_id = _create_global_id(blueprint.id, task)
                     self.composite_to_inner_blueprint_map[fqn_task_id] = inner_blueprint.id
 
     def _load_inner_blueprint(self, task: Task) -> Blueprint:
-        # TODO: Support dynamic blueprint loading
         assert "blueprint" in task.params
 
-        if "static" not in task.params["blueprint"]:
-            raise NotImplementedError("Only static inner blueprints are supported at the moment.")
+        if "static" in task.params["blueprint"]:
+            blueprint_id = task.params["blueprint"]["static"]
+            return self.blueprint_storage.get_blueprint(blueprint_id)
+        if "dynamic" in task.params["blueprint"]:
+            blueprint_id = task.params["blueprint"]["dynamic"]["blueprint_id"]
+            blueprint = self.blueprint_storage.get_blueprint(blueprint_id)
+            blueprint.id = f"{blueprint_id}_{task.id}"
+            return blueprint
 
-        blueprint_id = task.params["blueprint"]["static"]
-        return self.blueprint_storage.get_blueprint(blueprint_id)
+        raise NotImplementedError("Inner blueprint should be defined either as static or dynamic.")
+
 
     def _build_graph(self) -> None:
         """Builds a dependency graph from the loaded blueprint."""
