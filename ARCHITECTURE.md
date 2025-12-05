@@ -70,12 +70,15 @@ The orchestrator API is exposed through a FastAPI application (`python -m antiky
 **Sessions**
 - `GET /sessions`: Lists active sessions with their blueprint path, broker configuration, and start timestamp.
 - `GET /sessions/{session_id}`: Returns full details of a session, including the blueprint and parameters.
+- `GET /sessions/{session_id}/blueprint`: Returns the blueprint associated with the session (expanded if applicable).
 - `GET /sessions/{session_id}/diagram`: Returns a Mermaid diagram representing the current execution state of the session.
 - `GET /sessions/{session_id}/data`: Returns the session data (inputs/outputs) stored for the session.
 
 **Models**
+- `GET /models`: Lists all available models in the storage.
 - `POST /models/upload`: Uploads a `compas_model` JSON file.
 - `GET /models/{model_id}`: Retrieves a model by ID.
+- `DELETE /models/{model_id}`: Deletes a model from storage.
 
 Sessions remain active until the process receives a shutdown signal, at which point the API shuts down all orchestrators gracefully.
 
@@ -115,18 +118,23 @@ class SystemAgent(Agent):
     def sleep_process(self, task: Task) -> dict:
         duration = task.params.get("duration", 1)
         time.sleep(duration)
-        return {"slept_duration": duration}
 ```
 
 #### Development Mode
 
-The agent launcher supports a development mode that enables hot reloading of agents when their source code changes. This is useful for rapid development and testing of new agent capabilities.
+Both the orchestrator and the agent launcher support a development mode that enables hot reloading when source code changes. This is useful for rapid development and testing.
 
-To enable development mode, start the launcher with the `--dev` flag:
+To enable development mode, start the services with the `--dev` flag:
 
 ```bash
+# Start orchestrator in dev mode
+python -m antikythera_orchestrator --dev
+
+# Start agent launcher in dev mode
 python -m antikythera_agents --dev
 ```
+
+When enabled, the system watches for changes in the source files and automatically reloads the services. The orchestrator also enables debug-level logging in development mode.
 
 When enabled, the system watches for changes in the source files of loaded agents and automatically reloads them without restarting the process.
 
@@ -446,10 +454,10 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [x] MQTT Log handler (Log Message)
 - [x] Move orchestrator to antikythera_orchestrator package as well as system agents
 - [x] Implement sequencer for dynamic Blueprint expansion 
+- [x] Fix `StrEnum` problem on python 3.9
 - [ ] Add model to tool-context
 - [ ] Implement and use Task status and ack messages
 - [ ] Implement Agent starts with a configuration file
-- [ ] Fix `StrEnum` problem on python 3.9
 - [ ] PoC Grasshopper components: if inputs have values, treat them as params
 ...
 - [ ] Web UI + React Flow 

@@ -273,13 +273,16 @@ def get_session_data(session_id: str) -> SessionDataResponse:
         # Retrieve data for all blueprints of the session
         blueprint_id = session.orchestrator.session.blueprint.id
         inner_blueprint_ids = session.orchestrator.session.inner_blueprints.keys()
-        data = {"main_blueprint": storage.get_all(blueprint_id), "inner_blueprints": {blueprint_id: storage.get_all(blueprint_id) for blueprint_id in inner_blueprint_ids}}
+        data = {
+            "main_blueprint": storage.get_all(blueprint_id),
+            "inner_blueprints": {blueprint_id: storage.get_all(blueprint_id) for blueprint_id in inner_blueprint_ids},
+        }
         state = session.orchestrator.session.state
         return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)
 
     # If session is not in memory, try to load from storage
-    with SessionStorage() as storage:
-        session_info = storage.get_session_info(session_id)
+    with SessionStorage(session_id) as storage:
+        session_info = storage.get_session_info()
         if not session_info:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -475,8 +478,8 @@ def get_session_blueprint(session_id: str):
             )
 
     # Check storage
-    with SessionStorage() as session_storage:
-        session_info = session_storage.get_session_info(session_id)
+    with SessionStorage(session_id) as session_storage:
+        session_info = session_storage.get_session_info()
         if not session_info:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -523,8 +526,8 @@ def get_session_details(session_id: str):
             )
 
     # Check storage
-    with SessionStorage() as session_storage:
-        session_info = session_storage.get_session_info(session_id)
+    with SessionStorage(session_id) as session_storage:
+        session_info = session_storage.get_session_info()
         if not session_info:
             raise HTTPException(status_code=404, detail="Session not found")
 

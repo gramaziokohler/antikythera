@@ -51,8 +51,9 @@ def _create_immudb_client(db_name: str) -> ImmudbClient:
 class SessionStorage:
     SESSIONS_DB_NAME = "orchestrator_session"
 
-    def __init__(self):
+    def __init__(self, session_id: str):
         self.client = _create_immudb_client(self.SESSIONS_DB_NAME)
+        self.session_id = session_id
 
     def __enter__(self):
         return self
@@ -65,7 +66,8 @@ class SessionStorage:
         self.client.shutdown()
 
     def _key(self, blueprint_id: str, key: str) -> bytes:
-        return f"{blueprint_id}:{key}".encode()
+        assert self.session_id, "Session ID must be set"
+        return f"{blueprint_id}:{self.session_id}:{key}".encode()
 
     def get(self, blueprint_id: str, key: str) -> Optional[Any]:
         full_key = self._key(blueprint_id, key)
@@ -88,28 +90,30 @@ class SessionStorage:
         self.client.setAll(all_data)
 
     def get_all(self, blueprint_id: str) -> dict[str, Any]:
-        prefix = f"{blueprint_id}:".encode()
+        assert self.session_id, "Session ID must be set"
+        prefix = f"{blueprint_id}:{self.session_id}:".encode()
         # TODO: Handle pagination if more than 1000 keys
         results = self.client.scan(b"", prefix, False, 1000)
 
         data = {}
         for key, value in results.items():
             decoded_key = key.decode()
-            if decoded_key.startswith(f"{blueprint_id}:"):
-                clean_key = decoded_key[len(blueprint_id) + 1 :]
+            if decoded_key.startswith(f"{blueprint_id}:{self.session_id}:"):
+                clean_key = decoded_key[len(self.session_id) + len(blueprint_id) + 2 :]
                 data[clean_key] = json_loads(value.decode())
         return data
 
-    def _session_key(self, session_id: str) -> bytes:
-        return f"session:{session_id}".encode()
+    def _session_key(self) -> bytes:
+        assert self.session_id, "Session ID must be set"
+        return f"session:{self.session_id}".encode()
 
-    def register_session(self, session_id: str, blueprint_id: str) -> None:
-        key = self._session_key(session_id)
+    def register_session(self, blueprint_id: str) -> None:
+        key = self._session_key()
         value = {"blueprint_id": blueprint_id, "state": BlueprintSessionState.PENDING.value}
         self.client.set(key, json_dumps(value).encode())
 
-    def update_session_state(self, session_id: str, state: str) -> None:
-        key = self._session_key(session_id)
+    def update_session_state(self, state: str) -> None:
+        key = self._session_key()
         match = self.client.get(key)
         if match is None:
             return
@@ -118,8 +122,8 @@ class SessionStorage:
         data["state"] = state
         self.client.set(key, json_dumps(data).encode())
 
-    def get_session_info(self, session_id: str) -> Optional[dict]:
-        key = self._session_key(session_id)
+    def get_session_info(self) -> Optional[dict]:
+        key = self._session_key()
         match = self.client.get(key)
         if match is None:
             return None
