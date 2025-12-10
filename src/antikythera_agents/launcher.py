@@ -47,7 +47,7 @@ class AgentLauncher:
 
         self.agents = {}
         self._initialize_agents()
-        print(f"Agent Launcher initialized with ID: {self.launcher_id}")
+        print(f"Agent Launcher initialized with ID: {Colors.HEADER}{self.launcher_id}{Colors.ENDC}")
 
     def start(self):
         self.task_start_subscriber.subscribe()
