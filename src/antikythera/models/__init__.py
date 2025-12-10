@@ -1,4 +1,15 @@
-from .tasks import TaskState, DependencyType, TaskAssignmentMessage, TaskCompletionMessage, TaskError, SystemTaskType
+from .tasks import (
+    TaskState,
+    DependencyType,
+    TaskAssignmentMessage,
+    TaskCompletionMessage,
+    TaskError,
+    SystemTaskType,
+    TaskClaimRequest,
+    TaskAllocationMessage,
+    TaskCompletionAckMessage,
+    ExecutionMode,
+)
 from .blueprints import Blueprint, Task, Dependency, BlueprintSession, BlueprintSessionState
 
 __all__ = [
@@ -13,4 +24,8 @@ __all__ = [
     "TaskCompletionMessage",
     "TaskError",
     "SystemTaskType",
+    "TaskClaimRequest",
+    "TaskAllocationMessage",
+    "TaskCompletionAckMessage",
+    "ExecutionMode",
 ]

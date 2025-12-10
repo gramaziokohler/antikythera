@@ -6,6 +6,11 @@ import "google/protobuf/timestamp.proto";
 
 import "compas_pb/generated/message.proto";
 
+enum ExecutionMode {
+  EXECUTION_MODE_EXCLUSIVE = 0;   // Default: Only one agent is allocated the task
+  EXECUTION_MODE_COMPETITIVE = 1; // Multiple agents can run, first to finish wins
+}
+
 // Task assignment message sent by orchestrator to agents
 message TaskAssignmentMessage {
   // Required: unique task identifier
@@ -27,6 +32,33 @@ message TaskAssignmentMessage {
 
   // Optional: assignment timestamp
   google.protobuf.Timestamp timestamp = 6;
+
+  // Optional: execution mode
+  ExecutionMode execution_mode = 7;
+}
+
+// Task claim request sent by agents to orchestrator
+message TaskClaimRequest {
+  // Required: task identifier
+  string task_id = 1;
+
+  // Required: agent identifier
+  string agent_id = 2;
+
+  // Optional: claim timestamp
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+// Task allocation message sent by orchestrator to confirm task assignment
+message TaskAllocationMessage {
+  // Required: task identifier
+  string task_id = 1;
+
+  // Required: agent identifier allocated to the task
+  string assigned_agent_id = 2;
+
+  // Optional: allocation timestamp
+  google.protobuf.Timestamp timestamp = 3;
 }
 
 // Task status update sent by agents when they start executing a task
@@ -55,18 +87,21 @@ message TaskCompletionMessage {
   // Required: current task state
   TaskState state = 2;
 
+  // Required: agent identifier who completed the task
+  string agent_id = 3;
+
   // Optional: task outputs (only for succeeded tasks)
   // Uses google.protobuf.Any to support type-safe COMPAS objects via compas_pb
-  map<string, compas_pb.data.AnyData> outputs = 3;
+  map<string, compas_pb.data.AnyData> outputs = 4;
 
   // Optional: error information (required for failed tasks)
-  TaskError error = 4;
+  TaskError error = 5;
 
   // Optional: message timestamp
-  google.protobuf.Timestamp timestamp = 5;
+  google.protobuf.Timestamp timestamp = 6;
 
   // Optional: task execution duration in milliseconds
-  uint64 duration_ms = 6;
+  uint64 duration_ms = 7;
 }
 
 // Task completion acknowledgement sent by orchestrator after recording a completion

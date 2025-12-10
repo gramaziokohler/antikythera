@@ -21,7 +21,11 @@ from antikythera.models import DependencyType
 from antikythera.models import Task
 from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskCompletionMessage
+from antikythera.models import TaskCompletionAckMessage
 from antikythera.models import TaskState
+from antikythera.models import TaskClaimRequest
+from antikythera.models import TaskAllocationMessage
+from antikythera.models import ExecutionMode
 
 from .sequencers import BasicSequencer
 from .storage import BlueprintStorage
@@ -295,10 +299,17 @@ class Orchestrator:
         self.transport = MqttTransport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start = Topic("antikythera/task/start")
         self.task_completed = Topic("antikythera/task/completed")
+        self.task_claim = Topic("antikythera/task/claim")
+        self.task_allocation = Topic("antikythera/task/allocation")
+        self.task_ack = Topic("antikythera/task/ack")
 
         self.task_start_publisher = Publisher(self.task_start, transport=self.transport)
         self.task_completion_subscriber = Subscriber(self.task_completed, self.on_task_completed, transport=self.transport)
         self.task_completion_subscriber.subscribe()
+        self.task_claim_subscriber = Subscriber(self.task_claim, self.on_task_claim, transport=self.transport)
+        self.task_claim_subscriber.subscribe()
+        self.task_allocation_publisher = Publisher(self.task_allocation, transport=self.transport)
+        self.task_ack_publisher = Publisher(self.task_ack, transport=self.transport)
 
         # Session data is namespaced on BSID
         # but also most operations add blueprint ID to the key
@@ -328,6 +339,7 @@ class Orchestrator:
     def stop(self) -> None:
         """Stops the orchestrator."""
         self.task_completion_subscriber.unsubscribe()
+        self.task_claim_subscriber.unsubscribe()
         # NOTE: for now don't close session storage until we figure out how to better handle it on the API
         # try:
         #     self.session_storage.close()
@@ -398,11 +410,20 @@ class Orchestrator:
                     for key, value in inputs.items():
                         self.session_storage.set(inner_blueprint_id, key, value)
 
+                # TODO: Implement other execution modes (execution mode should probably be defined in the blueprint?)
+                execution_mode = task.params.get("execution_mode", ExecutionMode.EXCLUSIVE)
+
                 self.task_start_publisher.publish(
-                    TaskAssignmentMessage(id=_create_global_id(blueprint_id, task), type=task.type, inputs=inputs, output_keys=task.outputs, params=task.params)
+                    TaskAssignmentMessage(
+                        id=_create_global_id(blueprint_id, task),
+                        type=task.type,
+                        inputs=inputs,
+                        output_keys=task.outputs,
+                        params=task.params,
+                        execution_mode=execution_mode,
+                    )
                 )
-                # TODO: Verify if they actually started
-                task.state = TaskState.RUNNING
+                task.state = TaskState.READY
             except Exception as e:
                 LOG.exception(f"Failed to start task {task.id}: {e}")
                 task.state = TaskState.FAILED
@@ -443,7 +464,30 @@ class Orchestrator:
                 self.session_storage.update_session_state(self.session.state)
                 self.stop()
 
+        # Send ACK
+        ack = TaskCompletionAckMessage(id=message.id, state=TaskState(message.state), accepted_agent_id=message.agent_id)
+        self.task_ack_publisher.publish(ack)
+
         self._schedule_tasks()
+
+    def on_task_claim(self, message: TaskClaimRequest) -> None:
+        """Handles incoming task claim requests."""
+        LOG.info(f"Task claim received: {message}")
+
+        task_id = message.task_id
+        task : Task = self.graph.node_attribute(task_id, "task")
+        if task_id is None:
+            LOG.warning(f"Received claim for unknown task: {task_id}")
+            return
+
+        if task.state == TaskState.READY:
+            task.state = TaskState.RUNNING
+
+            allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
+            self.task_allocation_publisher.publish(allocation)
+            LOG.info(f"Allocated task {task_id} to agent {message.agent_id}")
+        else:
+            LOG.info(f"Rejected claim for task {task_id} from agent {message.agent_id}. Task state is {task.state}")
 
     def _init_session_data_for_task(self, blueprint_id: str, task: Task) -> None:
         # some tasks my have inputs that are static, serialized data values
