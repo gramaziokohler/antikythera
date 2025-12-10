@@ -2,6 +2,7 @@ compas >= 2,<3
 compas_eve >= 2,<3
 compas_model==0.9.1
 compas_pb >= 0.4.4,<1
+coolname
 fastapi >= 0.111,<1
 immudb-py
 mqtthandler
