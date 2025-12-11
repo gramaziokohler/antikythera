@@ -482,5 +482,9 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [ ] Implement and use Task status and ack messages
 - [ ] Implement Agent starts with a configuration file
 - [ ] PoC Grasshopper components: if inputs have values, treat them as params
-...
+- [ ] Make state of sibling tasks available to dynamically expanded tasks
+- [ ] Add Sequencer factory/registry
+- [ ] Implement pause/resume of Blueprint Session
+- [ ] Think about in-place editing of Blueprints/Sessions
+- [ ] Add MQTT log listener on the orchestrator and log agent entries (consider logging to DB?)
 - [ ] Web UI + React Flow 
