@@ -5,6 +5,7 @@ import threading
 from dataclasses import dataclass
 from queue import LifoQueue
 from queue import Queue
+from typing import Optional
 
 from compas.datastructures import Graph
 from compas_eve import Publisher
@@ -12,23 +13,25 @@ from compas_eve import Subscriber
 from compas_eve import Topic
 from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
+from compas_model.models import Model
 
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
 from antikythera.models import Dependency
 from antikythera.models import DependencyType
-from antikythera.models import Task
-from antikythera.models import TaskAssignmentMessage
-from antikythera.models import TaskCompletionMessage
-from antikythera.models import TaskCompletionAckMessage
-from antikythera.models import TaskState
-from antikythera.models import TaskClaimRequest
-from antikythera.models import TaskAllocationMessage
 from antikythera.models import ExecutionMode
+from antikythera.models import Task
+from antikythera.models import TaskAllocationMessage
+from antikythera.models import TaskAssignmentMessage
+from antikythera.models import TaskClaimRequest
+from antikythera.models import TaskCompletionAckMessage
+from antikythera.models import TaskCompletionMessage
+from antikythera.models import TaskState
 
 from .sequencers import BasicSequencer
 from .storage import BlueprintStorage
+from .storage import ModelStorage
 from .storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
@@ -388,9 +391,21 @@ class Orchestrator:
             value = self.session_storage.get(inner_blueprint_id, key)
             self.session_storage.set(outer_blueprint_id, mapped_key, value)
 
+    def _get_model_if_available(self) -> Optional[Model]:
+        model_id = self.session.params.get("model_id")
+        model: Optional[Model] = None
+        if model_id is not None:
+            with ModelStorage() as storage:
+                model = storage.get_model(model_id)
+        return model
+
     def _schedule_tasks(self) -> None:
         """Schedules tasks for execution."""
         pending_tasks = self.scheduler.get_pending_tasks()
+
+        # NOTE: doing this here will fetch the model evey cycle.
+        # NOTE: we could theoratically do this only once per session, unless we expect the model to change during execution..
+        model = self._get_model_if_available()
 
         for pending_task in pending_tasks:
             try:
@@ -412,6 +427,8 @@ class Orchestrator:
 
                 # TODO: Implement other execution modes (execution mode should probably be defined in the blueprint?)
                 execution_mode = task.params.get("execution_mode", ExecutionMode.EXCLUSIVE)
+                if model:
+                    task.params["model"] = model
 
                 self.task_start_publisher.publish(
                     TaskAssignmentMessage(
@@ -475,7 +492,7 @@ class Orchestrator:
         LOG.info(f"Task claim received: {message}")
 
         task_id = message.task_id
-        task : Task = self.graph.node_attribute(task_id, "task")
+        task: Task = self.graph.node_attribute(task_id, "task")
         if task_id is None:
             LOG.warning(f"Received claim for unknown task: {task_id}")
             return
