@@ -49,6 +49,25 @@ class Agent(ABC):
             # Could add cleanup logic here if needed
             pass
 
+    def can_claim_task(self, task: Task) -> bool:
+        """Check if this agent can handle the given task.
+
+        Parameters
+        ----------
+        task : Task
+            The task to check
+
+        Returns
+        -------
+        bool
+            True if the agent can handle the task, False otherwise
+        """
+        try:
+            tool_name = self._get_tool_for_task(task)
+            return self.has_tool(tool_name)
+        except Exception:
+            return False
+
     def execute_task(self, task: Task) -> Dict[str, Any]:
         """Execute a task using the appropriate tool.
 

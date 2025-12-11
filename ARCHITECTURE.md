@@ -269,12 +269,14 @@ Tasks can optionally declare an `argument_mapping` block to remap task-level inp
 
 ### Agent Communication Protocol
 
-Agents communicate with the orchestrator via 4 types of messages sent over MQTT. The schema for these protocol messages are defined using Protocol Buffers (`protobuf`) and the `compas_pb` library for type-safe serialization of COMPAS objects:
+Agents communicate with the orchestrator via 6 types of messages sent over MQTT. The schema for these protocol messages are defined using Protocol Buffers (`protobuf`) and the `compas_pb` library for type-safe serialization of COMPAS objects:
 
 1. **Task Assignment**: The orchestrator sends a `TaskAssignmentMessage` when a task is ready to be executed.
-2. **Task Status Updates**: When an agent begins executing a task it publishes a `TaskStatusUpdateMessage` so the orchestrator know the task is now actively running and who is responsible for it. After this, the agent may send additional status updates (e.g., progress reports) as needed.
-3. **Task Completion**: The agent sends a `TaskCompletionMessage` with the task result upon completion (success or failure).
-4. **Task Completion ACK**: The orchestrator sends a `TaskCompletionAckMessage` immediately after it accepts a `TaskCompletionMessage`. This acknowledgement is broadcast to all agents running the same task so the non-reporting agents can invalidate their local execution and return to the idle state without waiting for a timeout.
+2. **Task Claim Request**: Agents capable of executing the task send a `TaskClaimRequest` to the orchestrator.
+3. **Task Allocation**: The orchestrator selects one agent and sends a `TaskAllocationMessage` confirming the assignment.
+4. **Task Status Updates**: When the allocated agent begins executing a task it publishes a `TaskStatusUpdateMessage` so the orchestrator know the task is now actively running. After this, the agent may send additional status updates (e.g., progress reports) as needed.
+5. **Task Completion**: The agent sends a `TaskCompletionMessage` with the task result upon completion (success or failure).
+6. **Task Completion ACK**: The orchestrator sends a `TaskCompletionAckMessage` immediately after it accepts a `TaskCompletionMessage`.
 
 **Protocol Buffer Definitions**
 
@@ -282,16 +284,24 @@ The complete protobuf schema is maintained in [`src/antikythera/proto/antikyther
 
 **Key message types:**
 - `TaskAssignmentMessage`: Sent by orchestrator to agents when tasks are ready
+- `TaskClaimRequest`: Sent by agents to claim a task
+- `TaskAllocationMessage`: Sent by orchestrator to confirm task assignment to a specific agent
 - `TaskStatusUpdateMessage`: Sent by agents as soon as they start working on a task
 - `TaskCompletionMessage`: Sent by agents to orchestrator upon task completion
 - `TaskCompletionAckMessage`: Sent by orchestrator after recording task completion to signal that the task is closed for all agents
 - `TaskState`: Enum defining task lifecycle states
 - `TaskError`: Error information for failed tasks
+- `ExecutionMode`: Enum defining execution mode (EXCLUSIVE, COMPETITIVE)
 
 **Message structure overview:**
 ```protobuf
 // Canonical definitions in src/antikythera/proto/antikythera.proto
 package antikythera.v1;
+
+enum ExecutionMode {
+  EXECUTION_MODE_EXCLUSIVE = 0;   // Default: Only one agent is allocated the task
+  EXECUTION_MODE_COMPETITIVE = 1; // Multiple agents can run, first to finish wins
+}
 
 message TaskAssignmentMessage {
   string id = 1;                                    // Required: unique task identifier
@@ -300,6 +310,19 @@ message TaskAssignmentMessage {
   repeated string output_keys = 4;                  // Optional: expected output keys (for validation)
   map<string, compas_pb.data.AnyData> params = 5;   // Optional: task-specific parameters (not from session data)
   google.protobuf.Timestamp timestamp = 6;          // Optional: assignment timestamp
+  ExecutionMode execution_mode = 7;                 // Optional: execution mode
+}
+
+message TaskClaimRequest {
+  string task_id = 1;                               // Required: task identifier
+  string agent_id = 2;                              // Required: agent identifier
+  google.protobuf.Timestamp timestamp = 3;          // Optional: claim timestamp
+}
+
+message TaskAllocationMessage {
+  string task_id = 1;                               // Required: task identifier
+  string assigned_agent_id = 2;                     // Required: agent identifier allocated to the task
+  google.protobuf.Timestamp timestamp = 3;          // Optional: allocation timestamp
 }
 
 message TaskStatusUpdateMessage {
@@ -459,5 +482,9 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [ ] Implement and use Task status and ack messages
 - [ ] Implement Agent starts with a configuration file
 - [ ] PoC Grasshopper components: if inputs have values, treat them as params
-...
+- [ ] Make state of sibling tasks available to dynamically expanded tasks
+- [ ] Add Sequencer factory/registry
+- [ ] Implement pause/resume of Blueprint Session
+- [ ] Think about in-place editing of Blueprints/Sessions
+- [ ] Add MQTT log listener on the orchestrator and log agent entries (consider logging to DB?)
 - [ ] Web UI + React Flow 

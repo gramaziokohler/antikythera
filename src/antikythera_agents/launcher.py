@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import random
 import threading
+import uuid
 
+import coolname
 from compas_eve import Publisher
 from compas_eve import Subscriber
 from compas_eve import Topic
@@ -12,6 +15,9 @@ from antikythera.models import Task
 from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
+from antikythera.models import TaskClaimRequest
+from antikythera.models import TaskAllocationMessage
+from antikythera.models import TaskCompletionAckMessage
 from antikythera_agents.cli import Colors
 
 
@@ -27,20 +33,31 @@ def _get_plugin_manager():
 
 class AgentLauncher:
     def __init__(self, broker_host="127.0.0.1", broker_port=1883):
+        self.launcher_id = coolname.generate_slug(4)
+        self.pending_claims = {}  # task_id -> Task
+
         self.threads = []
         self.thread_lock = threading.Lock()
         self.transport = MqttTransport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start_subscriber = Subscriber(Topic("antikythera/task/start"), self.on_task_start, transport=self.transport)
         self.task_completion_publisher = Publisher(Topic("antikythera/task/completed"), transport=self.transport)
+        self.task_claim_publisher = Publisher(Topic("antikythera/task/claim"), transport=self.transport)
+        self.task_allocation_subscriber = Subscriber(Topic("antikythera/task/allocation"), self.on_task_allocation, transport=self.transport)
+        self.task_ack_subscriber = Subscriber(Topic("antikythera/task/ack"), self.on_task_ack, transport=self.transport)
 
         self.agents = {}
         self._initialize_agents()
+        print(f"Agent Launcher initialized with ID: {Colors.HEADER}{self.launcher_id}{Colors.ENDC}")
 
     def start(self):
         self.task_start_subscriber.subscribe()
+        self.task_allocation_subscriber.subscribe()
+        self.task_ack_subscriber.subscribe()
 
     def stop(self):
         self.task_start_subscriber.unsubscribe()
+        self.task_allocation_subscriber.unsubscribe()
+        self.task_ack_subscriber.unsubscribe()
 
         with self.thread_lock:
             active_threads = list(self.threads)
@@ -80,20 +97,36 @@ class AgentLauncher:
             params=message.params,
         )
 
-        thread = threading.Thread(target=self._execute_task_wrapper, args=(task,))
-        with self.thread_lock:
-            self.threads.append(thread)
-        thread.start()
+        for agent_type, agent in self.agents.items():
+            if agent.can_claim_task(task):
+                # We have an agent for this task, claim it!
+                self.pending_claims[task.id] = (task, agent_type)
+                claim = TaskClaimRequest(task_id=task.id, agent_id=self.launcher_id)
+                self.task_claim_publisher.publish(claim)
+                # Assuming only one agent per launcher claims it
+                break
 
-    def _execute_task_wrapper(self, task: Task) -> None:
+    def on_task_allocation(self, message: TaskAllocationMessage) -> None:
+        if message.assigned_agent_id == self.launcher_id:
+            task_id = message.task_id
+            claim_info = self.pending_claims.pop(task_id, None)
+            if claim_info:
+                task, agent_type = claim_info
+                thread = threading.Thread(target=self._execute_task_wrapper, args=(task, agent_type))
+                with self.thread_lock:
+                    self.threads.append(thread)
+                thread.start()
+            else:
+                print(f"Received allocation for unknown or already processed task {task_id}")
+
+    def _execute_task_wrapper(self, task: Task, agent_type: str) -> None:
         try:
-            self._execute_task(task)
+            self._execute_task(task, agent_type)
         finally:
             with self.thread_lock:
                 self.threads.remove(threading.current_thread())
 
-    def _execute_task(self, task: Task) -> None:
-        agent_type = task.type.split(".")[0] if "." in task.type else task.type
+    def _execute_task(self, task: Task, agent_type: str) -> None:
         agent = self.agents.get(agent_type)
 
         if not agent:
@@ -108,8 +141,11 @@ class AgentLauncher:
             state = TaskState.FAILED
             outputs = {"exception": str(e)}
 
-        msg = TaskCompletionMessage(id=task.id, state=state, outputs=outputs)
+        msg = TaskCompletionMessage(id=task.id, state=state, outputs=outputs, agent_id=self.launcher_id)
         self.task_completion_publisher.publish(msg)
+
+    def on_task_ack(self, message: TaskCompletionAckMessage) -> None:
+        pass
 
     def reload_agents(self):
         print(f"{Colors.OKBLUE}Reloading agents...{Colors.ENDC}")

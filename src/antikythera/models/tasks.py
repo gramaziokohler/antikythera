@@ -16,6 +16,13 @@ except ImportError:
 from compas.data import Data
 
 
+class ExecutionMode(StrEnum):
+    """Enumeration of execution modes."""
+
+    EXCLUSIVE = "EXCLUSIVE"  # EXECUTION_MODE_EXCLUSIVE
+    COMPETITIVE = "COMPETITIVE"  # EXECUTION_MODE_COMPETITIVE
+
+
 class DependencyType(StrEnum):
     """Enumeration of possible dependency types."""
 
@@ -70,15 +77,62 @@ class TaskAssignmentMessage(Data):
             "output_keys": self.output_keys,
             "params": self.params,
             "timestamp": self.timestamp.isoformat(),
+            "execution_mode": self.execution_mode,
         }
 
-    def __init__(self, id: str, type: str, inputs: Dict[str, Any] = None, output_keys: list[str] = None, params: Dict[str, Any] = None, timestamp: datetime = None) -> None:
+    def __init__(
+        self,
+        id: str,
+        type: str,
+        inputs: Dict[str, Any] = None,
+        output_keys: list[str] = None,
+        params: Dict[str, Any] = None,
+        timestamp: datetime = None,
+        execution_mode: ExecutionMode = ExecutionMode.EXCLUSIVE,
+    ) -> None:
         super().__init__()
         self.id = id
         self.type = type
         self.inputs = inputs or {}
         self.output_keys = output_keys or []
         self.params = params or {}
+        self.timestamp = timestamp or datetime.now()
+        self.execution_mode = execution_mode
+
+
+class TaskClaimRequest(Data):
+    """Task claim request sent by agents to orchestrator."""
+
+    @property
+    def __data__(self) -> Dict[str, Any]:
+        return {
+            "task_id": self.task_id,
+            "agent_id": self.agent_id,
+            "timestamp": self.timestamp.isoformat(),
+        }
+
+    def __init__(self, task_id: str, agent_id: str, timestamp: Optional[datetime] = None) -> None:
+        super().__init__()
+        self.task_id = task_id
+        self.agent_id = agent_id
+        self.timestamp = timestamp or datetime.now()
+
+
+class TaskAllocationMessage(Data):
+    """Task allocation message sent by orchestrator to agents."""
+
+    @property
+    def __data__(self) -> Dict[str, Any]:
+        return {
+            "task_id": self.task_id,
+            "assigned_agent_id": self.assigned_agent_id,
+            "timestamp": self.timestamp.isoformat(),
+        }
+
+    def __init__(self, task_id: str, assigned_agent_id: str, timestamp: Optional[datetime] = None) -> None:
+        super().__init__()
+        self.task_id = task_id
+        self.assigned_agent_id = assigned_agent_id
         self.timestamp = timestamp or datetime.now()
 
 
@@ -94,6 +148,7 @@ class TaskCompletionMessage(Data):
             "error": self.error,
             "timestamp": self.timestamp.isoformat(),
             "duration_ms": self.duration_ms,
+            "agent_id": self.agent_id,
         }
 
     def __init__(
@@ -104,6 +159,7 @@ class TaskCompletionMessage(Data):
         error: Optional[TaskError] = None,
         timestamp: Optional[datetime] = None,
         duration_ms: Optional[int] = None,
+        agent_id: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.id = id
@@ -112,3 +168,30 @@ class TaskCompletionMessage(Data):
         self.error = error
         self.timestamp = timestamp or datetime.now()
         self.duration_ms = duration_ms
+        self.agent_id = agent_id
+
+
+class TaskCompletionAckMessage(Data):
+    """Task completion acknowledgement message sent by orchestrator."""
+
+    @property
+    def __data__(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "state": self.state,
+            "accepted_agent_id": self.accepted_agent_id,
+            "timestamp": self.timestamp.isoformat(),
+        }
+
+    def __init__(
+        self,
+        id: str,
+        state: TaskState,
+        accepted_agent_id: str,
+        timestamp: Optional[datetime] = None,
+    ) -> None:
+        super().__init__()
+        self.id = id
+        self.state = state
+        self.accepted_agent_id = accepted_agent_id
+        self.timestamp = timestamp or datetime.now()

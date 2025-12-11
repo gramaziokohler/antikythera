@@ -9,6 +9,10 @@ from .tasks import TaskAssignmentMessage
 from .tasks import TaskCompletionMessage
 from .tasks import TaskError
 from .tasks import TaskState
+from .tasks import TaskClaimRequest
+from .tasks import TaskAllocationMessage
+from .tasks import TaskCompletionAckMessage
+from .tasks import ExecutionMode
 
 
 @pb_serializer(TaskAssignmentMessage)
@@ -26,6 +30,7 @@ def taskassignment_to_pb(message: TaskAssignmentMessage) -> antikythera_pb2.Task
             pb.params[k].CopyFrom(_serializer_any(v))
     if message.timestamp:
         pb.timestamp.FromDatetime(message.timestamp)
+    pb.execution_mode = _execution_mode_to_pb(message.execution_mode)
     return pb
 
 
@@ -48,6 +53,7 @@ def taskassignment_from_pb(pb: antikythera_pb2.TaskAssignmentMessage) -> TaskAss
         output_keys=output_keys if output_keys else None,
         params=params if params else None,
         timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,
+        execution_mode=_execution_mode_from_pb(pb.execution_mode),
     )
 
 
@@ -60,6 +66,22 @@ TASK_STATE_TO_PB = {
 }
 
 TASK_STATE_FROM_PB = {v: k for k, v in TASK_STATE_TO_PB.items()}
+
+
+EXECUTION_MODE_TO_PB = {
+    ExecutionMode.EXCLUSIVE: antikythera_pb2.ExecutionMode.EXECUTION_MODE_EXCLUSIVE,
+    ExecutionMode.COMPETITIVE: antikythera_pb2.ExecutionMode.EXECUTION_MODE_COMPETITIVE,
+}
+
+EXECUTION_MODE_FROM_PB = {v: k for k, v in EXECUTION_MODE_TO_PB.items()}
+
+
+def _execution_mode_to_pb(mode: ExecutionMode) -> antikythera_pb2.ExecutionMode:
+    return EXECUTION_MODE_TO_PB.get(mode, antikythera_pb2.ExecutionMode.EXECUTION_MODE_EXCLUSIVE)
+
+
+def _execution_mode_from_pb(pb_mode: antikythera_pb2.ExecutionMode) -> ExecutionMode:
+    return EXECUTION_MODE_FROM_PB.get(pb_mode, ExecutionMode.EXCLUSIVE)
 
 
 def _task_state_to_pb(state: TaskState) -> antikythera_pb2.TaskState:
@@ -88,6 +110,8 @@ def taskcompletion_to_pb(message: TaskCompletionMessage) -> antikythera_pb2.Task
         pb.timestamp.FromDatetime(message.timestamp)
     if message.duration_ms is not None:
         pb.duration_ms = message.duration_ms
+    if message.agent_id:
+        pb.agent_id = message.agent_id
     return pb
 
 
@@ -106,8 +130,68 @@ def taskcompletion_from_pb(pb: antikythera_pb2.TaskCompletionMessage) -> TaskCom
     return TaskCompletionMessage(
         id=pb.id,
         state=_task_state_from_pb(pb.state),
+        agent_id=pb.agent_id,
         outputs=outputs if outputs else None,
         error=error,
         timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,
         duration_ms=pb.duration_ms if pb.duration_ms > 0 else None,
+    )
+
+
+@pb_serializer(TaskClaimRequest)
+def taskclaimrequest_to_pb(message: TaskClaimRequest) -> antikythera_pb2.TaskClaimRequest:
+    pb = antikythera_pb2.TaskClaimRequest()
+    pb.task_id = message.task_id
+    pb.agent_id = message.agent_id
+    if message.timestamp:
+        pb.timestamp.FromDatetime(message.timestamp)
+    return pb
+
+
+@pb_deserializer(antikythera_pb2.TaskClaimRequest)
+def taskclaimrequest_from_pb(pb: antikythera_pb2.TaskClaimRequest) -> TaskClaimRequest:
+    return TaskClaimRequest(
+        task_id=pb.task_id,
+        agent_id=pb.agent_id,
+        timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,
+    )
+
+
+@pb_serializer(TaskAllocationMessage)
+def taskallocation_to_pb(message: TaskAllocationMessage) -> antikythera_pb2.TaskAllocationMessage:
+    pb = antikythera_pb2.TaskAllocationMessage()
+    pb.task_id = message.task_id
+    pb.assigned_agent_id = message.assigned_agent_id
+    if message.timestamp:
+        pb.timestamp.FromDatetime(message.timestamp)
+    return pb
+
+
+@pb_deserializer(antikythera_pb2.TaskAllocationMessage)
+def taskallocation_from_pb(pb: antikythera_pb2.TaskAllocationMessage) -> TaskAllocationMessage:
+    return TaskAllocationMessage(
+        task_id=pb.task_id,
+        assigned_agent_id=pb.assigned_agent_id,
+        timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,
+    )
+
+
+@pb_serializer(TaskCompletionAckMessage)
+def taskcompletionack_to_pb(message: TaskCompletionAckMessage) -> antikythera_pb2.TaskCompletionAckMessage:
+    pb = antikythera_pb2.TaskCompletionAckMessage()
+    pb.id = message.id
+    pb.state = _task_state_to_pb(message.state)
+    pb.accepted_agent_id = message.accepted_agent_id
+    if message.timestamp:
+        pb.timestamp.FromDatetime(message.timestamp)
+    return pb
+
+
+@pb_deserializer(antikythera_pb2.TaskCompletionAckMessage)
+def taskcompletionack_from_pb(pb: antikythera_pb2.TaskCompletionAckMessage) -> TaskCompletionAckMessage:
+    return TaskCompletionAckMessage(
+        id=pb.id,
+        state=_task_state_from_pb(pb.state),
+        accepted_agent_id=pb.accepted_agent_id,
+        timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,
     )
