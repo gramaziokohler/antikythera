@@ -60,10 +60,25 @@ The orchestrator loads a **blueprint** from a file or an API call, and will begi
 
 The orchestrator API is exposed through a FastAPI application (`python -m antikythera_orchestrator`). The API accepts HTTP requests to control blueprint sessions:
 
-- `POST /blueprints/start`: Starts executing a blueprint. Payload mirrors the CLI arguments: `blueprint_file` (path to JSON blueprint), `broker_host`, and `broker_port`. The response returns the generated `session_id`.
-- `GET /blueprints`: Lists active sessions with their blueprint path, broker configuration, and start timestamp so that operators can track concurrent executions.
+**Blueprints**
+- `GET /blueprints`: Lists all available blueprints in the storage.
+- `POST /blueprints/upload`: Uploads a new blueprint JSON file.
+- `GET /blueprints/{blueprint_id}`: Retrieves a blueprint by ID. If the blueprint is active in a session, returns the expanded version.
+- `DELETE /blueprints/{blueprint_id}`: Deletes a blueprint from storage.
+- `POST /blueprints/start`: Starts executing a blueprint. Payload mirrors the CLI arguments: `blueprint_id` (id to stored blueprint), `broker_host`, `broker_port`, and `params` (arbitrary parameters for the session). The response returns the generated `session_id`.
+
+**Sessions**
+- `GET /sessions`: Lists active sessions with their blueprint path, broker configuration, and start timestamp.
+- `GET /sessions/{session_id}`: Returns full details of a session, including the blueprint and parameters.
+- `GET /sessions/{session_id}/blueprint`: Returns the blueprint associated with the session (expanded if applicable).
 - `GET /sessions/{session_id}/diagram`: Returns a Mermaid diagram representing the current execution state of the session.
 - `GET /sessions/{session_id}/data`: Returns the session data (inputs/outputs) stored for the session.
+
+**Models**
+- `GET /models`: Lists all available models in the storage.
+- `POST /models/upload`: Uploads a `compas_model` JSON file.
+- `GET /models/{model_id}`: Retrieves a model by ID.
+- `DELETE /models/{model_id}`: Deletes a model from storage.
 
 Sessions remain active until the process receives a shutdown signal, at which point the API shuts down all orchestrators gracefully.
 
@@ -103,18 +118,23 @@ class SystemAgent(Agent):
     def sleep_process(self, task: Task) -> dict:
         duration = task.params.get("duration", 1)
         time.sleep(duration)
-        return {"slept_duration": duration}
 ```
 
 #### Development Mode
 
-The agent launcher supports a development mode that enables hot reloading of agents when their source code changes. This is useful for rapid development and testing of new agent capabilities.
+Both the orchestrator and the agent launcher support a development mode that enables hot reloading when source code changes. This is useful for rapid development and testing.
 
-To enable development mode, start the launcher with the `--dev` flag:
+To enable development mode, start the services with the `--dev` flag:
 
 ```bash
+# Start orchestrator in dev mode
+python -m antikythera_orchestrator --dev
+
+# Start agent launcher in dev mode
 python -m antikythera_agents --dev
 ```
+
+When enabled, the system watches for changes in the source files and automatically reloads the services. The orchestrator also enables debug-level logging in development mode.
 
 When enabled, the system watches for changes in the source files of loaded agents and automatically reloads them without restarting the process.
 
@@ -124,6 +144,12 @@ If a task ends up in a failed state, the orchestrator should be able to resume e
 
 Initially, only very simple agents will be implemented to execute toy problems.
 
+### Sequencers
+
+Sequencers are responsible for the dynamic expansion of blueprints. When a `system.composite` task is marked as `dynamic`, a sequencer is invoked to generate a set of tasks that replace the original composite task. This allows for data-driven blueprint generation, where the structure of the process depends on the input data (e.g., the number of elements in a model).
+
+The `Sequencer` abstract base class defines the interface for all sequencers. The `BasicSequencer` is a concrete implementation that iterates over the elements of a model and creates a linear chain of static composite tasks, one for each element.
+
 ### Data store
 
 The system uses a [`ImmuDB`](https://immudb.io/) as persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
@@ -131,7 +157,8 @@ The system uses a [`ImmuDB`](https://immudb.io/) as persistent data store to kee
 The data store contains two types of data, internal and external:
 * Orchestrator data, considered internal.
 * Blueprint session data, considered external and linked to a specific `BSID` (blueprint session identifier).
-* The data store also persistently stores "updloaded" blueprints which can be then referenced by their name/identified to start. 
+* The data store also persistently stores "uploaded" blueprints which can be then referenced by their name/identified to start. 
+* Models (see `compas_model`) are stored using a key like `model:{model_id}`.
 
 The global nature of blueprint session data is mitigated by the data dependencies defined in the **DAG**, i.e. by defining input and output data keys declaratively.
 
@@ -378,6 +405,7 @@ The Antikythera project is organized as follows:
 - **`antikythera_orchestrator/`**: Main orchestration engine components and API
   - **`orchestrator/`**: Orchestrator implementation
   - **`storage/`**: Persistence layer
+  - **`sequencers.py`**: Logic for dynamic blueprint expansion
   - **`system_agents.py`**: Built-in system agents (start, end, sleep, composite)
   - **`api.py`**: FastAPI application implementation
   - **`__main__.py`**: Application entry point
@@ -424,8 +452,12 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [x] Poll mermaid diagram API call  
 - [x] Add/Update blueprint to Antikythera
 - [x] MQTT Log handler (Log Message)
+- [x] Move orchestrator to antikythera_orchestrator package as well as system agents
+- [x] Implement sequencer for dynamic Blueprint expansion 
+- [x] Fix `StrEnum` problem on python 3.9
+- [ ] Add model to tool-context
 - [ ] Implement and use Task status and ack messages
 - [ ] Implement Agent starts with a configuration file
-- [ ] Implement sequencer for dynamic Blueprint expansion 
+- [ ] PoC Grasshopper components: if inputs have values, treat them as params
 ...
 - [ ] Web UI + React Flow 

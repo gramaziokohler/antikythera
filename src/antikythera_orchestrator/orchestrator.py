@@ -23,6 +23,7 @@ from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
 
+from .sequencers import BasicSequencer
 from .storage import BlueprintStorage
 from .storage import SessionStorage
 
@@ -250,12 +251,12 @@ class TaskScheduler:
                 dependencies = ""
 
             milestone = ""
-            if task.type in ("system.start", "system.end"):
+            if task.is_start or task.is_end:
                 milestone = "milestone, "
                 duration = "0d"
             else:
                 duration = "1d"
-            if task.type == "system.start" and dependencies == "":
+            if task.is_start and dependencies == "":
                 dependencies = datetime.date.today().isoformat()
 
             result.append("  {:40}   : {}{}, {}, {}".format(task_label, milestone, self._create_mermaid_task_id(blueprint_id, task), dependencies, duration))
@@ -299,15 +300,16 @@ class Orchestrator:
         self.task_completion_subscriber = Subscriber(self.task_completed, self.on_task_completed, transport=self.transport)
         self.task_completion_subscriber.subscribe()
 
-        # Session data is blueprint-namespaced
-        self.session_storage = SessionStorage()
+        # Session data is namespaced on BSID
+        # but also most operations add blueprint ID to the key
+        self.session_storage = SessionStorage(self.session.bsid)
 
-        existing_session = self.session_storage.get_session_info(self.session.bsid)
+        existing_session = self.session_storage.get_session_info()
         if existing_session:
             self.session.state = BlueprintSessionState(existing_session["state"])
             LOG.info(f"Resuming session {self.session.bsid} with state {self.session.state}")
         else:
-            self.session_storage.register_session(self.session.bsid, self.session.blueprint.id)
+            self.session_storage.register_session(self.session.blueprint.id)
 
         self.blueprint_storage = BlueprintStorage()
         LOG.info(f"Initialized session storage for session BSID={self.session.bsid}")
@@ -319,7 +321,7 @@ class Orchestrator:
     def start(self) -> None:
         """Starts the orchestrator."""
         self.session.state = BlueprintSessionState.RUNNING
-        self.session_storage.update_session_state(self.session.bsid, self.session.state)
+        self.session_storage.update_session_state(self.session.state)
         LOG.info(f"Orchestrator session with id {self.session.bsid} started!")
         self._schedule_tasks()
 
@@ -333,7 +335,7 @@ class Orchestrator:
         #     LOG.error(f"Error closing session storage: {exc}")
         if self.session.state == BlueprintSessionState.RUNNING:
             self.session.state = BlueprintSessionState.STOPPED
-            self.session_storage.update_session_state(self.session.bsid, self.session.state)
+            self.session_storage.update_session_state(self.session.state)
         LOG.info(f"Execution of session id {self.session.bsid} completed!")
 
     def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
@@ -389,7 +391,7 @@ class Orchestrator:
                 inputs = self._map_inputs_from_session(blueprint_id, task)
 
                 # Handle inputs for inner blueprints
-                if task.type == "system.composite":
+                if task.is_composite:
                     inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(blueprint_id, task)]
                     # NOTE: See above for why set_all() is commented out
                     # self.session_storage.set_all(inner_blueprint_id, inputs)
@@ -405,7 +407,7 @@ class Orchestrator:
                 LOG.exception(f"Failed to start task {task.id}: {e}")
                 task.state = TaskState.FAILED
                 self.session.state = BlueprintSessionState.FAILED
-                self.session_storage.update_session_state(self.session.bsid, self.session.state)
+                self.session_storage.update_session_state(self.session.state)
 
     def _get_last_task(self) -> Task:
         for node, data in self.graph.nodes(data=True):
@@ -433,12 +435,12 @@ class Orchestrator:
             self._map_outputs_to_session(blueprint_id, processed_task.task)
 
             # Handle outs from inner blueprints
-            if processed_task.task.type == "system.composite":
+            if processed_task.task.is_composite:
                 self._map_outputs_to_outer_session(blueprint_id, processed_task.task)
 
             if self._is_last_task_in_blueprint(processed_task):
                 self.session.state = BlueprintSessionState.COMPLETED
-                self.session_storage.update_session_state(self.session.bsid, self.session.state)
+                self.session_storage.update_session_state(self.session.state)
                 self.stop()
 
         self._schedule_tasks()
@@ -447,8 +449,32 @@ class Orchestrator:
         # some tasks my have inputs that are static, serialized data values
         # put those into session data before execution starts
         for key, value in task.inputs.items():
+            # NOTE: this is problematic for the situations in which you actually want to have strings as the actual value
             if not isinstance(value, str):
                 self.session_storage.set(blueprint_id, key, value)
+
+    def _expand_dynamic_tasks(self, blueprint: Blueprint) -> None:
+        expanded_something = True
+        while expanded_something:
+            expanded_something = False
+            # Iterate over a copy of tasks to allow modification of the blueprint
+            for task in list(blueprint.tasks):
+                blueprint_params = task.params.get("blueprint") or {}
+                dynamic_params = blueprint_params.get("dynamic") or {}
+                is_expanded = dynamic_params.get("expanded", False)
+                if task.is_composite and not is_expanded:
+                    sequencer_name = dynamic_params["sequencer"]
+
+                    # TODO: Use a registry or factory
+                    if sequencer_name == "basic_sequencer":
+                        sequencer = BasicSequencer(self.session)
+                    else:
+                        raise ValueError(f"Unknown sequencer: {sequencer_name}")
+
+                    blueprint = sequencer.expand(task, blueprint)
+                    expanded_something = True
+                    # Break to restart the loop with the modified blueprint
+                    break
 
     def _preprocess_blueprint(self) -> None:
         """Preprocesses the blueprint before execution to expand composite tasks."""
@@ -458,10 +484,13 @@ class Orchestrator:
         while not blueprint_queue.empty():
             blueprint = blueprint_queue.get()
 
+            self._expand_dynamic_tasks(blueprint)
+
             for task in blueprint.tasks:
                 self._init_session_data_for_task(blueprint.id, task)
 
-                if task.type == "system.composite":
+                if task.is_composite:
+                    LOG.debug(f"Loading inner blueprint for composite task {task.id} in blueprint {blueprint.id}")
                     inner_blueprint = self._load_inner_blueprint(task)
                     self.session.inner_blueprints[inner_blueprint.id] = inner_blueprint
                     blueprint_queue.put(inner_blueprint)
@@ -470,14 +499,30 @@ class Orchestrator:
                     self.composite_to_inner_blueprint_map[fqn_task_id] = inner_blueprint.id
 
     def _load_inner_blueprint(self, task: Task) -> Blueprint:
-        # TODO: Support dynamic blueprint loading
         assert "blueprint" in task.params
 
-        if "static" not in task.params["blueprint"]:
-            raise NotImplementedError("Only static inner blueprints are supported at the moment.")
+        if "static" in task.params["blueprint"]:
+            blueprint_id = task.params["blueprint"]["static"]
+            return self.blueprint_storage.get_blueprint(blueprint_id)
+        if "dynamic" in task.params["blueprint"]:
+            # Get data from the expanded dynamic blueprint task data
+            blueprint_id = task.params["blueprint"]["dynamic"]["blueprint_id"]
+            element = task.params["blueprint"]["dynamic"]["element"]
 
-        blueprint_id = task.params["blueprint"]["static"]
-        return self.blueprint_storage.get_blueprint(blueprint_id)
+            # The expanded ID is used to avoid ID collisions
+            # because multiple elements are processed with the same base blueprint
+            # but different instances of it
+            expanded_blueprint_id = f"{blueprint_id}_{task.id}"
+
+            blueprint = self.blueprint_storage.get_blueprint(blueprint_id)
+            blueprint.id = expanded_blueprint_id
+
+            # We need to store an input param into the expanded blueprint to pass on the element details
+            self.session_storage.set(expanded_blueprint_id, "element", element)
+
+            return blueprint
+
+        raise NotImplementedError("Inner blueprint should be defined either as static or dynamic.")
 
     def _build_graph(self) -> None:
         """Builds a dependency graph from the loaded blueprint."""
@@ -505,9 +550,9 @@ class Orchestrator:
                     start_task = None
                     end_task = None
                     for t in inner_blueprint.tasks:
-                        if t.type == "system.start":
+                        if t.is_start:
                             start_task = t
-                        if t.type == "system.end":
+                        if t.is_end:
                             end_task = t
                         if start_task and end_task:
                             break

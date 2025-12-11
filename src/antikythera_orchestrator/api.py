@@ -10,8 +10,11 @@ from typing import Dict
 from typing import Optional
 
 from compas.data import json_dumps
+from compas.data import json_loads
+from compas_model.models import Model
 from fastapi import FastAPI
 from fastapi import HTTPException
+from fastapi import Response
 from fastapi import UploadFile
 from pydantic import BaseModel
 from pydantic import Field
@@ -20,7 +23,9 @@ from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.storage import BlueprintStorage
+from antikythera_orchestrator.storage import ModelStorage
 from antikythera_orchestrator.storage import RequestedBlueprintNotFound
+from antikythera_orchestrator.storage import RequestedModelNotFound
 from antikythera_orchestrator.storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
@@ -39,6 +44,7 @@ class StartBlueprintRequest(BaseModel):
     blueprint_id: str = Field(..., description="ID of the blueprint to start.")
     broker_host: str = Field("127.0.0.1", description="MQTT broker host.")
     broker_port: int = Field(1883, ge=1, le=65535, description="MQTT broker port.")
+    params: Dict[str, str] = Field(default_factory=dict, description="Arbitrary parameters for the session.")
 
 
 class StartBlueprintResponse(BaseModel):
@@ -86,6 +92,16 @@ class DeleteBlueprintResponse(BaseModel):
     message: str
 
 
+class UploadModelResponse(BaseModel):
+    model_id: str
+    message: str
+
+
+class DeleteModelResponse(BaseModel):
+    model_id: str
+    message: str
+
+
 app = FastAPI(title="Antikythera Orchestrator API")
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
@@ -101,7 +117,7 @@ def _start_blueprint_session(request: StartBlueprintRequest) -> str:
         raise HTTPException(status_code=400, detail=f"Failed to load blueprint: {exc}")
 
     session_id = uuid.uuid4().hex
-    session = BlueprintSession(bsid=session_id, blueprint=blueprint)
+    session = BlueprintSession(bsid=session_id, blueprint=blueprint, params=request.params)
     orchestrator = Orchestrator(session, broker_host=request.broker_host, broker_port=request.broker_port)
 
     try:
@@ -253,15 +269,20 @@ def get_session_data(session_id: str) -> SessionDataResponse:
         session = _sessions.get(session_id)
 
     if session:
-        # Retrieve data for the main blueprint of the session
+        storage = session.orchestrator.session_storage
+        # Retrieve data for all blueprints of the session
         blueprint_id = session.orchestrator.session.blueprint.id
-        data = session.orchestrator.session_storage.get_all(blueprint_id)
+        inner_blueprint_ids = session.orchestrator.session.inner_blueprints.keys()
+        data = {
+            "main_blueprint": storage.get_all(blueprint_id),
+            "inner_blueprints": {blueprint_id: storage.get_all(blueprint_id) for blueprint_id in inner_blueprint_ids},
+        }
         state = session.orchestrator.session.state
         return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)
 
     # If session is not in memory, try to load from storage
-    with SessionStorage() as storage:
-        session_info = storage.get_session_info(session_id)
+    with SessionStorage(session_id) as storage:
+        session_info = storage.get_session_info()
         if not session_info:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -270,6 +291,265 @@ def get_session_data(session_id: str) -> SessionDataResponse:
         data = storage.get_all(blueprint_id)
 
         return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)
+
+
+@app.post("/models/upload", response_model=UploadModelResponse, status_code=201)
+async def upload_model(file: UploadFile) -> UploadModelResponse:
+    """Upload a model JSON file to the database.
+
+    Parameters
+    ----------
+    file : UploadFile
+        The model JSON file to upload.
+
+    Returns
+    -------
+    UploadModelResponse
+        Response containing the model ID and success message.
+
+    Raises
+    ------
+    HTTPException
+        If the file is not a JSON file or cannot be parsed.
+    """
+    if not file.filename or not file.filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail="Only JSON files are accepted.")
+
+    try:
+        content = await file.read()
+
+        # Parse JSON to ensure validity and extract ID
+        model_data: Model = json_loads(content.decode())
+
+        model_id = f"{Path(file.filename).stem}_{str(model_data.guid)[0:8]}"
+
+    except Exception as exc:
+        LOG.exception("Failed to parse uploaded model file.")
+        raise HTTPException(status_code=400, detail=f"Failed to parse model file: {exc}")
+
+    try:
+        with ModelStorage() as storage:
+            storage.add_model(model_id, model_data)
+    except Exception as exc:
+        LOG.exception("Failed to save model to database")
+        raise HTTPException(status_code=500, detail=f"Failed to save model: {exc}")
+
+    return UploadModelResponse(model_id=model_id, message="Model uploaded successfully.")
+
+
+@app.get("/models", response_model=list[str])
+def list_models() -> list[str]:
+    """List all available model IDs.
+
+    Returns
+    -------
+    list[str]
+        A list of model IDs.
+    """
+    try:
+        with ModelStorage() as storage:
+            return storage.list_models()
+    except Exception as exc:
+        LOG.exception("Failed to fetch models from database")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch models: {exc}")
+
+
+@app.delete("/models/{model_id}", response_model=DeleteModelResponse)
+def delete_model(model_id: str) -> DeleteModelResponse:
+    """Delete a model from the database.
+
+    Parameters
+    ----------
+    model_id : str
+        The ID of the model to delete.
+
+    Returns
+    -------
+    DeleteModelResponse
+        Response containing the model ID and success message.
+
+    Raises
+    ------
+    HTTPException
+        If the model is not found or cannot be deleted.
+    """
+    try:
+        with ModelStorage() as storage:
+            storage.remove_model(model_id)
+    except RequestedModelNotFound as exc:
+        LOG.warning(f"Model {model_id} not found: {exc}")
+        raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
+    except Exception as exc:
+        LOG.exception(f"Failed to delete model {model_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete model: {exc}")
+
+    return DeleteModelResponse(model_id=model_id, message="Model deleted successfully.")
+
+
+@app.get("/models/{model_id}")
+def get_model(model_id: str):
+    """Retrieve a model by its ID.
+
+    Parameters
+    ----------
+    model_id : str
+        The ID of the model to retrieve.
+
+    Returns
+    -------
+    Response
+        The model data as a JSON response.
+
+    Raises
+    ------
+    HTTPException
+        If the model is not found.
+    """
+    try:
+        with ModelStorage() as storage:
+            model = storage.get_model(model_id)
+    except RequestedModelNotFound:
+        raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
+    except Exception as exc:
+        LOG.exception(f"Failed to retrieve model {model_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve model: {exc}")
+
+    return Response(content=json_dumps(model), media_type="application/json")
+
+
+@app.get("/blueprints/{blueprint_id}")
+def get_blueprint(blueprint_id: str):
+    """Retrieve a blueprint by its ID.
+
+    If the blueprint is currently active in a session, the active (possibly expanded)
+    version is returned. Otherwise, the stored version is returned.
+
+    Parameters
+    ----------
+    blueprint_id : str
+        The ID of the blueprint to retrieve.
+
+    Returns
+    -------
+    Response
+        The blueprint data as a JSON response.
+
+    Raises
+    ------
+    HTTPException
+        If the blueprint is not found.
+    """
+    blueprint = None
+
+    # First check active sessions
+    with _sessions_lock:
+        for session in _sessions.values():
+            if session.blueprint_id == blueprint_id:
+                # Found active session with this blueprint
+                # NOTE: this is tricky since if there's several sessions with the same blueprint (from previous runs) which are finished
+                # thie finised one will be returned, potentially ignoring the currently active one.
+                # TODO: made get_session_blueprint instead, maybe remove this section and always get from storage?
+                blueprint = session.orchestrator.session.blueprint
+                break
+
+    if not blueprint:
+        # If not found in active sessions, check storage
+        try:
+            with BlueprintStorage() as storage:
+                blueprint = storage.get_blueprint(blueprint_id)
+        except RequestedBlueprintNotFound:
+            raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} not found")
+        except Exception as exc:
+            LOG.exception(f"Failed to retrieve blueprint {blueprint_id}")
+            raise HTTPException(status_code=500, detail=f"Failed to retrieve blueprint: {exc}")
+
+    return Response(content=json_dumps(blueprint), media_type="application/json")
+
+
+@app.get("/sessions/{session_id}/blueprint")
+def get_session_blueprint(session_id: str):
+    # Check active sessions
+    with _sessions_lock:
+        session_wrapper = _sessions.get(session_id)
+        if session_wrapper:
+            return Response(
+                content=json_dumps(session_wrapper.orchestrator.session.blueprint),
+                media_type="application/json",
+            )
+
+    # Check storage
+    with SessionStorage(session_id) as session_storage:
+        session_info = session_storage.get_session_info()
+        if not session_info:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        blueprint_id = session_info["blueprint_id"]
+
+        try:
+            with BlueprintStorage() as bp_storage:
+                blueprint = bp_storage.get_blueprint(blueprint_id)
+        except RequestedBlueprintNotFound:
+            raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} for session {session_id} not found")
+        except Exception as exc:
+            LOG.exception(f"Failed to retrieve blueprint {blueprint_id} for session {session_id}")
+            raise HTTPException(status_code=500, detail=f"Failed to retrieve session blueprint: {exc}")
+
+        return Response(content=json_dumps(blueprint), media_type="application/json")
+
+
+@app.get("/sessions/{session_id}")
+def get_session_details(session_id: str):
+    """Retrieve full details of a session including blueprints and parameters.
+
+    Parameters
+    ----------
+    session_id : str
+        The ID of the session to retrieve.
+
+    Returns
+    -------
+    Response
+        The session data as a JSON response.
+
+    Raises
+    ------
+    HTTPException
+        If the session is not found.
+    """
+    # Check active sessions
+    with _sessions_lock:
+        session_wrapper = _sessions.get(session_id)
+        if session_wrapper:
+            return Response(
+                content=json_dumps(session_wrapper.orchestrator.session),
+                media_type="application/json",
+            )
+
+    # Check storage
+    with SessionStorage(session_id) as session_storage:
+        session_info = session_storage.get_session_info()
+        if not session_info:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        blueprint_id = session_info["blueprint_id"]
+        state = session_info["state"]
+
+        try:
+            with BlueprintStorage() as bp_storage:
+                blueprint = bp_storage.get_blueprint(blueprint_id)
+        except Exception as exc:
+            LOG.exception(f"Failed to retrieve blueprint {blueprint_id} for session {session_id}")
+            raise HTTPException(status_code=500, detail=f"Failed to retrieve session blueprint: {exc}")
+
+        # Reconstruct a partial session object
+        # Note: params and inner_blueprints are not currently persisted, so they will be empty
+        session = BlueprintSession(
+            bsid=session_id,
+            blueprint=blueprint,
+            state=state,
+        )
+
+        return Response(content=json_dumps(session), media_type="application/json")
 
 
 @app.on_event("shutdown")

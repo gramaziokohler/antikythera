@@ -16,6 +16,7 @@ from compas.data import Data
 from compas.data import json_load
 
 from .tasks import DependencyType
+from .tasks import SystemTaskType
 from .tasks import TaskState
 
 
@@ -107,6 +108,18 @@ class Task(Data):
 
     def __repr__(self):
         return f"Task(id={self.id}, type={self.type}, dependencies={self.depends_on})"
+
+    @property
+    def is_composite(self) -> bool:
+        return self.type == SystemTaskType.COMPOSITE
+
+    @property
+    def is_start(self) -> bool:
+        return self.type == SystemTaskType.START
+
+    @property
+    def is_end(self) -> bool:
+        return self.type == SystemTaskType.END
 
 
 class Blueprint(Data):
@@ -206,6 +219,7 @@ class BlueprintSession(Data):
             "blueprint": self.blueprint,
             "inner_blueprints": self.inner_blueprints,
             "state": self.state,
+            "params": self.params,
         }
 
     def __init__(
@@ -214,12 +228,14 @@ class BlueprintSession(Data):
         blueprint: Blueprint,
         inner_blueprints: Dict[str, Blueprint] = None,
         state: BlueprintSessionState = BlueprintSessionState.PENDING,
+        params: Dict[str, str] = None,
     ) -> None:
         super().__init__()
         self.bsid = bsid
         self.blueprint = blueprint
         self.inner_blueprints = inner_blueprints or {}
         self.state = state
+        self.params = params or {}
 
 
 def _parse_task(task_def: Dict[str, Any]) -> Task:
