@@ -121,6 +121,18 @@ class Task(Data):
     def is_end(self) -> bool:
         return self.type == SystemTaskType.END
 
+    @property
+    def is_dynamically_expanded(self) -> bool:
+        if not self.is_composite:
+            return False
+
+        dynamic_params = self.params.get("blueprint", {}).get("dynamic", {})
+        return dynamic_params.get("expanded", False)
+
+    def try_get_element_id(self) -> str:
+        """Returns the element_id of a dynamically expanded task, or None if not applicable."""
+        return self.params.get("blueprint", {}).get("dynamic", {}).get("element", {}).get("element_id")
+
 
 class Blueprint(Data):
     """Represents a complete blueprint.

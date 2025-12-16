@@ -67,7 +67,7 @@ class SessionStorage:
 
     def _key(self, blueprint_id: str, key: str) -> bytes:
         assert self.session_id, "Session ID must be set"
-        return f"{blueprint_id}:{self.session_id}:{key}".encode()
+        return f"{self._session_key()}:{blueprint_id}:{key}".encode()
 
     def get(self, blueprint_id: str, key: str) -> Optional[Any]:
         full_key = self._key(blueprint_id, key)
@@ -103,28 +103,28 @@ class SessionStorage:
                 data[clean_key] = json_loads(value.decode())
         return data
 
-    def _session_key(self) -> bytes:
+    def _session_key(self) -> str:
         assert self.session_id, "Session ID must be set"
-        return f"session:{self.session_id}".encode()
+        return f"bsid-{self.session_id}"
 
     def register_session(self, blueprint_id: str) -> None:
         key = self._session_key()
         value = {"blueprint_id": blueprint_id, "state": BlueprintSessionState.PENDING.value}
-        self.client.set(key, json_dumps(value).encode())
+        self.client.set(key.encode(), json_dumps(value).encode())
 
     def update_session_state(self, state: str) -> None:
         key = self._session_key()
-        match = self.client.get(key)
+        match = self.client.get(key.encode())
         if match is None:
             return
 
         data = json_loads(match.value.decode())
         data["state"] = state
-        self.client.set(key, json_dumps(data).encode())
+        self.client.set(key.encode(), json_dumps(data).encode())
 
     def get_session_info(self) -> Optional[dict]:
         key = self._session_key()
-        match = self.client.get(key)
+        match = self.client.get(key.encode())
         if match is None:
             return None
         return json_loads(match.value.decode())
