@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from copy import deepcopy
 from typing import Any
 from typing import Dict
 from typing import List
@@ -128,6 +131,42 @@ class Task(Data):
 
         dynamic_params = self.params.get("blueprint", {}).get("dynamic", {})
         return dynamic_params.get("expanded", False)
+
+    @classmethod
+    def from_dynamic_task(cls, dynamic_task: Task, new_task_id: str, element_id: str) -> Task:
+        """Creates a new dynamically expanded task from a composite task.
+
+        Parameters
+        ----------
+        dynamic_task : Task
+            The original composite task to expand.
+        new_task_id : str
+            The ID for the new expanded task.
+        element_id : str
+            The element ID to associate with the new task.
+
+        Returns
+        -------
+        Task
+            The newly created expanded task.
+
+        """
+        inner_blueprint_id = dynamic_task.params["blueprint"]["dynamic"]["blueprint"]
+
+        new_task_params = deepcopy(dynamic_task.params)
+        new_task_params["blueprint"]["dynamic"]["blueprint_id"] = inner_blueprint_id
+        new_task_params["blueprint"]["dynamic"]["element"] = {"element_id": element_id}
+        new_task_params["blueprint"]["dynamic"]["expanded"] = True
+
+        return cls(
+            id=new_task_id,
+            type=SystemTaskType.COMPOSITE,
+            description=f"{dynamic_task.description} - {element_id}",
+            params=new_task_params,
+            inputs=deepcopy(dynamic_task.inputs),
+            outputs=deepcopy(dynamic_task.outputs),
+            depends_on=[],
+        )
 
     def try_get_element_id(self) -> str:
         """Returns the element_id of a dynamically expanded task, or None if not applicable."""
