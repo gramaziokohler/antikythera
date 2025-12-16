@@ -1,12 +1,10 @@
 from abc import ABC
 from abc import abstractmethod
-from copy import deepcopy
 from typing import TYPE_CHECKING
 from typing import List
 
 from antikythera.models import Blueprint
 from antikythera.models import Dependency
-from antikythera.models import SystemTaskType
 from antikythera.models import Task
 from antikythera_orchestrator.storage import ModelStorage
 
@@ -26,8 +24,7 @@ class Sequencer(ABC):
 class BasicSequencer(Sequencer):
     def expand(self, task: Task, blueprint: Blueprint) -> Blueprint:
         elements = self.get_model_elements()
-        inner_blueprint_id = task.params["blueprint"]["dynamic"]["blueprint"]
-        new_tasks = self._create_element_tasks(task, elements, inner_blueprint_id)
+        new_tasks = self._create_element_tasks(task, elements)
         self._update_blueprint_tasks(blueprint, task, new_tasks)
         return blueprint
 
@@ -42,7 +39,7 @@ class BasicSequencer(Sequencer):
 
         return list(model.elements())
 
-    def _create_element_tasks(self, task: Task, elements: List, inner_blueprint_id: str) -> List[Task]:
+    def _create_element_tasks(self, task: Task, elements: List) -> List[Task]:
         new_tasks = []
         previous_task_id = None
         original_dependencies = task.depends_on
@@ -51,22 +48,13 @@ class BasicSequencer(Sequencer):
             element_id = str(element.guid)
             new_task_id = f"{task.id}_{i}"
 
-            new_task_params = deepcopy(task.params)
-            new_task_params["blueprint"]["dynamic"]["blueprint_id"] = inner_blueprint_id
-            new_task_params["blueprint"]["dynamic"]["element"] = {"element_id": element_id}
-            new_task_params["blueprint"]["dynamic"]["expanded"] = True
-
-            new_task = Task(
-                id=new_task_id,
-                type=SystemTaskType.COMPOSITE,
-                description=f"{task.description} - {element_id}",
-                params=new_task_params,
-                inputs=deepcopy(task.inputs),
-                outputs=deepcopy(task.outputs),
-                depends_on=[],
+            new_task = Task.from_dynamic_task(
+                dynamic_task=task,
+                new_task_id=new_task_id,
+                element_id=element_id,
             )
 
-            if i == 0:
+            if previous_task_id is None:
                 new_task.depends_on = [d for d in original_dependencies]
             else:
                 new_task.depends_on = [Dependency(id=previous_task_id)]

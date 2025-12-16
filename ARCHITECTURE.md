@@ -150,6 +150,15 @@ Sequencers are responsible for the dynamic expansion of blueprints. When a `syst
 
 The `Sequencer` abstract base class defines the interface for all sequencers. The `BasicSequencer` is a concrete implementation that iterates over the elements of a model and creates a linear chain of static composite tasks, one for each element.
 
+#### Dynamic Task Expansion & Output Aggregation
+
+1.  **Expansion**: When the orchestrator encounters a task with `dynamic` parameters, it uses a **Sequencer** to generate a collection of composite tasks each with a sub-blueprint for each item in the collection.
+2.  **Execution**: These sub-blueprints are executed as inner blueprints.
+3.  **Output Aggregation**: Since multiple inner blueprints (one per element) are generated from a single parent task, their outputs need to be aggregated back to the parent session to avoid overwriting.
+    * The orchestrator detects if an inner blueprint is part of a dynamic expansion.
+    * Outputs from these inner blueprints are aggregated into a dictionary in the session storage, keyed by the `element_id`.
+    * Example: If a dynamic task produces a `trajectory` output for 10 elements, the session storage will contain a single `trajectory` variable which is a dictionary: `{'element_0': Trajectory(...), 'element_1': Trajectory(...), ...}`.
+
 ### Data store
 
 The system uses a [`ImmuDB`](https://immudb.io/) as persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
@@ -478,13 +487,17 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [x] Move orchestrator to antikythera_orchestrator package as well as system agents
 - [x] Implement sequencer for dynamic Blueprint expansion 
 - [x] Fix `StrEnum` problem on python 3.9
-- [ ] Add model to tool-context
-- [ ] Implement and use Task status and ack messages
+- [x] Add model to tool-context
+- [x] Implement and use Task status and ack messages
 - [ ] Implement Agent starts with a configuration file
 - [ ] PoC Grasshopper components: if inputs have values, treat them as params
 - [ ] Make state of sibling tasks available to dynamically expanded tasks
 - [ ] Add Sequencer factory/registry
 - [ ] Implement pause/resume of Blueprint Session
-- [ ] Think about in-place editing of Blueprints/Sessions
+- [ ] Implement in-place editing of Blueprints/Sessions
 - [ ] Add MQTT log listener on the orchestrator and log agent entries (consider logging to DB?)
+- [ ] Implement a Blueprint validator which validates uploaded blueprints
 - [ ] Web UI + React Flow 
+- [ ] Download blueprints: back to the JSON representation
+- [ ] Add unittests with mocking for immudb
+- [ ] Conceptualize map/reducer strategy for output data management in dynamic tasks. 
