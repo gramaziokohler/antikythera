@@ -216,6 +216,32 @@ class Blueprint(Data):
         self.description = description
         self.tasks = tasks or []
 
+    def validate(self) -> None:
+        """Validates the blueprint structure.
+
+        Raises
+        ------
+        ValueError
+            If the blueprint is invalid.
+        """
+        start_tasks = [t for t in self.tasks if t.type == SystemTaskType.START]
+        end_tasks = [t for t in self.tasks if t.type == SystemTaskType.END]
+
+        if len(start_tasks) != 1:
+            raise ValueError(f"Blueprint must have exactly one start task, found {len(start_tasks)}.")
+        if len(end_tasks) != 1:
+            raise ValueError(f"Blueprint must have exactly one end task, found {len(end_tasks)}.")
+
+        task_ids = {t.id for t in self.tasks}
+
+        for task in self.tasks:
+            if task.type != SystemTaskType.START and not task.depends_on:
+                raise ValueError(f"Task '{task.id}' is an orphan (no dependencies) and is not a start task.")
+
+            for dep in task.depends_on:
+                if dep.id not in task_ids:
+                    raise ValueError(f"Task '{task.id}' depends on non-existent task '{dep.id}'.")
+
     @classmethod
     def from_file(cls, filepath: str) -> "Blueprint":
         """Loads a blueprint from a JSON file.
@@ -232,12 +258,14 @@ class Blueprint(Data):
         task_defs = data.get("tasks", [])
         tasks = [_parse_task(task_def) for task_def in task_defs]
 
-        return cls(
+        blueprint = cls(
             id=data["id"],
             name=data["name"],
             description=data.get("description"),
             tasks=tasks,
         )
+        blueprint.validate()
+        return blueprint
 
 
 class BlueprintSessionState(StrEnum):
