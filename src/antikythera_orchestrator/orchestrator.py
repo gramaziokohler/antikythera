@@ -324,7 +324,7 @@ class Orchestrator:
             self.session.state = BlueprintSessionState(existing_session["state"])
             LOG.info(f"Resuming session {self.session.bsid} with state {self.session.state}")
         else:
-            self.session_storage.register_session(self.session.blueprint.id)
+            self.session_storage.register_session(self.session.blueprint.id, self.session.params, state=self.session.state)
 
         self.blueprint_storage = BlueprintStorage()
         LOG.info(f"Initialized session storage for session BSID={self.session.bsid}")
@@ -471,6 +471,9 @@ class Orchestrator:
                 self.session.state = BlueprintSessionState.FAILED
                 self.session_storage.update_session_state(self.session.state)
 
+        # Persist the updated blueprint state (with task states)
+        self.session_storage.update_session_blueprint_state(self.session.blueprint)
+
     def _get_last_task(self) -> Task:
         for node, data in self.graph.nodes(data=True):
             if self.graph.degree_out(node) == 0:
@@ -509,6 +512,9 @@ class Orchestrator:
         ack = TaskCompletionAckMessage(id=message.id, state=TaskState(message.state), accepted_agent_id=message.agent_id)
         self.task_ack_publisher.publish(ack)
 
+        # Persist the updated blueprint state (with task states)
+        self.session_storage.update_session_blueprint_state(self.session.blueprint)
+
         self._schedule_tasks()
 
     def on_task_claim(self, message: TaskClaimRequest) -> None:
@@ -527,6 +533,9 @@ class Orchestrator:
             allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
             self.task_allocation_publisher.publish(allocation)
             LOG.info(f"Allocated task {task_id} to agent {message.agent_id}")
+
+            # Persist the updated blueprint state (with task states)
+            self.session_storage.update_session_blueprint_state(self.session.blueprint)
         else:
             LOG.info(f"Rejected claim for task {task_id} from agent {message.agent_id}. Task state is {task.state}")
 
@@ -544,10 +553,9 @@ class Orchestrator:
             expanded_something = False
             # Iterate over a copy of tasks to allow modification of the blueprint
             for task in list(blueprint.tasks):
-                blueprint_params = task.params.get("blueprint") or {}
-                dynamic_params = blueprint_params.get("dynamic") or {}
-
-                if task.is_composite and not task.is_dynamically_expanded:
+                if task.is_dynamic and not task.is_dynamically_expanded:
+                    blueprint_params = task.params.get("blueprint") or {}
+                    dynamic_params = blueprint_params.get("dynamic") or {}
                     sequencer_name = dynamic_params["sequencer"]
 
                     # TODO: Use a registry or factory
@@ -582,6 +590,11 @@ class Orchestrator:
 
                     fqn_task_id = _create_global_id(blueprint.id, task)
                     self.composite_to_inner_blueprint_map[fqn_task_id] = inner_blueprint.id
+
+        # Update session storage with inner blueprint IDs
+        self.session_storage.update_session_blueprints(list(self.session.inner_blueprints.keys()))
+        # Update session storage with the expanded blueprint
+        self.session_storage.update_session_blueprint_state(self.session.blueprint)
 
     def _load_inner_blueprint(self, task: Task) -> Blueprint:
         assert "blueprint" in task.params

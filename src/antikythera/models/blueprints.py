@@ -125,6 +125,14 @@ class Task(Data):
         return self.type == SystemTaskType.END
 
     @property
+    def is_dynamic(self) -> bool:
+        if not self.is_composite:
+            return False
+
+        blueprint_params = self.params.get("blueprint", {})
+        return "dynamic" in blueprint_params
+
+    @property
     def is_dynamically_expanded(self) -> bool:
         if not self.is_composite:
             return False
@@ -201,11 +209,30 @@ class Blueprint(Data):
             "tasks": self.tasks,
         }
 
+    @classmethod
+    def __from_data__(cls, data: Dict[str, Any]) -> "Blueprint":
+        # TODO: revisit this method, it's not really aligned with COMPAS Data patterns
+        task_defs = data.get("tasks", [])
+        tasks = []
+        for task_def in task_defs:
+            if isinstance(task_def, Task):
+                tasks.append(task_def)
+            else:
+                tasks.append(_parse_task(task_def))
+        
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            version=data.get("version"),
+            description=data.get("description"),
+            tasks=tasks,
+        )
+
     def __init__(
         self,
         id: str,
         name: str,
-        version: str = "1.0",
+        version: Optional[str] = "1.0",
         description: Optional[str] = None,
         tasks: List[Task] = None,
     ) -> None:
@@ -255,15 +282,10 @@ class Blueprint(Data):
         with open(filepath, "r") as f:
             data = json_load(f)
 
-        task_defs = data.get("tasks", [])
-        tasks = [_parse_task(task_def) for task_def in task_defs]
+        if isinstance(data, cls):
+            return data
 
-        blueprint = cls(
-            id=data["id"],
-            name=data["name"],
-            description=data.get("description"),
-            tasks=tasks,
-        )
+        blueprint = cls.__from_data__(data)
         blueprint.validate()
         return blueprint
 

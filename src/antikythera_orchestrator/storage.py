@@ -91,15 +91,16 @@ class SessionStorage:
 
     def get_all(self, blueprint_id: str) -> dict[str, Any]:
         assert self.session_id, "Session ID must be set"
-        prefix = f"{blueprint_id}:{self.session_id}:".encode()
+        prefix_str = f"{self._session_key()}:{blueprint_id}:"
+        prefix = prefix_str.encode()
         # TODO: Handle pagination if more than 1000 keys
         results = self.client.scan(b"", prefix, False, 1000)
 
         data = {}
         for key, value in results.items():
             decoded_key = key.decode()
-            if decoded_key.startswith(f"{blueprint_id}:{self.session_id}:"):
-                clean_key = decoded_key[len(self.session_id) + len(blueprint_id) + 2 :]
+            if decoded_key.startswith(prefix_str):
+                clean_key = decoded_key[len(prefix_str) :]
                 data[clean_key] = json_loads(value.decode())
         return data
 
@@ -107,20 +108,33 @@ class SessionStorage:
         assert self.session_id, "Session ID must be set"
         return f"bsid-{self.session_id}"
 
-    def register_session(self, blueprint_id: str) -> None:
+    def register_session(self, blueprint_id: str, params: Optional[dict] = None, state: BlueprintSessionState = BlueprintSessionState.PENDING) -> None:
         key = self._session_key()
-        value = {"blueprint_id": blueprint_id, "state": BlueprintSessionState.PENDING.value}
+        value = {
+            "blueprint_id": blueprint_id,
+            "state": state.value,
+            "params": params or {},
+        }
         self.client.set(key.encode(), json_dumps(value).encode())
 
-    def update_session_state(self, state: str) -> None:
+    def _update_session_data(self, updates: dict[str, Any]) -> None:
         key = self._session_key()
         match = self.client.get(key.encode())
         if match is None:
             return
 
         data = json_loads(match.value.decode())
-        data["state"] = state
+        data.update(updates)
         self.client.set(key.encode(), json_dumps(data).encode())
+
+    def update_session_state(self, state: str) -> None:
+        self._update_session_data({"state": state})
+
+    def update_session_blueprints(self, inner_blueprint_ids: list[str]) -> None:
+        self._update_session_data({"inner_blueprint_ids": inner_blueprint_ids})
+
+    def update_session_blueprint_state(self, blueprint: Blueprint) -> None:
+        self._update_session_data({"blueprint": blueprint})
 
     def get_session_info(self) -> Optional[dict]:
         key = self._session_key()
