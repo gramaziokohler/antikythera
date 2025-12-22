@@ -3,6 +3,8 @@
 import logging
 import threading
 from dataclasses import dataclass
+from enum import StrEnum
+from enum import auto
 from queue import LifoQueue
 from queue import Queue
 from typing import Optional
@@ -281,6 +283,12 @@ class TaskScheduler:
         return "\n".join(result)
 
 
+class OrchestratorState(StrEnum):
+    IDLE = auto()
+    RUNNING = auto()
+    PAUSED = auto()
+
+
 class Orchestrator:
     """Coordinates the execution of a blueprint.
 
@@ -299,6 +307,7 @@ class Orchestrator:
         self.session: BlueprintSession = session
         self.composite_to_inner_blueprint_map: dict[str, str] = {}
         self.graph: Graph = None
+        self._state = OrchestratorState.IDLE
 
         self.transport = MqttTransport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start = Topic("antikythera/task/start")
@@ -333,15 +342,31 @@ class Orchestrator:
         self._build_graph()
         self.scheduler = TaskScheduler(self.session, self.graph)
 
+    def _reset_failed_tasks(self) -> None:
+        """Resets tasks that are in FAILED state to PENDING."""
+        for node, data in self.graph.nodes(data=True):
+            task: Task = data["task"]
+            if task.state == TaskState.FAILED:
+                LOG.debug(f"Resetting failed task {task.id} to PENDING")
+                task.state = TaskState.PENDING
+
     def start(self) -> None:
         """Starts the orchestrator."""
+        if self._state == OrchestratorState.RUNNING:
+            LOG.warning("Orchestrator is already running.")
+            return
+
+        self._reset_failed_tasks()
+
         self.session.state = BlueprintSessionState.RUNNING
         self.session_storage.update_session_state(self.session.state)
         LOG.info(f"Orchestrator session with id {self.session.bsid} started!")
+        self._state = OrchestratorState.RUNNING
         self._schedule_tasks()
 
     def stop(self) -> None:
         """Stops the orchestrator."""
+        self._state = OrchestratorState.IDLE
         self.task_completion_subscriber.unsubscribe()
         self.task_claim_subscriber.unsubscribe()
         # NOTE: for now don't close session storage until we figure out how to better handle it on the API
@@ -353,6 +378,13 @@ class Orchestrator:
             self.session.state = BlueprintSessionState.STOPPED
             self.session_storage.update_session_state(self.session.state)
         LOG.info(f"Execution of session id {self.session.bsid} completed!")
+
+    def pause(self) -> None:
+        """Pauses the orchestrator."""
+        self._state = OrchestratorState.PAUSED
+        self.session.state = BlueprintSessionState.STOPPED
+        self.session_storage.update_session_state(self.session.state)
+        LOG.info(f"Orchestrator session with id {self.session.bsid} paused!")
 
     def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
         """Resolve task inputs from session data applying argument remapping."""
@@ -509,7 +541,8 @@ class Orchestrator:
         ack = TaskCompletionAckMessage(id=message.id, state=TaskState(message.state), accepted_agent_id=message.agent_id)
         self.task_ack_publisher.publish(ack)
 
-        self._schedule_tasks()
+        if self._state == OrchestratorState.RUNNING:
+            self._schedule_tasks()
 
     def on_task_claim(self, message: TaskClaimRequest) -> None:
         """Handles incoming task claim requests."""

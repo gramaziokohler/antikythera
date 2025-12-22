@@ -102,6 +102,11 @@ class DeleteModelResponse(BaseModel):
     message: str
 
 
+class SessionActionResponse(BaseModel):
+    session_id: str
+    message: str
+
+
 app = FastAPI(title="Antikythera Orchestrator API")
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
@@ -291,6 +296,40 @@ def get_session_data(session_id: str) -> SessionDataResponse:
         data = storage.get_all(blueprint_id)
 
         return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)
+
+
+@app.post("/sessions/{session_id}/pause", response_model=SessionActionResponse)
+def pause_session(session_id: str) -> SessionActionResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        session.orchestrator.pause()
+    except Exception as exc:
+        LOG.exception(f"Failed to pause session {session_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to pause session: {exc}")
+
+    return SessionActionResponse(session_id=session_id, message="Session paused.")
+
+
+@app.post("/sessions/{session_id}/start", response_model=SessionActionResponse)
+def start_session(session_id: str) -> SessionActionResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        session.orchestrator.start()
+    except Exception as exc:
+        LOG.exception(f"Failed to start session {session_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to start session: {exc}")
+
+    return SessionActionResponse(session_id=session_id, message="Session started.")
 
 
 @app.post("/models/upload", response_model=UploadModelResponse, status_code=201)
