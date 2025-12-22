@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import random
 import threading
-import uuid
+import time
 
 import coolname
 from compas_eve import Publisher
@@ -19,6 +18,8 @@ from antikythera.models import TaskClaimRequest
 from antikythera.models import TaskAllocationMessage
 from antikythera.models import TaskCompletionAckMessage
 from antikythera_agents.cli import Colors
+
+THREAD_JOIN_TIMEOUT = 10
 
 
 def _ensure_agents():
@@ -66,8 +67,18 @@ class AgentLauncher:
         if thread_count > 0:
             print(f"Waiting for {thread_count} running tasks to complete...")
 
+        deadline = time.time() + THREAD_JOIN_TIMEOUT
+
         for thread in active_threads:
-            thread.join()
+            remaining_time = max(0, deadline - time.time())
+            if remaining_time == 0 and thread.is_alive():
+                print(f"Timeout reached, skipping join for {thread.name}")
+                continue
+
+            try:
+                thread.join(remaining_time)
+            except Exception as e:
+                print(f"Error joining thread: {e}, continuing shutdown.")
 
         # Dispose of all agents
         for agent in self.agents.values():
@@ -112,7 +123,7 @@ class AgentLauncher:
             claim_info = self.pending_claims.pop(task_id, None)
             if claim_info:
                 task, agent_type = claim_info
-                thread = threading.Thread(target=self._execute_task_wrapper, args=(task, agent_type))
+                thread = threading.Thread(target=self._execute_task_wrapper, daemon=True, args=(task, agent_type))
                 with self.thread_lock:
                     self.threads.append(thread)
                 thread.start()
