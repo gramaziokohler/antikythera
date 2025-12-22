@@ -7,6 +7,8 @@ from enum import StrEnum
 from enum import auto
 from queue import LifoQueue
 from queue import Queue
+from typing import Optional
+from typing import cast
 
 from compas.datastructures import Graph
 from compas_eve import Publisher
@@ -14,6 +16,7 @@ from compas_eve import Subscriber
 from compas_eve import Topic
 from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
+from compas_model.models import Model
 
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
@@ -31,6 +34,7 @@ from antikythera.models import TaskState
 
 from .sequencers import BasicSequencer
 from .storage import BlueprintStorage
+from .storage import ModelStorage
 from .storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
@@ -389,7 +393,16 @@ class Orchestrator:
         inputs = {}
         for key in task.inputs:
             mapped_key = input_mapping.get(key) or key
-            inputs[key] = self.session_storage.get(blueprint_id, mapped_key)
+            inputs_value = self.session_storage.get(blueprint_id, mapped_key)
+
+            if task.is_dynamically_expanded:
+                # in dynamically expanded tasks, the value is always a mapping {"element_id": "value"}
+                # the aggregation happens in :meth:`_map_outputs_to_outer_session`
+                assert isinstance(inputs_value, dict)
+                element_id = task.try_get_element_id()
+                inputs[key] = inputs_value[element_id]
+            else:
+                inputs[key] = inputs_value
         return inputs
 
     def _map_outputs_to_session(self, blueprint_id: str, task: Task) -> dict:
@@ -413,16 +426,41 @@ class Orchestrator:
         return outputs
 
     def _map_outputs_to_outer_session(self, outer_blueprint_id: str, task: Task):
+        """maps outputs from an inner blueprint to the session storage namespace of the outer blueprint."""
         inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(outer_blueprint_id, task)]
+
+        element = None
+        if task.is_dynamically_expanded:
+            element = self.session_storage.get(inner_blueprint_id, "element")
 
         for key in task.outputs:
             mapped_key = task.argument_mapping.get("outputs", {}).get(key) or key
             value = self.session_storage.get(inner_blueprint_id, key)
-            self.session_storage.set(outer_blueprint_id, mapped_key, value)
+
+            if element:
+                # If dynamic, we aggregate into a dictionary in the outer session
+                element_id = element["element_id"]
+                existing_value = self.session_storage.get(outer_blueprint_id, mapped_key) or {}
+                existing_value[element_id] = value
+                self.session_storage.set(outer_blueprint_id, mapped_key, existing_value)
+            else:
+                self.session_storage.set(outer_blueprint_id, mapped_key, value)
+
+    def _get_model_if_available(self) -> Optional[Model]:
+        model_id = self.session.params.get("model_id")
+        model: Optional[Model] = None
+        if model_id is not None:
+            with ModelStorage() as storage:
+                model = storage.get_model(model_id)
+        return model
 
     def _schedule_tasks(self) -> None:
         """Schedules tasks for execution."""
         pending_tasks = self.scheduler.get_pending_tasks()
+
+        # NOTE: doing this here will fetch the model evey cycle.
+        # NOTE: we could theoratically do this only once per session, unless we expect the model to change during execution..
+        model = self._get_model_if_available()
 
         for pending_task in pending_tasks:
             try:
@@ -444,6 +482,9 @@ class Orchestrator:
 
                 # TODO: Implement other execution modes (execution mode should probably be defined in the blueprint?)
                 execution_mode = task.params.get("execution_mode", ExecutionMode.EXCLUSIVE)
+
+                if model:
+                    task.params["model"] = model
 
                 self.task_start_publisher.publish(
                     TaskAssignmentMessage(
@@ -485,11 +526,11 @@ class Orchestrator:
         for processed_task in processed_tasks:
             blueprint_id = processed_task.blueprint_id
 
-            self._map_outputs_to_session(blueprint_id, processed_task.task)
-
             # Handle outs from inner blueprints
             if processed_task.task.is_composite:
                 self._map_outputs_to_outer_session(blueprint_id, processed_task.task)
+            else:
+                self._map_outputs_to_session(blueprint_id, processed_task.task)
 
             if self._is_last_task_in_blueprint(processed_task):
                 self.session.state = BlueprintSessionState.COMPLETED
@@ -508,7 +549,7 @@ class Orchestrator:
         LOG.info(f"Task claim received: {message}")
 
         task_id = message.task_id
-        task: Task = self.graph.node_attribute(task_id, "task")
+        task = cast(Task, self.graph.node_attribute(task_id, "task"))
         if task_id is None:
             LOG.warning(f"Received claim for unknown task: {task_id}")
             return
@@ -538,8 +579,8 @@ class Orchestrator:
             for task in list(blueprint.tasks):
                 blueprint_params = task.params.get("blueprint") or {}
                 dynamic_params = blueprint_params.get("dynamic") or {}
-                is_expanded = dynamic_params.get("expanded", False)
-                if task.is_composite and not is_expanded:
+
+                if task.is_composite and not task.is_dynamically_expanded:
                     sequencer_name = dynamic_params["sequencer"]
 
                     # TODO: Use a registry or factory
