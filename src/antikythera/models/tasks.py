@@ -103,7 +103,16 @@ class TaskAssignmentMessage(Data):
         self.execution_mode = execution_mode
 
     def __repr__(self) -> str:
-        return f"TaskAssignmentMessage(id={self.id}, type={self.type}, inputs={self.inputs}, output_keys={self.output_keys}, params={self.params}, timestamp={self.timestamp}, execution_mode={self.execution_mode})"
+        return (
+            f"TaskAssignmentMessage("
+            f"id={self.id}, "
+            f"type={self.type}, "
+            f"inputs={self.inputs}, "
+            f"output_keys={self.output_keys}, "
+            f"params={self.params}, "
+            f"timestamp={self.timestamp}, "
+            f"execution_mode={self.execution_mode})"
+        )
 
 
 class TaskClaimRequest(Data):
@@ -183,7 +192,16 @@ class TaskCompletionMessage(Data):
         self.agent_id = agent_id
 
     def __repr__(self) -> str:
-        return f"TaskCompletionMessage(id={self.id}, state={self.state}, outputs={self.outputs}, error={self.error}, timestamp={self.timestamp}, duration_ms={self.duration_ms}, agent_id={self.agent_id})"
+        return (
+            f"TaskCompletionMessage("
+            f"id={self.id}, "
+            f"state={self.state}, "
+            f"outputs={self.outputs}, "
+            f"error={self.error}, "
+            f"timestamp={self.timestamp}, "
+            f"duration_ms={self.duration_ms}, "
+            f"agent_id={self.agent_id})"
+        )
 
 
 class TaskCompletionAckMessage(Data):

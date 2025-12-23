@@ -11,12 +11,12 @@ from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
 
 from antikythera.models import Task
+from antikythera.models import TaskAllocationMessage
 from antikythera.models import TaskAssignmentMessage
+from antikythera.models import TaskClaimRequest
+from antikythera.models import TaskCompletionAckMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
-from antikythera.models import TaskClaimRequest
-from antikythera.models import TaskAllocationMessage
-from antikythera.models import TaskCompletionAckMessage
 from antikythera_agents.cli import Colors
 
 THREAD_JOIN_TIMEOUT = 10
