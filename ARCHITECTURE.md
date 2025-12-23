@@ -493,10 +493,10 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [ ] PoC Grasshopper components: if inputs have values, treat them as params
 - [ ] Make state of sibling tasks available to dynamically expanded tasks
 - [ ] Add Sequencer factory/registry
-- [ ] Implement pause/resume of Blueprint Session
+- [x] Implement pause/resume of Blueprint Session
 - [ ] Implement in-place editing of Blueprints/Sessions
 - [ ] Add MQTT log listener on the orchestrator and log agent entries (consider logging to DB?)
-- [ ] Implement a Blueprint validator which validates uploaded blueprints
+- [x] Implement a Blueprint validator which validates uploaded blueprints
 - [ ] Web UI + React Flow 
 - [ ] Download blueprints: back to the JSON representation
 - [ ] Add unittests with mocking for immudb
