@@ -648,10 +648,18 @@ class Orchestrator:
             # The expanded ID is used to avoid ID collisions
             # because multiple elements are processed with the same base blueprint
             # but different instances of it
-            expanded_blueprint_id = f"{blueprint_id}_{task.id}"
+            # NOTE: concatenating blueprint ID, task ID isn't always unique enough. if different composite tasks
+            # use the same inner blueprint due to collision the orchestrator will just hang..
+            short_element_id = element["element_id"][:8]  # use only first 8 chars to avoid too long IDs
+            expanded_blueprint_id = f"{blueprint_id}_{task.id}_{short_element_id}"
 
             blueprint = self.blueprint_storage.get_blueprint(blueprint_id)
             blueprint.id = expanded_blueprint_id
+
+            # NOTE: this isn't needed per se, but it's useful for debugging/logging purposes
+            task.params["blueprint"]["dynamic"]["blueprint_id"] = expanded_blueprint_id
+
+            LOG.debug(f"Loaded dynamic inner blueprint with new ID {expanded_blueprint_id} for task {task.id}")
 
             # We need to store an input param into the expanded blueprint to pass on the element details
             self.session_storage.set(expanded_blueprint_id, "element", element)
