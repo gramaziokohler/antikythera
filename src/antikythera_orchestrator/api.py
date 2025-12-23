@@ -1,6 +1,7 @@
 import logging
 import tempfile
 import uuid
+import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timezone
@@ -8,6 +9,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Dict
 from typing import Optional
+from typing import cast
 
 from compas.data import json_dumps
 from compas.data import json_loads
@@ -92,8 +94,8 @@ class DeleteBlueprintResponse(BaseModel):
     message: str
 
 
-class UploadModelResponse(BaseModel):
-    model_id: str
+class UploadModelsResponse(BaseModel):
+    model_ids: list[str] = Field(default_factory=list, description="Model IDs of the uploaded models.")
     message: str
 
 
@@ -324,8 +326,88 @@ def start_session(session_id: str) -> SessionActionResponse:
     return SessionActionResponse(session_id=session_id, message="Session started.")
 
 
-@app.post("/models/upload", response_model=UploadModelResponse, status_code=201)
-async def upload_model(file: UploadFile) -> UploadModelResponse:
+async def _handle_upload_json_file(file: UploadFile) -> list[str]:
+    assert file.filename
+
+    content = await file.read()
+
+    # Parse JSON to ensure validity and extract ID
+    model_data: Model = cast(Model, json_loads(content.decode()))
+
+    model_id = f"{Path(file.filename).stem}_{str(model_data.guid)[0:8]}"
+    try:
+        with ModelStorage() as storage:
+            storage.add_model(model_id, model_data)
+    except Exception as exc:
+        LOG.exception("Failed to save model to database")
+        raise HTTPException(status_code=500, detail=f"Failed to save model: {exc}")
+
+    return [model_id]
+
+
+async def _handle_upload_cog_file(file: UploadFile) -> list[str]:
+    assert file.filename
+    content = await file.read()
+    uploaded_ids = []
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cog_path = Path(tmp_dir) / file.filename
+        cog_path.write_bytes(content)
+
+        try:
+            with zipfile.ZipFile(cog_path, "r") as zip_ref:
+                zip_ref.extractall(tmp_dir)
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=400, detail="Invalid .cog file (not a valid zip archive).")
+
+        manifest_path = Path(tmp_dir) / "manifest.json"
+        if not manifest_path.exists():
+            raise HTTPException(status_code=400, detail="Manifest file missing in .cog archive.")
+
+        try:
+            manifest = json_loads(manifest_path.read_text())
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid manifest file.")
+
+        items = manifest.get("items", [])
+
+        with ModelStorage() as storage:
+            for item in items:
+                model_file = item.get("model")
+                nesting_file = item.get("nesting")
+
+                # Default to looking in model/ directory using the filename
+                model_path = Path(tmp_dir) / "model" / Path(model_file).name
+
+                if not model_path.exists():
+                    LOG.warning(f"Model file {model_file} listed in manifest but not found in archive.")
+                    continue
+
+                try:
+                    model_data = cast(Model, json_loads(model_path.read_text()))
+                    model_id = f"{Path(model_file).stem}_{str(model_data.guid)[0:8]}"
+
+                    storage.add_model(model_id, model_data)
+                    uploaded_ids.append(model_id)
+
+                    if nesting_file:
+                        nesting_path = Path(tmp_dir) / "nesting" / Path(nesting_file).name
+
+                        if nesting_path.exists():
+                            nesting_data = json_loads(nesting_path.read_text())
+                            storage.add_nesting(model_id, nesting_data)
+                        else:
+                            LOG.warning(f"Nesting file {nesting_file} listed in manifest but not found in archive.")
+
+                except Exception as e:
+                    LOG.error(f"Failed to process model {model_file}: {e}")
+                    raise HTTPException(status_code=400, detail=f"Failed to process model {model_file}: {e}")
+
+    return uploaded_ids
+
+
+@app.post("/models/upload", response_model=UploadModelsResponse, status_code=201)
+async def upload_model(file: UploadFile) -> UploadModelsResponse:
     """Upload a model JSON file to the database.
 
     Parameters
@@ -343,29 +425,17 @@ async def upload_model(file: UploadFile) -> UploadModelResponse:
     HTTPException
         If the file is not a JSON file or cannot be parsed.
     """
-    if not file.filename or not file.filename.endswith(".json"):
-        raise HTTPException(status_code=400, detail="Only JSON files are accepted.")
+    if file.filename is None:
+        raise HTTPException(status_code=400, detail="Filename must be provided.")
 
-    try:
-        content = await file.read()
+    if file.filename.endswith(".json"):
+        uploaded_ids = await _handle_upload_json_file(file)
+    elif file.filename.endswith(".cog"):
+        uploaded_ids = await _handle_upload_cog_file(file)
+    else:
+        raise HTTPException(status_code=400, detail="Only JSON and COG files are accepted.")
 
-        # Parse JSON to ensure validity and extract ID
-        model_data: Model = json_loads(content.decode())
-
-        model_id = f"{Path(file.filename).stem}_{str(model_data.guid)[0:8]}"
-
-    except Exception as exc:
-        LOG.exception("Failed to parse uploaded model file.")
-        raise HTTPException(status_code=400, detail=f"Failed to parse model file: {exc}")
-
-    try:
-        with ModelStorage() as storage:
-            storage.add_model(model_id, model_data)
-    except Exception as exc:
-        LOG.exception("Failed to save model to database")
-        raise HTTPException(status_code=500, detail=f"Failed to save model: {exc}")
-
-    return UploadModelResponse(model_id=model_id, message="Model uploaded successfully.")
+    return UploadModelsResponse(model_ids=uploaded_ids, message="Model uploaded successfully.")
 
 
 @app.get("/models", response_model=list[str])
