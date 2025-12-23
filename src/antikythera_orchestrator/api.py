@@ -284,9 +284,7 @@ def get_session_data(session_id: str) -> SessionDataResponse:
 
         data = {
             "main_blueprint": storage.get_all(blueprint_id),
-            "inner_blueprints": {
-                inner_id: storage.get_all(inner_id) for inner_id in inner_blueprint_ids
-            },
+            "inner_blueprints": {inner_id: storage.get_all(inner_id) for inner_id in inner_blueprint_ids},
         }
 
         return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)
@@ -627,18 +625,18 @@ def get_session_details(session_id: str):
         blueprint_data = session_info.get("blueprint")
 
         try:
-            with BlueprintStorage() as bp_storage:
-                if blueprint_data:
-                    if isinstance(blueprint_data, dict):
-                        blueprint = Blueprint.__from_data__(blueprint_data)
-                    else:
-                        blueprint = blueprint_data
+            if blueprint_data:
+                if isinstance(blueprint_data, dict):
+                    blueprint = Blueprint.__from_data__(blueprint_data)
                 else:
-                    blueprint = bp_storage.get_blueprint(blueprint_id)
+                    blueprint = blueprint_data
+            else:
+                blueprint = session_storage.get_blueprint(blueprint_id)
 
-                inner_blueprints = {}
-                for inner_id in inner_blueprint_ids:
-                    inner_blueprints[inner_id] = bp_storage.get_blueprint(inner_id)
+            inner_blueprints = {}
+            for inner_id in inner_blueprint_ids:
+                inner_blueprints[inner_id] = session_storage.get_blueprint(inner_id)
+
         except Exception as exc:
             LOG.exception(f"Failed to retrieve blueprint {blueprint_id} for session {session_id}")
             raise HTTPException(status_code=500, detail=f"Failed to retrieve session blueprint: {exc}")
