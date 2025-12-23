@@ -143,6 +143,18 @@ class SessionStorage:
             return None
         return json_loads(match.value.decode())
 
+    def store_blueprint(self, blueprint: Blueprint) -> None:
+        """Store a session-specific blueprint definition.
+
+        This is used to persist modified blueprints (e.g. after task expansion)
+        associated with this session, preserving the original blueprint in BlueprintStorage.
+        """
+        self.set(blueprint.id, "definition", blueprint)
+
+    def get_blueprint(self, blueprint_id: str) -> Optional[Blueprint]:
+        """Retrieve a session-specific blueprint definition."""
+        return self.get(blueprint_id, "definition")
+
 
 class BlueprintStorage:
     BLUEPRINTS_DB_NAME = "orchestrator_blueprints"
