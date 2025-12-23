@@ -353,6 +353,58 @@ class ModelStorage:
 
         self.client.setAll({key: value, index_key: index_value})
 
+    def add_nesting(self, model_id: str, nesting: Any) -> None:
+        """Store a nesting result for a model.
+
+        Parameters
+        ----------
+        model_id : str
+            The ID of the model.
+        nesting : Any
+            The nesting result to store (must be COMPAS serializable).
+
+        Raises
+        ------
+        RequestedModelNotFound
+            If the model with the given ID is not found.
+        """
+        LOG.debug(f"Storing nesting for model {model_id} in immudb")
+
+        # Verify model exists
+        model_key = f"model:{model_id}".encode()
+        match = self.client.get(model_key)
+        if not match:
+            LOG.error(f"Model {model_id} not found in database")
+            raise RequestedModelNotFound(f"Model {model_id} not found")
+
+        key = f"nesting:{model_id}".encode()
+        value = json_dumps(nesting).encode()
+        self.client.set(key, value)
+
+    def get_nesting(self, model_id: str) -> Optional[NestingResult]:
+        """Retrieve a nesting result for a model.
+
+        Parameters
+        ----------
+        model_id : str
+            The ID of the model.
+
+        Returns
+        -------
+        Optional[Any]
+            The nesting result if found, None otherwise.
+        """
+        key = f"nesting:{model_id}".encode()
+        try:
+            match = self.client.get(key)
+            if not match:
+                return None
+
+            return cast(NestingResult, json_loads(match.value.decode()))
+        except Exception as ex:
+            LOG.exception(f"Failed to retrieve nesting for model {model_id} - {ex}")
+            raise
+
     def get_model(self, model_id: str) -> Any:
         """Retrieve a model by its ID.
 
