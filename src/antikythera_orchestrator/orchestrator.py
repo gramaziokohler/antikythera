@@ -625,6 +625,15 @@ class Orchestrator:
         # Update session storage with the expanded blueprint
         self.session_storage.update_session_blueprint_state(self.session.blueprint)
 
+        # store session blueprints
+        # these are session specific copies of the blueprints, they may have been modified during preprocessing
+        # e.g. dynamic tasks expanded, new blueprints created etc.
+        self.session_storage.store_blueprint(self.session.blueprint)
+        for inner_blueprint in self.session.inner_blueprints.values():
+            self.session_storage.store_blueprint(inner_blueprint)
+
+        # json_dump(self.session, f"orchestrator_preprocessed_session_{self.session.bsid}.json")
+
     def _load_inner_blueprint(self, task: Task) -> Blueprint:
         assert "blueprint" in task.params
 
