@@ -6,6 +6,7 @@ from typing import cast
 
 from compas.data import json_dumps
 from compas.data import json_loads
+from compas_timber.planning import NestingResult
 from immudb import ImmudbClient
 from immudb.datatypes import DeleteKeysRequest
 
@@ -44,7 +45,6 @@ def _create_immudb_client(db_name: str) -> ImmudbClient:
         client.createDatabase(db_name.encode())
     client.useDatabase(db_name.encode())
 
-    LOG.debug(f"Connected to immudb database '{db_name}' as user '{config.IMMUDB_USER}'")
     return client
 
 
