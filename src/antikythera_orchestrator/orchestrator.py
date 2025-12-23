@@ -591,11 +591,7 @@ class Orchestrator:
                     dynamic_params = blueprint_params.get("dynamic") or {}
                     sequencer_name = dynamic_params["sequencer"]
 
-                    # TODO: Use a registry or factory
-                    if sequencer_name == "basic_sequencer":
-                        sequencer = BasicSequencer(self.session)
-                    else:
-                        raise ValueError(f"Unknown sequencer: {sequencer_name}")
+                    sequencer = SequencerRegistry().get_sequencer(sequencer_name, self.session)
 
                     blueprint = sequencer.expand(task, blueprint)
                     expanded_something = True
