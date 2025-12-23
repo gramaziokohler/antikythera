@@ -32,7 +32,7 @@ from antikythera.models import TaskCompletionAckMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
 
-from .sequencers import BasicSequencer
+from .sequencers import SequencerRegistry
 from .storage import BlueprintStorage
 from .storage import ModelStorage
 from .storage import SessionStorage
@@ -139,8 +139,6 @@ class TaskScheduler:
         return ProcessedTask(task_id=task.id, blueprint_id=blueprint_id, task=task)
 
     def process_queue(self) -> list[ProcessedTask]:
-        LOG.debug(f"processing queue: {[m.id for m in list(self.queue.queue)]}")
-
         processed_tasks = []
         put_back_to_queue = []
 
@@ -486,6 +484,7 @@ class Orchestrator:
                 if model:
                     task.params["model"] = model
 
+                # TODO: what do we do if no agent even claims the task.. should there be some timeout?
                 self.task_start_publisher.publish(
                     TaskAssignmentMessage(
                         id=_create_global_id(blueprint_id, task),
@@ -521,12 +520,14 @@ class Orchestrator:
 
     def on_task_completed(self, message: TaskCompletionMessage) -> None:
         """Handles incoming task completion messages."""
-        LOG.info(f"task finished: {message}")
+        LOG.info(f"task completion received : {message}")
 
         self.scheduler.queue_message(message)
         processed_tasks = self.scheduler.process_queue()
 
         for processed_task in processed_tasks:
+            LOG.debug(f"Task {processed_task.task_id} finished with state {processed_task.task.state}")
+
             blueprint_id = processed_task.blueprint_id
 
             # Handle outs from inner blueprints
@@ -553,6 +554,8 @@ class Orchestrator:
     def on_task_claim(self, message: TaskClaimRequest) -> None:
         """Handles incoming task claim requests."""
         LOG.info(f"Task claim received: {message}")
+
+        assert self.graph is not None
 
         task_id = message.task_id
         task = cast(Task, self.graph.node_attribute(task_id, "task"))
