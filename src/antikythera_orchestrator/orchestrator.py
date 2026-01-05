@@ -506,6 +506,7 @@ class Orchestrator:
                     task.params["model"] = model
 
                 # TODO: what do we do if no agent even claims the task.. should there be some timeout?
+                task.state = TaskState.READY
                 self.task_start_publisher.publish(
                     TaskAssignmentMessage(
                         id=_create_global_id(blueprint_id, task),
@@ -516,7 +517,6 @@ class Orchestrator:
                         execution_mode=execution_mode,
                     )
                 )
-                task.state = TaskState.READY
             except Exception as e:
                 LOG.exception(f"Failed to start task {task.id}: {e}")
                 task.state = TaskState.FAILED
