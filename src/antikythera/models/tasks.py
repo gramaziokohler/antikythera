@@ -64,7 +64,7 @@ class TaskError(Data):
         self.message = message
         self.details = details
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return f"TaskError(code={self.code}, message={self.message}, details={self.details})"
 
 
@@ -102,7 +102,7 @@ class TaskAssignmentMessage(Data):
         self.timestamp = timestamp or datetime.now()
         self.execution_mode = execution_mode
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return (
             f"TaskAssignmentMessage("
             f"id={self.id}, "
@@ -132,7 +132,7 @@ class TaskClaimRequest(Data):
         self.agent_id = agent_id
         self.timestamp = timestamp or datetime.now()
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return f"TaskClaimRequest(task_id={self.task_id}, agent_id={self.agent_id}, timestamp={self.timestamp})"
 
 
@@ -153,7 +153,7 @@ class TaskAllocationMessage(Data):
         self.assigned_agent_id = assigned_agent_id
         self.timestamp = timestamp or datetime.now()
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return f"TaskAllocationMessage(task_id={self.task_id}, assigned_agent_id={self.assigned_agent_id}, timestamp={self.timestamp})"
 
 
@@ -191,7 +191,7 @@ class TaskCompletionMessage(Data):
         self.duration_ms = duration_ms
         self.agent_id = agent_id
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return (
             f"TaskCompletionMessage("
             f"id={self.id}, "
@@ -229,5 +229,5 @@ class TaskCompletionAckMessage(Data):
         self.accepted_agent_id = accepted_agent_id
         self.timestamp = timestamp or datetime.now()
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return f"TaskCompletionAckMessage(id={self.id}, state={self.state}, accepted_agent_id={self.accepted_agent_id}, timestamp={self.timestamp})"
