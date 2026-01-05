@@ -310,6 +310,7 @@ class Orchestrator:
         self.composite_to_inner_blueprint_map: dict[str, str] = {}
         self.graph: Graph = None
         self._state = OrchestratorState.IDLE
+        self._completion_event = threading.Event()
 
         self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start = Topic("antikythera/task/start")
@@ -359,6 +360,7 @@ class Orchestrator:
             return
 
         self._reset_failed_tasks()
+        self._completion_event.clear()
 
         self.session.state = BlueprintSessionState.RUNNING
         self.session_storage.update_session_state(self.session.state)
@@ -387,6 +389,21 @@ class Orchestrator:
         self.session.state = BlueprintSessionState.STOPPED
         self.session_storage.update_session_state(self.session.state)
         LOG.info(f"Orchestrator session with id {self.session.bsid} paused!")
+
+    def await_completion(self, timeout: Optional[float] = None) -> bool:
+        """Waits for the session to complete (succeed or fail).
+
+        Parameters
+        ----------
+        timeout : float, optional
+            The maximum time to wait in seconds.
+
+        Returns
+        -------
+        bool
+            True if the session completed, False if the timeout was reached.
+        """
+        return self._completion_event.wait(timeout)
 
     def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
         """Resolve task inputs from session data applying argument remapping."""
@@ -505,6 +522,7 @@ class Orchestrator:
                 task.state = TaskState.FAILED
                 self.session.state = BlueprintSessionState.FAILED
                 self.session_storage.update_session_state(self.session.state)
+                self._completion_event.set()
 
         # Persist the updated blueprint state (with task states)
         self.session_storage.update_session_blueprint_state(self.session.blueprint)
@@ -543,6 +561,7 @@ class Orchestrator:
             if self._is_last_task_in_blueprint(processed_task):
                 self.session.state = BlueprintSessionState.COMPLETED
                 self.session_storage.update_session_state(self.session.state)
+                self._completion_event.set()
                 self.stop()
 
         # Send ACK
