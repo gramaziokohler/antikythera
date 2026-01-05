@@ -22,13 +22,15 @@ LOG = logging.getLogger(__name__)
 class SequencerRegistry:
     _SEQUENCERS = {}
 
-    def register_sequencer(self, name: str, sequencer_cls: type) -> None:
-        if name in self._SEQUENCERS:
+    @classmethod
+    def register_sequencer(cls, name: str, sequencer_cls: type) -> None:
+        if name in cls._SEQUENCERS:
             LOG.warning(f"Sequencer '{name}' is already registered. Overwriting.")
-        self._SEQUENCERS[name] = sequencer_cls
+        cls._SEQUENCERS[name] = sequencer_cls
 
-    def get_sequencer(self, name: str, *args, **kwargs):
-        sequencer_cls = self._SEQUENCERS.get(name)
+    @classmethod
+    def get_sequencer(cls, name: str, *args, **kwargs):
+        sequencer_cls = cls._SEQUENCERS.get(name)
         if not sequencer_cls:
             raise ValueError(f"Sequencer '{name}' is not registered.")
         return sequencer_cls(*args, **kwargs)
@@ -36,7 +38,7 @@ class SequencerRegistry:
 
 def sequencer(name: str):
     def decorator(cls):
-        SequencerRegistry().register_sequencer(name, cls)
+        SequencerRegistry.register_sequencer(name, cls)
         return cls
 
     return decorator

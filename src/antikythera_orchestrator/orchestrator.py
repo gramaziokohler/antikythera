@@ -594,7 +594,7 @@ class Orchestrator:
                     dynamic_params = blueprint_params.get("dynamic") or {}
                     sequencer_name = dynamic_params["sequencer"]
 
-                    sequencer = SequencerRegistry().get_sequencer(sequencer_name, self.session)
+                    sequencer = SequencerRegistry.get_sequencer(sequencer_name, self.session)
 
                     blueprint = sequencer.expand(task, blueprint)
                     expanded_something = True
