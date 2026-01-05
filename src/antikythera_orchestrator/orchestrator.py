@@ -40,6 +40,10 @@ from .storage import SessionStorage
 LOG = logging.getLogger(__name__)
 
 
+def _get_eve_transport(host, port, codec):
+    return MqttTransport(host=host, port=port, codec=codec)
+
+
 def _create_global_id(blueprint_id: str, task: Task) -> str:
     """Creates a globally unique identifier for a task.
 
@@ -307,7 +311,7 @@ class Orchestrator:
         self.graph: Graph = None
         self._state = OrchestratorState.IDLE
 
-        self.transport = MqttTransport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
+        self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start = Topic("antikythera/task/start")
         self.task_completed = Topic("antikythera/task/completed")
         self.task_claim = Topic("antikythera/task/claim")
