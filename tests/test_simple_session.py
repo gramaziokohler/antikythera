@@ -54,7 +54,7 @@ def mock_transport_launcher(in_memory_transport):
 def test_start_simple_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define a simple blueprint
     task_start = Task(id="start", type="system.start")
-    task_sleep = Task(id="sleep_task", type="system.sleep", params={"duration": 4})
+    task_sleep = Task(id="sleep_task", type="system.sleep", params={"duration": 0.1})
     task_end = Task(id="end", type="system.end")
 
     # Chain tasks: start -> sleep -> end
