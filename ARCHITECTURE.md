@@ -289,8 +289,9 @@ The `.cog` file format is a ZIP archive used to package multiple models and thei
 
 **Structure:**
 - `manifest.json`: A JSON file describing the contents of the archive.
-- `model/`: A directory containing `compas_model` JSON files.
-- `nesting/`: A directory containing nesting result JSON files.
+- `model/`: A directory containing zero or more `compas_model` JSON files.
+- `nesting/`: A directory containing zero or more nesting result JSON files.
+- `blueprints/` : A directory containing zero or more blueprints for this cog.
 
 **Manifest Schema:**
 ```json
