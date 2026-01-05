@@ -237,7 +237,7 @@ class Blueprint(Data):
                 tasks.append(task_def)
             else:
                 tasks.append(_parse_task(task_def))
-        
+
         return cls(
             id=data["id"],
             name=data["name"],
