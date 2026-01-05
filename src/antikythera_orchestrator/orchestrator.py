@@ -3,16 +3,6 @@
 import logging
 import threading
 from dataclasses import dataclass
-
-try:
-    from enum import StrEnum
-except ImportError:
-    from enum import Enum
-
-    class StrEnum(str, Enum):
-        pass
-
-
 from enum import auto
 from queue import LifoQueue
 from queue import Queue
@@ -27,6 +17,7 @@ from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
 from compas_model.models import Model
 
+from antikythera.compat import StrEnum
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
