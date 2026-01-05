@@ -6,7 +6,6 @@ from typing import cast
 
 from compas.data import json_dumps
 from compas.data import json_loads
-from compas_timber.planning import NestingResult
 from immudb import ImmudbClient
 from immudb.datatypes import DeleteKeysRequest
 
@@ -393,7 +392,7 @@ class ModelStorage:
         value = json_dumps(nesting).encode()
         self.client.set(key, value)
 
-    def get_nesting(self, model_id: str) -> Optional[NestingResult]:
+    def get_nesting(self, model_id: str) -> Optional[Any]:
         """Retrieve a nesting result for a model.
 
         Parameters
@@ -412,7 +411,7 @@ class ModelStorage:
             if not match:
                 return None
 
-            return cast(NestingResult, json_loads(match.value.decode()))
+            return json_loads(match.value.decode())
         except Exception as ex:
             LOG.exception(f"Failed to retrieve nesting for model {model_id} - {ex}")
             raise

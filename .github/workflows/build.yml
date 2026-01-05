@@ -18,6 +18,11 @@ jobs:
         python: ["3.12"]
 
     steps:
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
 

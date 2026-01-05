@@ -112,6 +112,24 @@ class Task(Data):
     def __repr__(self):
         return f"Task(id={self.id}, type={self.type}, dependencies={self.depends_on})"
 
+    def then(self, task: Task, type: DependencyType = DependencyType.FS) -> Task:
+        """Adds a dependency from the given task to this task.
+
+        Parameters
+        ----------
+        task : Task
+            The task that will depend on this task.
+        type : DependencyType, optional
+            The type of dependency, by default DependencyType.FS.
+
+        Returns
+        -------
+        Task
+            The task that was passed in, to allow chaining.
+        """
+        task.depends_on.append(Dependency(id=self.id, type=type))
+        return task
+
     @property
     def is_composite(self) -> bool:
         return self.type == SystemTaskType.COMPOSITE
@@ -219,7 +237,7 @@ class Blueprint(Data):
                 tasks.append(task_def)
             else:
                 tasks.append(_parse_task(task_def))
-        
+
         return cls(
             id=data["id"],
             name=data["name"],

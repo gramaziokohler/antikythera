@@ -22,6 +22,10 @@ from antikythera_agents.cli import Colors
 THREAD_JOIN_TIMEOUT = 10
 
 
+def _get_eve_transport(host, port, codec):
+    return MqttTransport(host=host, port=port, codec=codec)
+
+
 def _ensure_agents():
     _get_plugin_manager().discover_plugins()
 
@@ -39,7 +43,7 @@ class AgentLauncher:
 
         self.threads = []
         self.thread_lock = threading.Lock()
-        self.transport = MqttTransport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
+        self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start_subscriber = Subscriber(Topic("antikythera/task/start"), self.on_task_start, transport=self.transport)
         self.task_completion_publisher = Publisher(Topic("antikythera/task/completed"), transport=self.transport)
         self.task_claim_publisher = Publisher(Topic("antikythera/task/claim"), transport=self.transport)
