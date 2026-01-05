@@ -5,14 +5,14 @@ from compas_pb.registry import pb_serializer
 
 from antikythera.proto import antikythera_pb2
 
+from .tasks import ExecutionMode
+from .tasks import TaskAllocationMessage
 from .tasks import TaskAssignmentMessage
+from .tasks import TaskClaimRequest
+from .tasks import TaskCompletionAckMessage
 from .tasks import TaskCompletionMessage
 from .tasks import TaskError
 from .tasks import TaskState
-from .tasks import TaskClaimRequest
-from .tasks import TaskAllocationMessage
-from .tasks import TaskCompletionAckMessage
-from .tasks import ExecutionMode
 
 
 @pb_serializer(TaskAssignmentMessage)

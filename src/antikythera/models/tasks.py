@@ -64,6 +64,9 @@ class TaskError(Data):
         self.message = message
         self.details = details
 
+    def __str__(self) -> str:
+        return f"TaskError(code={self.code}, message={self.message}, details={self.details})"
+
 
 class TaskAssignmentMessage(Data):
     """Task assignment message sent by orchestrator to agents."""
@@ -99,6 +102,18 @@ class TaskAssignmentMessage(Data):
         self.timestamp = timestamp or datetime.now()
         self.execution_mode = execution_mode
 
+    def __str__(self) -> str:
+        return (
+            f"TaskAssignmentMessage("
+            f"id={self.id}, "
+            f"type={self.type}, "
+            f"inputs={self.inputs}, "
+            f"output_keys={self.output_keys}, "
+            f"params={self.params}, "
+            f"timestamp={self.timestamp}, "
+            f"execution_mode={self.execution_mode})"
+        )
+
 
 class TaskClaimRequest(Data):
     """Task claim request sent by agents to orchestrator."""
@@ -117,6 +132,9 @@ class TaskClaimRequest(Data):
         self.agent_id = agent_id
         self.timestamp = timestamp or datetime.now()
 
+    def __str__(self) -> str:
+        return f"TaskClaimRequest(task_id={self.task_id}, agent_id={self.agent_id}, timestamp={self.timestamp})"
+
 
 class TaskAllocationMessage(Data):
     """Task allocation message sent by orchestrator to agents."""
@@ -134,6 +152,9 @@ class TaskAllocationMessage(Data):
         self.task_id = task_id
         self.assigned_agent_id = assigned_agent_id
         self.timestamp = timestamp or datetime.now()
+
+    def __str__(self) -> str:
+        return f"TaskAllocationMessage(task_id={self.task_id}, assigned_agent_id={self.assigned_agent_id}, timestamp={self.timestamp})"
 
 
 class TaskCompletionMessage(Data):
@@ -170,6 +191,18 @@ class TaskCompletionMessage(Data):
         self.duration_ms = duration_ms
         self.agent_id = agent_id
 
+    def __str__(self) -> str:
+        return (
+            f"TaskCompletionMessage("
+            f"id={self.id}, "
+            f"state={self.state}, "
+            f"outputs={self.outputs}, "
+            f"error={self.error}, "
+            f"timestamp={self.timestamp}, "
+            f"duration_ms={self.duration_ms}, "
+            f"agent_id={self.agent_id})"
+        )
+
 
 class TaskCompletionAckMessage(Data):
     """Task completion acknowledgement message sent by orchestrator."""
@@ -195,3 +228,6 @@ class TaskCompletionAckMessage(Data):
         self.state = state
         self.accepted_agent_id = accepted_agent_id
         self.timestamp = timestamp or datetime.now()
+
+    def __str__(self) -> str:
+        return f"TaskCompletionAckMessage(id={self.id}, state={self.state}, accepted_agent_id={self.accepted_agent_id}, timestamp={self.timestamp})"

@@ -6,6 +6,7 @@ from typing import cast
 
 from compas.data import json_dumps
 from compas.data import json_loads
+from compas_timber.planning import NestingResult
 from immudb import ImmudbClient
 from immudb.datatypes import DeleteKeysRequest
 
@@ -44,7 +45,6 @@ def _create_immudb_client(db_name: str) -> ImmudbClient:
         client.createDatabase(db_name.encode())
     client.useDatabase(db_name.encode())
 
-    LOG.debug(f"Connected to immudb database '{db_name}' as user '{config.IMMUDB_USER}'")
     return client
 
 
@@ -142,6 +142,18 @@ class SessionStorage:
         if match is None:
             return None
         return json_loads(match.value.decode())
+
+    def store_blueprint(self, blueprint: Blueprint) -> None:
+        """Store a session-specific blueprint definition.
+
+        This is used to persist modified blueprints (e.g. after task expansion)
+        associated with this session, preserving the original blueprint in BlueprintStorage.
+        """
+        self.set(blueprint.id, "definition", blueprint)
+
+    def get_blueprint(self, blueprint_id: str) -> Optional[Blueprint]:
+        """Retrieve a session-specific blueprint definition."""
+        return self.get(blueprint_id, "definition")
 
 
 class BlueprintStorage:
@@ -352,6 +364,58 @@ class ModelStorage:
         index_value = json_dumps(index_data).encode()
 
         self.client.setAll({key: value, index_key: index_value})
+
+    def add_nesting(self, model_id: str, nesting: Any) -> None:
+        """Store a nesting result for a model.
+
+        Parameters
+        ----------
+        model_id : str
+            The ID of the model.
+        nesting : Any
+            The nesting result to store (must be COMPAS serializable).
+
+        Raises
+        ------
+        RequestedModelNotFound
+            If the model with the given ID is not found.
+        """
+        LOG.debug(f"Storing nesting for model {model_id} in immudb")
+
+        # Verify model exists
+        model_key = f"model:{model_id}".encode()
+        match = self.client.get(model_key)
+        if not match:
+            LOG.error(f"Model {model_id} not found in database")
+            raise RequestedModelNotFound(f"Model {model_id} not found")
+
+        key = f"nesting:{model_id}".encode()
+        value = json_dumps(nesting).encode()
+        self.client.set(key, value)
+
+    def get_nesting(self, model_id: str) -> Optional[NestingResult]:
+        """Retrieve a nesting result for a model.
+
+        Parameters
+        ----------
+        model_id : str
+            The ID of the model.
+
+        Returns
+        -------
+        Optional[Any]
+            The nesting result if found, None otherwise.
+        """
+        key = f"nesting:{model_id}".encode()
+        try:
+            match = self.client.get(key)
+            if not match:
+                return None
+
+            return cast(NestingResult, json_loads(match.value.decode()))
+        except Exception as ex:
+            LOG.exception(f"Failed to retrieve nesting for model {model_id} - {ex}")
+            raise
 
     def get_model(self, model_id: str) -> Any:
         """Retrieve a model by its ID.

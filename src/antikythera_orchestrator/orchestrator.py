@@ -32,7 +32,7 @@ from antikythera.models import TaskCompletionAckMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
 
-from .sequencers import BasicSequencer
+from .sequencers import SequencerRegistry
 from .storage import BlueprintStorage
 from .storage import ModelStorage
 from .storage import SessionStorage
@@ -139,8 +139,6 @@ class TaskScheduler:
         return ProcessedTask(task_id=task.id, blueprint_id=blueprint_id, task=task)
 
     def process_queue(self) -> list[ProcessedTask]:
-        LOG.debug(f"processing queue: {[m.id for m in list(self.queue.queue)]}")
-
         processed_tasks = []
         put_back_to_queue = []
 
@@ -486,6 +484,7 @@ class Orchestrator:
                 if model:
                     task.params["model"] = model
 
+                # TODO: what do we do if no agent even claims the task.. should there be some timeout?
                 self.task_start_publisher.publish(
                     TaskAssignmentMessage(
                         id=_create_global_id(blueprint_id, task),
@@ -521,12 +520,14 @@ class Orchestrator:
 
     def on_task_completed(self, message: TaskCompletionMessage) -> None:
         """Handles incoming task completion messages."""
-        LOG.info(f"task finished: {message}")
+        LOG.info(f"task completion received : {message}")
 
         self.scheduler.queue_message(message)
         processed_tasks = self.scheduler.process_queue()
 
         for processed_task in processed_tasks:
+            LOG.debug(f"Task {processed_task.task_id} finished with state {processed_task.task.state}")
+
             blueprint_id = processed_task.blueprint_id
 
             # Handle outs from inner blueprints
@@ -553,6 +554,8 @@ class Orchestrator:
     def on_task_claim(self, message: TaskClaimRequest) -> None:
         """Handles incoming task claim requests."""
         LOG.info(f"Task claim received: {message}")
+
+        assert self.graph is not None
 
         task_id = message.task_id
         task = cast(Task, self.graph.node_attribute(task_id, "task"))
@@ -591,11 +594,7 @@ class Orchestrator:
                     dynamic_params = blueprint_params.get("dynamic") or {}
                     sequencer_name = dynamic_params["sequencer"]
 
-                    # TODO: Use a registry or factory
-                    if sequencer_name == "basic_sequencer":
-                        sequencer = BasicSequencer(self.session)
-                    else:
-                        raise ValueError(f"Unknown sequencer: {sequencer_name}")
+                    sequencer = SequencerRegistry.get_sequencer(sequencer_name, self.session)
 
                     blueprint = sequencer.expand(task, blueprint)
                     expanded_something = True
@@ -629,6 +628,15 @@ class Orchestrator:
         # Update session storage with the expanded blueprint
         self.session_storage.update_session_blueprint_state(self.session.blueprint)
 
+        # store session blueprints
+        # these are session specific copies of the blueprints, they may have been modified during preprocessing
+        # e.g. dynamic tasks expanded, new blueprints created etc.
+        self.session_storage.store_blueprint(self.session.blueprint)
+        for inner_blueprint in self.session.inner_blueprints.values():
+            self.session_storage.store_blueprint(inner_blueprint)
+
+        # json_dump(self.session, f"orchestrator_preprocessed_session_{self.session.bsid}.json")
+
     def _load_inner_blueprint(self, task: Task) -> Blueprint:
         assert "blueprint" in task.params
 
@@ -643,10 +651,18 @@ class Orchestrator:
             # The expanded ID is used to avoid ID collisions
             # because multiple elements are processed with the same base blueprint
             # but different instances of it
-            expanded_blueprint_id = f"{blueprint_id}_{task.id}"
+            # NOTE: concatenating blueprint ID, task ID isn't always unique enough. if different composite tasks
+            # use the same inner blueprint due to collision the orchestrator will just hang..
+            short_element_id = element["element_id"][:8]  # use only first 8 chars to avoid too long IDs
+            expanded_blueprint_id = f"{blueprint_id}_{task.id}_{short_element_id}"
 
             blueprint = self.blueprint_storage.get_blueprint(blueprint_id)
             blueprint.id = expanded_blueprint_id
+
+            # NOTE: this isn't needed per se, but it's useful for debugging/logging purposes
+            task.params["blueprint"]["dynamic"]["blueprint_id"] = expanded_blueprint_id
+
+            LOG.debug(f"Loaded dynamic inner blueprint with new ID {expanded_blueprint_id} for task {task.id}")
 
             # We need to store an input param into the expanded blueprint to pass on the element details
             self.session_storage.set(expanded_blueprint_id, "element", element)

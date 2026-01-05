@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import logging
 from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
@@ -7,9 +10,38 @@ from antikythera.models import Blueprint
 from antikythera.models import Dependency
 from antikythera.models import Task
 from antikythera_orchestrator.storage import ModelStorage
+from antikythera_orchestrator.storage import SessionStorage
 
 if TYPE_CHECKING:
     from antikythera.models import BlueprintSession
+
+
+LOG = logging.getLogger(__name__)
+
+
+class SequencerRegistry:
+    _SEQUENCERS = {}
+
+    @classmethod
+    def register_sequencer(cls, name: str, sequencer_cls: type) -> None:
+        if name in cls._SEQUENCERS:
+            LOG.warning(f"Sequencer '{name}' is already registered. Overwriting.")
+        cls._SEQUENCERS[name] = sequencer_cls
+
+    @classmethod
+    def get_sequencer(cls, name: str, *args, **kwargs):
+        sequencer_cls = cls._SEQUENCERS.get(name)
+        if not sequencer_cls:
+            raise ValueError(f"Sequencer '{name}' is not registered.")
+        return sequencer_cls(*args, **kwargs)
+
+
+def sequencer(name: str):
+    def decorator(cls):
+        SequencerRegistry.register_sequencer(name, cls)
+        return cls
+
+    return decorator
 
 
 class Sequencer(ABC):
@@ -18,17 +50,22 @@ class Sequencer(ABC):
 
     @abstractmethod
     def expand(self, task: Task, blueprint: Blueprint) -> Blueprint:
-        pass
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_fabrication_items(self, blueprint_id: str) -> List:
+        raise NotImplementedError
 
 
+@sequencer("basic_sequencer")
 class BasicSequencer(Sequencer):
     def expand(self, task: Task, blueprint: Blueprint) -> Blueprint:
-        elements = self.get_model_elements()
+        elements = self.get_fabrication_items(blueprint.id)
         new_tasks = self._create_element_tasks(task, elements)
         self._update_blueprint_tasks(blueprint, task, new_tasks)
         return blueprint
 
-    def get_model_elements(self) -> List:
+    def get_fabrication_items(self, _: str) -> List:
         model_id = self.session.params.get("model_id")
 
         if not model_id:
@@ -84,3 +121,58 @@ class BasicSequencer(Sequencer):
                 new_blueprint_tasks.append(t)
 
         blueprint.tasks = new_blueprint_tasks
+
+
+@sequencer("basic_stock_sequencer")
+class BasicStockSequencer(BasicSequencer):
+    def get_fabrication_items(self, _: str) -> List:
+        model_id = self.session.params.get("model_id")
+
+        if not model_id:
+            raise ValueError("model_id not found in session params or task params")
+
+        with ModelStorage() as storage:
+            nesting_result = storage.get_nesting(model_id)
+            if not nesting_result:
+                raise ValueError(f"Nesting result not found for model_id: {model_id}")
+
+        return list(nesting_result.stocks)
+
+
+@sequencer("basic_element_sequencer")
+class BasicElementSequencer(BasicSequencer):
+    def get_fabrication_items(self, blueprint_id: str) -> List:
+        """
+        Retrieves elements for a specific stock.
+        It expects the 'element' (stock_id) to be present in the session storage
+        for the current blueprint context.
+        """
+        model_id = self.session.params.get("model_id")
+        if not model_id:
+            raise ValueError("model_id not found in session params")
+
+        session_storage = SessionStorage(self.session.bsid)
+        element_context = session_storage.get(blueprint_id, "element")
+
+        if not element_context:
+            raise ValueError(f"No context element found for blueprint {blueprint_id}. BasicElementSequencer must run inside a dynamic task expanded by a stock sequencer.")
+
+        stock_id = element_context["element_id"]
+
+        with ModelStorage() as storage:
+            nesting_result = storage.get_nesting(model_id)
+            model = storage.get_model(model_id)
+            if not nesting_result:
+                raise ValueError(f"Nesting result not found for model_id: {model_id}")
+
+        target_stock = None
+        for stock in nesting_result.stocks:
+            if str(stock.guid) == stock_id:
+                target_stock = stock
+                break
+
+        if not target_stock:
+            raise ValueError(f"Stock with ID {stock_id} not found in nesting result.")
+
+        # HACK: we actually just need the keys but for the sake of not having to re-implement `_create_element_tasks` we return the full elements
+        return [model.element_by_guid(guid) for guid in target_stock.element_data]

@@ -73,10 +73,12 @@ The orchestrator API is exposed through a FastAPI application (`python -m antiky
 - `GET /sessions/{session_id}/blueprint`: Returns the blueprint associated with the session (expanded if applicable).
 - `GET /sessions/{session_id}/diagram`: Returns a Mermaid diagram representing the current execution state of the session.
 - `GET /sessions/{session_id}/data`: Returns the session data (inputs/outputs) stored for the session.
+- `POST /sessions/{session_id}/pause`: Pauses the execution of a session.
+- `POST /sessions/{session_id}/start`: Resumes the execution of a session.
 
 **Models**
 - `GET /models`: Lists all available models in the storage.
-- `POST /models/upload`: Uploads a `compas_model` JSON file.
+- `POST /models/upload`: Uploads a `compas_model` JSON file or a `.cog` archive.
 - `GET /models/{model_id}`: Retrieves a model by ID.
 - `DELETE /models/{model_id}`: Deletes a model from storage.
 
@@ -146,9 +148,14 @@ Initially, only very simple agents will be implemented to execute toy problems.
 
 ### Sequencers
 
-Sequencers are responsible for the dynamic expansion of blueprints. When a `system.composite` task is marked as `dynamic`, a sequencer is invoked to generate a set of tasks that replace the original composite task. This allows for data-driven blueprint generation, where the structure of the process depends on the input data (e.g., the number of elements in a model).
+Sequencers are responsible for the dynamic expansion of blueprints. When a `system.composite` task is marked as `dynamic`, the sequencer requested in `sequencer` is invoked to generate a set of tasks that replace the original composite task. This allows for data-driven blueprint generation, where the structure of the process depends on the input data (e.g., the number of elements in a model).
 
-The `Sequencer` abstract base class defines the interface for all sequencers. The `BasicSequencer` is a concrete implementation that iterates over the elements of a model and creates a linear chain of static composite tasks, one for each element.
+The `Sequencer` abstract base class defines the interface for all sequencers. Sequencers are registered using the `@sequencer` decorator and managed by the `SequencerRegistry`.
+
+Available sequencers:
+* `BasicSequencer` (`basic_sequencer`): Iterates over all elements of a model and creates a linear chain of static composite tasks, one for each element.
+* `BasicStockSequencer` (`basic_stock_sequencer`): Iterates over the stocks defined in a nesting result and creates a linear chain of tasks.
+* `BasicElementSequencer` (`basic_element_sequencer`): Iterates over the elements assigned to a specific stock (intended to be used within a blueprint expanded by `BasicStockSequencer`).
 
 #### Dynamic Task Expansion & Output Aggregation
 
@@ -273,6 +280,28 @@ Tasks can optionally declare an `argument_mapping` block to remap task-level inp
       "grasp_frame": "framecito"
     }
   }
+}
+```
+
+### COG Archive
+
+The `.cog` file format is a ZIP archive used to package multiple models and their associated nesting results for bulk upload.
+
+**Structure:**
+- `manifest.json`: A JSON file describing the contents of the archive.
+- `model/`: A directory containing zero or more `compas_model` JSON files.
+- `nesting/`: A directory containing zero or more nesting result JSON files.
+- `blueprints/` : A directory containing zero or more blueprints for this cog.
+
+**Manifest Schema:**
+```json
+{
+  "items": [
+    {
+      "model": "model_filename.json",
+      "nesting": "nesting_filename.json"
+    }
+  ]
 }
 ```
 
@@ -493,10 +522,10 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [ ] PoC Grasshopper components: if inputs have values, treat them as params
 - [ ] Make state of sibling tasks available to dynamically expanded tasks
 - [ ] Add Sequencer factory/registry
-- [ ] Implement pause/resume of Blueprint Session
+- [x] Implement pause/resume of Blueprint Session
 - [ ] Implement in-place editing of Blueprints/Sessions
 - [ ] Add MQTT log listener on the orchestrator and log agent entries (consider logging to DB?)
-- [ ] Implement a Blueprint validator which validates uploaded blueprints
+- [x] Implement a Blueprint validator which validates uploaded blueprints
 - [ ] Web UI + React Flow 
 - [ ] Download blueprints: back to the JSON representation
 - [ ] Add unittests with mocking for immudb
