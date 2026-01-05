@@ -52,10 +52,6 @@ class Sequencer(ABC):
     def expand(self, task: Task, blueprint: Blueprint) -> Blueprint:
         raise NotImplementedError
 
-    @abstractmethod
-    def get_fabrication_items(self, blueprint_id: str) -> List:
-        raise NotImplementedError
-
 
 @sequencer("basic_sequencer")
 class BasicSequencer(Sequencer):
