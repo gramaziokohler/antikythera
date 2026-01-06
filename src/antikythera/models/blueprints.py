@@ -253,6 +253,8 @@ class Blueprint(Data):
         self.version = version
         self.description = description
         self.tasks = tasks or []
+        if self.tasks:
+            self.validate()
 
     def validate(self) -> None:
         """Validates the blueprint structure.

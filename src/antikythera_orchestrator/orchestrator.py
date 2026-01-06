@@ -362,6 +362,10 @@ class Orchestrator:
         self._reset_failed_tasks()
         self._completion_event.clear()
 
+        # Ensure subscriptions are active (in case we are restarting after stop)
+        self.task_completion_subscriber.subscribe()
+        self.task_claim_subscriber.subscribe()
+
         self.session.state = BlueprintSessionState.RUNNING
         self.session_storage.update_session_state(self.session.state)
         LOG.info(f"Orchestrator session with id {self.session.bsid} started!")
@@ -557,6 +561,14 @@ class Orchestrator:
                 self._map_outputs_to_outer_session(blueprint_id, processed_task.task)
             else:
                 self._map_outputs_to_session(blueprint_id, processed_task.task)
+
+            if processed_task.task.state == TaskState.FAILED:
+                LOG.error(f"Task {processed_task.task_id} failed, aborting session.")
+                self.session.state = BlueprintSessionState.FAILED
+                self.session_storage.update_session_state(self.session.state)
+                self._completion_event.set()
+                self.stop()
+                return
 
             if self._is_last_task_in_blueprint(processed_task):
                 self.session.state = BlueprintSessionState.COMPLETED
