@@ -44,7 +44,7 @@ def test_task_failure_and_retry(mock_immudb, mock_transport_orchestrator, mock_t
 
     task_end = Task(id="end", type="system.end")
 
-    task_start.then(task).then(task_end)
+    task_start >> task >> task_end
 
     blueprint = Blueprint(id="fail_bp", name="Failure Blueprint", tasks=[task_start, task, task_end])
 

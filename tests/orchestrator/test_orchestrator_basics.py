@@ -13,7 +13,7 @@ def test_start_simple_session(mock_immudb, mock_transport_orchestrator, mock_tra
     task_end = Task(id="end", type="system.end")
 
     # Chain tasks: start -> sleep -> end
-    task_start.then(task_sleep).then(task_end)
+    task_start >> task_sleep >> task_end
 
     blueprint = Blueprint(id="simple_bp", name="Simple Blueprint", tasks=[task_start, task_sleep, task_end])
 

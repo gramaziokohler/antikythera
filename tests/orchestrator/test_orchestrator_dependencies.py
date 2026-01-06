@@ -21,13 +21,7 @@ def test_parallel_execution(mock_immudb, mock_transport_orchestrator, mock_trans
 
     task_end = Task(id="end", type="system.end")
 
-    task_start.then(task_a)
-    task_start.then(task_b)
-
-    task_a.then(task_c)
-    task_b.then(task_c)
-
-    task_c.then(task_end)
+    task_start >> [task_a, task_b] >> task_c >> task_end
 
     blueprint = Blueprint(id="parallel_bp", name="Parallel Blueprint", tasks=[task_start, task_a, task_b, task_c, task_end])
 

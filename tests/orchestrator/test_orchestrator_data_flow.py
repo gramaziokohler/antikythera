@@ -46,7 +46,7 @@ def test_data_passing_between_tasks(mock_immudb, mock_transport_orchestrator, mo
 
     task_end = Task(id="end", type="system.end")
 
-    task_start.then(task_a).then(task_b).then(task_end)
+    task_start >> task_a >> task_b >> task_end
 
     blueprint = Blueprint(id="data_flow_bp", name="Data Flow Blueprint", tasks=[task_start, task_a, task_b, task_end])
 
@@ -101,7 +101,7 @@ def test_static_inputs(mock_immudb, mock_transport_orchestrator, mock_transport_
 
     task_end = Task(id="end", type="system.end")
 
-    task_start.then(task_static).then(task_end)
+    task_start >> task_static >> task_end
 
     blueprint = Blueprint(id="static_input_bp", name="Static Input Blueprint", tasks=[task_start, task_static, task_end])
 

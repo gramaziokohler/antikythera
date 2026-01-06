@@ -39,7 +39,7 @@ def test_composite_task_execution(mock_immudb, mock_transport_orchestrator, mock
 
     inner_end = Task(id="inner_end", type="system.end")
 
-    inner_start.then(inner_task).then(inner_end)
+    inner_start >> inner_task >> inner_end
 
     inner_blueprint = Blueprint(id="inner_bp", name="Inner Blueprint", tasks=[inner_start, inner_task, inner_end])
 
@@ -80,7 +80,7 @@ def test_composite_task_execution(mock_immudb, mock_transport_orchestrator, mock
 
     task_end_sys = Task(id="sys_end", type="system.end")
 
-    task_start_sys.then(task_start).then(task_composite).then(task_end_sys)
+    task_start_sys >> task_start >> task_composite >> task_end_sys
 
     outer_blueprint = Blueprint(id="outer_bp", name="Outer Blueprint", tasks=[task_start_sys, task_start, task_composite, task_end_sys])
 

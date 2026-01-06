@@ -21,7 +21,7 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
 
     task_end = Task(id="end", type="system.end")
 
-    task_start.then(task_1).then(task_2).then(task_end)
+    task_start >> task_1 >> task_2 >> task_end
 
     blueprint = Blueprint(id="pause_resume_bp", name="Pause Resume Blueprint", tasks=[task_start, task_1, task_2, task_end])
 

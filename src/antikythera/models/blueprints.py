@@ -5,6 +5,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Union
 
 from compas.data import Data
 from compas.data import json_load
@@ -105,23 +106,34 @@ class Task(Data):
     def __repr__(self):
         return f"Task(id={self.id}, type={self.type}, dependencies={self.depends_on})"
 
-    def then(self, task: Task, type: DependencyType = DependencyType.FS) -> Task:
-        """Adds a dependency from the given task to this task.
+    def then(self, task: Union[Task, List[Task]], type: DependencyType = DependencyType.FS) -> Union[Task, List[Task]]:
+        """Adds a dependency from the given task(s) to this task.
 
         Parameters
         ----------
-        task : Task
-            The task that will depend on this task.
+        task : Task or List[Task]
+            The task(s) that will depend on this task.
         type : DependencyType, optional
             The type of dependency, by default DependencyType.FS.
 
         Returns
         -------
-        Task
-            The task that was passed in, to allow chaining.
+        Task or List[Task]
+            The task(s) that was passed in, to allow chaining.
         """
-        task.depends_on.append(Dependency(id=self.id, type=type))
+        targets = task if isinstance(task, list) else [task]
+        for t in targets:
+            t.depends_on.append(Dependency(id=self.id, type=type))
         return task
+
+    def __rshift__(self, other: Union[Task, List[Task]]) -> Union[Task, List[Task]]:
+        return self.then(other)
+
+    def __rrshift__(self, other: Union[Task, List[Task]]) -> Task:
+        sources = other if isinstance(other, list) else [other]
+        for source in sources:
+            self.depends_on.append(Dependency(id=source.id))
+        return self
 
     @property
     def is_composite(self) -> bool:
