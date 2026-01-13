@@ -1,3 +1,5 @@
+[![Made with COMPAS](https://compas.dev/badge.svg)](https://compas.dev)
+
 # Antikythera
 
 > *An all knowing, all controlling, robotic and otherwise, process manager.*
