@@ -417,11 +417,31 @@ Initially, blueprints are defined using the JSON format described above. This pr
 
 ### Phase 2: Python DSL
 
-A domain-specific language (DSL) implemented in Python will provide a more ergonomic interface for defining blueprints programmatically. This will enable:
+A domain-specific language (DSL) implemented in Python provides an ergonomic interface for defining blueprints programmatically. This enables:
 
-- Type checking and validation during development
-- Reuse of process components and patterns
-- Integration with existing Python-based workflows
+- **Fluid Task Dependencies**: Use the right-shift operator (`>>`) to define dependencies clearly and concisely.
+- **Type checking**: Validation during development.
+- **Reuse**: Easy reuse of process components and patterns.
+- **Integration**: Seamless integration with existing Python-based workflows.
+
+**Example:**
+
+```python
+from antikythera.models import Task, Blueprint
+
+# Define tasks
+t_start = Task(id="start", type="system.start")
+A = Task(id="A", type="agent.task")
+B = Task(id="B", type="agent.task")
+C = Task(id="C", type="agent.task")
+t_end = Task(id="end", type="system.end")
+
+# Define flow using the >> operator
+# Start -> A and B run in parallel -> C waits for both -> End
+t_start >> [A, B] >> C >> t_end
+
+bp = Blueprint(id="example", tasks=[t_start, A, B, C, t_end])
+```
 
 ### Phase 3: LLM-Assisted Authoring (Long-term Vision)
 

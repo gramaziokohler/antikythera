@@ -12,9 +12,10 @@ Example:
     python mqtt_recorder.py mqtt_log.json "sensor/#" "device/status"
 """
 
-import sys
 import json
+import sys
 from datetime import datetime
+
 import paho.mqtt.client as mqtt
 
 
