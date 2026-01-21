@@ -47,12 +47,53 @@ def _create_immudb_client(db_name: str) -> ImmudbClient:
     return client
 
 
+def _update_index(client: ImmudbClient, index_key: bytes, items_to_add: list[str] = None, items_to_remove: list[str] = None) -> bytes:
+    items_to_add = items_to_add or []
+    items_to_remove = items_to_remove or []
+
+    match = client.get(index_key)
+    if match:
+        index_data = json_loads(match.value.decode())
+        index_data = cast(list[str], index_data)
+    else:
+        index_data = []
+
+    index_data.extend(items_to_add)
+    index_data = list(set(index_data))  # Remove duplicates
+
+    for item_to_remove in items_to_remove:
+        try:
+            index_data.remove(item_to_remove)
+        except ValueError:
+            pass  # Item not in list, ignore
+
+    # we return the updated data instead of setting it here to allow batching multiple operations
+    return json_dumps(index_data).encode()
+
+
+def append_to_index(client: ImmudbClient, index_key: bytes, new_item: str) -> bytes:
+    return _update_index(client, index_key, items_to_add=[new_item])
+
+
+def remove_from_index(client: ImmudbClient, index_key: bytes, item_to_remove: str) -> bytes:
+    return _update_index(client, index_key, items_to_remove=[item_to_remove])
+
+
 class SessionStorage:
     SESSIONS_DB_NAME = "orchestrator_session"
 
     def __init__(self, session_id: str):
         self.client = _create_immudb_client(self.SESSIONS_DB_NAME)
         self.session_id = session_id
+
+    def list_sessions(self) -> list[str]:
+        index_key = b"session:index"
+        match = self.client.get(index_key)
+        if not match:
+            return []
+
+        index_data = json_loads(match.value.decode())
+        return cast(list[str], index_data)
 
     def __enter__(self):
         return self
@@ -114,7 +155,12 @@ class SessionStorage:
             "state": state.value,
             "params": params or {},
         }
-        self.client.set(key.encode(), json_dumps(value).encode())
+
+        # maintain an index so that we can list all saved sessions
+        index_key = b"session:index"
+        index_value = append_to_index(self.client, index_key, self.session_id)
+
+        self.client.setAll({key.encode(): json_dumps(value).encode(), index_key: index_value})
 
     def _update_session_data(self, updates: dict[str, Any]) -> None:
         key = self._session_key()
