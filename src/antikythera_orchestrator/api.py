@@ -35,6 +35,8 @@ LOG = logging.getLogger(__name__)
 
 @dataclass
 class ActiveSession:
+    """Runtime wrapper for a currently active blueprint session."""
+
     orchestrator: Orchestrator
     blueprint_id: str
     broker_host: str
@@ -55,11 +57,14 @@ class StartBlueprintResponse(BaseModel):
 
 
 class SessionInfo(BaseModel):
+    """Response model for listing sessions."""
+
     session_id: str
     blueprint_id: str
     broker_host: str
     broker_port: int
-    started_at: datetime
+    started_at: Optional[datetime]
+    ended_at: Optional[datetime]
     state: str
 
 
@@ -154,19 +159,46 @@ def start_blueprint(payload: StartBlueprintRequest) -> StartBlueprintResponse:
 
 @app.get("/sessions", response_model=list[SessionInfo])
 def list_sessions() -> list[SessionInfo]:
-    with _sessions_lock:
-        infos = [
-            SessionInfo(
-                session_id=sid,
-                blueprint_id=session.blueprint_id,
-                broker_host=session.broker_host,
-                broker_port=session.broker_port,
-                started_at=session.started_at,
-                state=session.orchestrator.session.state,
+    sessions_in_storage = SessionStorage.list_sessions()
+
+    session_infos = []
+    for session_id in sessions_in_storage:
+        with SessionStorage(session_id) as storage:
+            session_info = storage.get_session_info()
+            if not session_info:
+                continue
+
+            blueprint_id = session_info["blueprint_id"]
+            state = session_info["state"]
+            started_at = session_info.get("started_at")
+            ended_at = session_info.get("ended_at")
+
+            if started_at:
+                started_at = datetime.fromisoformat(started_at)
+            if ended_at:
+                ended_at = datetime.fromisoformat(ended_at)
+
+            broker_host = "unavailable"
+            broker_port = 0
+
+            if session_id in _sessions:
+                # only active sessions have useful broker info
+                active_session = _sessions[session_id]
+                broker_host = active_session.broker_host
+                broker_port = active_session.broker_port
+
+            session_infos.append(
+                SessionInfo(
+                    session_id=session_id,
+                    blueprint_id=blueprint_id,
+                    broker_host=broker_host,
+                    broker_port=broker_port,
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    state=state,
+                )
             )
-            for sid, session in _sessions.items()
-        ]
-    return infos
+    return session_infos
 
 
 @app.get("/blueprints", response_model=list[BlueprintInfo])
