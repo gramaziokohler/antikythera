@@ -233,16 +233,6 @@ class BlueprintStorage:
         metadata_key = f"metadata:{blueprint.id}".encode()
         blueprint_key = f"blueprint:{blueprint.id}".encode()
 
-        match = self.client.get(index_key)
-        if match:
-            index_data = json_loads(match.value.decode())
-            index_data = cast(list[str], index_data)
-        else:
-            index_data = []
-
-        if blueprint.id not in index_data:
-            index_data.append(blueprint.id)
-
         # Store metadata and serialized blueprint separately as blueprints may be large
         # and we might just want to query metadata
         metadata = {
@@ -256,7 +246,7 @@ class BlueprintStorage:
 
         metadata_value = json_dumps(metadata).encode()
         blueprint_value = json_dumps(blueprint).encode()
-        blueprint_index_value = json_dumps(index_data).encode()
+        blueprint_index_value = append_to_index(self.client, index_key, blueprint.id)
 
         # do it all in a single transaction
         self.client.setAll(
@@ -343,18 +333,8 @@ class BlueprintStorage:
 
         # Remove from index
         index_key = b"blueprint:index"
-        match = self.client.get(index_key)
-        if match:
-            index_data = json_loads(match.value.decode())
-            index_data = cast(list[str], index_data)
-
-            if blueprint_id in index_data:
-                index_data.remove(blueprint_id)
-                # Update the index
-                blueprint_index_value = json_dumps(index_data).encode()
-                self.client.set(index_key, blueprint_index_value)
-        else:
-            LOG.warning("Blueprint index not found, skipping index update")
+        blueprint_index_value = remove_from_index(self.client, index_key, blueprint_id)
+        self.client.set(index_key, blueprint_index_value)
 
         # Delete the blueprint and metadata keys
         metadata_key = f"metadata:{blueprint_id}".encode()
@@ -394,19 +374,10 @@ class ModelStorage:
 
         # Update index
         index_key = b"model:index"
-        match = self.client.get(index_key)
-        if match:
-            index_data = json_loads(match.value.decode())
-            index_data = cast(list[str], index_data)
-        else:
-            index_data = []
-
-        if model_id not in index_data:
-            index_data.append(model_id)
 
         key = f"model:{model_id}".encode()
         value = json_dumps(model).encode()
-        index_value = json_dumps(index_data).encode()
+        index_value = append_to_index(self.client, index_key, model_id)
 
         self.client.setAll({key: value, index_key: index_value})
 
@@ -526,18 +497,8 @@ class ModelStorage:
 
         # Remove from index
         index_key = b"model:index"
-        match = self.client.get(index_key)
-        if match:
-            index_data = json_loads(match.value.decode())
-            index_data = cast(list[str], index_data)
-
-            if model_id in index_data:
-                index_data.remove(model_id)
-                # Update the index
-                index_value = json_dumps(index_data).encode()
-                self.client.set(index_key, index_value)
-        else:
-            LOG.warning("Model index not found, skipping index update")
+        index_value = remove_from_index(self.client, index_key, model_id)
+        self.client.set(index_key, index_value)
 
         # Delete the model key
         delete_request = DeleteKeysRequest(keys=[key])
