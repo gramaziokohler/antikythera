@@ -350,6 +350,9 @@ class Orchestrator:
 
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
+        # NOTE: this is a speculative change as I think we might need to keep track of multiple orchestrator
+        # instances and, potentially, not allow multiple running at the same time. due to the event-diriven nature
+        # multiple running orchestrators is a pain.
         cls._INSTANCES.append(instance)
         for inst in cls._INSTANCES:
             if inst._state == OrchestratorState.FINISHED:
