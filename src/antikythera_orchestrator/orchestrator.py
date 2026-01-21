@@ -592,6 +592,7 @@ class Orchestrator:
             if self._is_last_task_in_blueprint(processed_task):
                 self.session.state = BlueprintSessionState.COMPLETED
                 self.session_storage.update_session_state(self.session.state)
+                self.session_storage.update_session_ended()
                 self._completion_event.set()
                 self.stop()
 

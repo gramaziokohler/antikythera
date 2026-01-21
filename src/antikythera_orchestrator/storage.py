@@ -189,6 +189,9 @@ class SessionStorage:
     def update_session_blueprint_state(self, blueprint: Blueprint) -> None:
         self._update_session_data({"blueprint": blueprint})
 
+    def update_session_ended(self) -> None:
+        self._update_session_data({"ended_at": datetime.datetime.now(datetime.timezone.utc).isoformat()})
+
     def get_session_info(self) -> Optional[dict]:
         key = self._session_key()
         match = self.client.get(key.encode())
