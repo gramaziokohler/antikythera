@@ -1,9 +1,11 @@
 import json
+
 import pytest
+
 from antikythera.models import Blueprint
-from antikythera.models import Task
 from antikythera.models import Dependency
 from antikythera.models import DependencyType
+from antikythera.models import Task
 from antikythera.models import TaskState
 
 
