@@ -362,7 +362,6 @@ class Orchestrator:
             if inst._state == OrchestratorState.RUNNING:
                 LOG.warning("Another orchestrator instance is already running in the background.")
                 # TODO: kill it? should we allow multiple instances? Probably not..
-                # since everything is event driven, multiple orchestrators might result in weird behavior, unwanted side effects etc.
                 # inst.stop()
 
     def _reset_failed_tasks(self) -> None:
