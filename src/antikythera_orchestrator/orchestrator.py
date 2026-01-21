@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+from __future__ import annotations
 
 import logging
 import threading
@@ -289,6 +289,7 @@ class OrchestratorState(StrEnum):
     IDLE = auto()
     RUNNING = auto()
     PAUSED = auto()
+    FINISHED = auto()
 
 
 class Orchestrator:
@@ -303,6 +304,8 @@ class Orchestrator:
         The blueprint session to execute.
 
     """
+
+    _INSTANCES = []
 
     def __init__(self, session: BlueprintSession, broker_host="127.0.0.1", broker_port=1883) -> None:
         super(Orchestrator, self).__init__()
@@ -345,6 +348,20 @@ class Orchestrator:
         self._build_graph()
         self.scheduler = TaskScheduler(self.session, self.graph)
 
+    @classmethod
+    def register_instance(cls, instance: Orchestrator) -> None:
+        cls._INSTANCES.append(instance)
+        for inst in cls._INSTANCES:
+            if inst._state == OrchestratorState.FINISHED:
+                # keep track only of active instances
+                cls._INSTANCES.remove(inst)
+
+            if inst._state == OrchestratorState.RUNNING:
+                LOG.warning("Another orchestrator instance is already running in the background.")
+                # TODO: kill it? should we allow multiple instances? Probably not..
+                # since everything is event driven, multiple orchestrators might result in weird behavior, unwanted side effects etc.
+                # inst.stop()
+
     def _reset_failed_tasks(self) -> None:
         """Resets tasks that are in FAILED state to PENDING."""
         for node, data in self.graph.nodes(data=True):
@@ -374,7 +391,7 @@ class Orchestrator:
 
     def stop(self) -> None:
         """Stops the orchestrator."""
-        self._state = OrchestratorState.IDLE
+        self._state = OrchestratorState.FINISHED
         self.task_completion_subscriber.unsubscribe()
         self.task_claim_subscriber.unsubscribe()
         # NOTE: for now don't close session storage until we figure out how to better handle it on the API
