@@ -86,14 +86,20 @@ class SessionStorage:
         self.client = _create_immudb_client(self.SESSIONS_DB_NAME)
         self.session_id = session_id
 
-    def list_sessions(self) -> list[str]:
-        index_key = b"session:index"
-        match = self.client.get(index_key)
-        if not match:
-            return []
+    @staticmethod
+    def list_sessions() -> list[str]:
+        client = _create_immudb_client(SessionStorage.SESSIONS_DB_NAME)
 
-        index_data = json_loads(match.value.decode())
-        return cast(list[str], index_data)
+        try:
+            index_key = b"session:index"
+            match = client.get(index_key)
+            if not match:
+                return []
+
+            index_data = json_loads(match.value.decode())
+            return cast(list[str], index_data)
+        finally:
+            client.shutdown()
 
     def __enter__(self):
         return self
@@ -153,6 +159,8 @@ class SessionStorage:
         value = {
             "blueprint_id": blueprint_id,
             "state": state.value,
+            "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "ended_at": None,
             "params": params or {},
         }
 
