@@ -123,7 +123,7 @@ def test_orchestrator_stop(mock_immudb, mock_transport_orchestrator, mock_transp
     # 6. Stop the orchestrator immediately
     orchestrator.stop()
 
-    assert orchestrator._state == OrchestratorState.IDLE
+    assert orchestrator._state == OrchestratorState.FINISHED
     assert orchestrator.session.state == BlueprintSessionState.STOPPED
 
     # Verify storage
