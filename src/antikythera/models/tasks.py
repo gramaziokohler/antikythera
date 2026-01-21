@@ -4,14 +4,7 @@ from datetime import datetime
 from typing import Any, Optional
 from typing import Dict
 
-try:
-    from enum import StrEnum
-except ImportError:
-    from enum import Enum
-
-    class StrEnum(str, Enum):
-        pass
-
+from antikythera.compat import StrEnum
 
 from compas.data import Data
 
