@@ -348,6 +348,8 @@ class Orchestrator:
         self._build_graph()
         self.scheduler = TaskScheduler(self.session, self.graph)
 
+        self.register_instance(self)
+
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
         # NOTE: this is a speculative change as I think we might need to keep track of multiple orchestrator
