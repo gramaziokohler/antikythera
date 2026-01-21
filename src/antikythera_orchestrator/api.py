@@ -124,52 +124,6 @@ _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
 
 
-def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
-    with SessionStorage(session_id) as session_storage:
-        session_info = session_storage.get_session_info()
-        if not session_info:
-            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-
-        state = session_info["state"]
-        params = session_info.get("params", {})
-        inner_blueprint_ids = session_info.get("inner_blueprint_ids", [])
-        blueprint = session_info["blueprint"]
-
-        inner_blueprints = {}
-        for inner_id in inner_blueprint_ids:
-            inner_blueprints[inner_id] = session_storage.get_blueprint(inner_id)
-
-    return BlueprintSession(
-        bsid=session_id,
-        blueprint=blueprint,
-        state=state,
-        params=params,
-        inner_blueprints=inner_blueprints,
-    )
-
-
-def _revive_session(session_id: str, broker_host: str, broker_port: int) -> ActiveSession:
-    """Revive a session from storage if it is not currently active in memory."""
-
-    session = _get_bp_session_from_storage(session_id)
-
-    orchestrator = Orchestrator(session, broker_host=broker_host, broker_port=broker_port)
-
-    active_session = ActiveSession(
-        orchestrator=orchestrator,
-        blueprint_id=session.blueprint.id,
-        broker_host=broker_host,
-        broker_port=broker_port,
-        started_at=datetime.now(timezone.utc),
-    )
-
-    with _sessions_lock:
-        _sessions[session_id] = active_session
-
-    LOG.info(f"Revived session {session_id} from storage.")
-    return active_session
-
-
 def _start_blueprint_session(request: StartBlueprintRequest) -> str:
     try:
         with BlueprintStorage() as storage:
@@ -388,6 +342,52 @@ def pause_session(session_id: str) -> SessionActionResponse:
         raise HTTPException(status_code=500, detail=f"Failed to pause session: {exc}")
 
     return SessionActionResponse(session_id=session_id, message="Session paused.")
+
+
+def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
+    with SessionStorage(session_id) as session_storage:
+        session_info = session_storage.get_session_info()
+        if not session_info:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        state = session_info["state"]
+        params = session_info.get("params", {})
+        inner_blueprint_ids = session_info.get("inner_blueprint_ids", [])
+        blueprint = session_info["blueprint"]
+
+        inner_blueprints = {}
+        for inner_id in inner_blueprint_ids:
+            inner_blueprints[inner_id] = session_storage.get_blueprint(inner_id)
+
+    return BlueprintSession(
+        bsid=session_id,
+        blueprint=blueprint,
+        state=state,
+        params=params,
+        inner_blueprints=inner_blueprints,
+    )
+
+
+def _revive_session(session_id: str, broker_host: str, broker_port: int) -> ActiveSession:
+    """Revive a session from storage if it is not currently active in memory."""
+
+    session = _get_bp_session_from_storage(session_id)
+
+    orchestrator = Orchestrator(session, broker_host=broker_host, broker_port=broker_port)
+
+    active_session = ActiveSession(
+        orchestrator=orchestrator,
+        blueprint_id=session.blueprint.id,
+        broker_host=broker_host,
+        broker_port=broker_port,
+        started_at=datetime.now(timezone.utc),
+    )
+
+    with _sessions_lock:
+        _sessions[session_id] = active_session
+
+    LOG.info(f"Revived session {session_id} from storage.")
+    return active_session
 
 
 @app.post("/sessions/{session_id}/start", response_model=SessionActionResponse)
