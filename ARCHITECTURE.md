@@ -550,7 +550,7 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [ ] Conceptualize map/reducer strategy for output data management in dynamic tasks. 
 
 - [ ] check that unittests are actually  verifying dynamic composite behavior
-- [ ] improve the specification of the argument mapping which is currenlty confusing and unintuitive
+- [ ] improve the specification of the argument mapping which is currently confusing and unintuitive
 - [ ] implement a WebXR agent
   - [ ] extend the protocol to allow "competitive" execution where all agents get assigned 
 - [ ] PoC Grasshopper components

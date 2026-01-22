@@ -297,6 +297,7 @@ class Orchestrator:
     """
 
     _INSTANCES = []
+    _LOCK = threading.Lock()
 
     def __init__(self, session: BlueprintSession, broker_host="127.0.0.1", broker_port=1883) -> None:
         super(Orchestrator, self).__init__()
@@ -354,18 +355,19 @@ class Orchestrator:
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
         # NOTE: this is a speculative change as I think we might need to keep track of multiple orchestrator
-        # instances and, potentially, not allow multiple running at the same time. due to the event-diriven nature
+        # instances and, potentially, not allow multiple running at the same time. due to the event-driven nature
         # multiple running orchestrators is a pain.
-        cls._INSTANCES.append(instance)
-        for inst in cls._INSTANCES[:]:
-            if inst.state in [BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED]:
-                # keep track only of active instances
-                cls._INSTANCES.remove(inst)
+        with cls._LOCK:
+            cls._INSTANCES.append(instance)
+            for inst in cls._INSTANCES[:]:
+                if inst.state in [BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED]:
+                    # keep track only of active instances
+                    cls._INSTANCES.remove(inst)
 
-            if inst.state == BlueprintSessionState.RUNNING:
-                LOG.warning("Another orchestrator instance is already running in the background.")
-                # TODO: kill it? should we allow multiple instances? Probably not..
-                # inst.stop()
+                if inst.state == BlueprintSessionState.RUNNING:
+                    LOG.warning("Another orchestrator instance is already running in the background.")
+                    # TODO: kill it? should we allow multiple instances? Probably not..
+                    # inst.stop()
 
     def _reset_failed_tasks(self) -> None:
         """Resets tasks that are in FAILED state to PENDING."""

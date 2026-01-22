@@ -23,6 +23,7 @@ from pydantic import Field
 
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
+from antikythera.models import BlueprintSessionState
 from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.storage import BlueprintStorage
 from antikythera_orchestrator.storage import ModelStorage
@@ -51,7 +52,7 @@ class StartBlueprintRequest(BaseModel):
     params: Dict[str, str] = Field(default_factory=dict, description="Arbitrary parameters for the session.")
 
 
-class RestartsSessionRequest(BaseModel):
+class RestartSessionRequest(BaseModel):
     broker_host: str = Field("127.0.0.1", description="MQTT broker host.")
     broker_port: int = Field(1883, ge=1, le=65535, description="MQTT broker port.")
 
@@ -373,6 +374,10 @@ def _revive_session(session_id: str, broker_host: str, broker_port: int) -> Acti
 
     session = _get_bp_session_from_storage(session_id)
 
+    if session.state == BlueprintSessionState.COMPLETED:
+        # NOTE: not sure if we actually want this restriction
+        raise ValueError("Cannot revive a completed session. Just start a new one.")
+
     orchestrator = Orchestrator(session, broker_host=broker_host, broker_port=broker_port)
 
     active_session = ActiveSession(
@@ -391,7 +396,7 @@ def _revive_session(session_id: str, broker_host: str, broker_port: int) -> Acti
 
 
 @app.post("/sessions/{session_id}/start", response_model=SessionActionResponse)
-def start_session(session_id: str, request: RestartsSessionRequest) -> SessionActionResponse:
+def start_session(session_id: str, request: RestartSessionRequest) -> SessionActionResponse:
     with _sessions_lock:
         session = _sessions.get(session_id)
 
