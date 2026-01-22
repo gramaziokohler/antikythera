@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass
-from enum import auto
 from queue import LifoQueue
 from queue import Queue
 from typing import Optional
@@ -17,7 +16,6 @@ from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
 from compas_model.models import Model
 
-from antikythera.compat import StrEnum
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
@@ -283,13 +281,6 @@ class TaskScheduler:
         breadth_first_traverse(self.graph.adjacency, root_node, append_node)
 
         return "\n".join(result)
-
-
-class OrchestratorState(StrEnum):
-    IDLE = auto()
-    RUNNING = auto()
-    PAUSED = auto()
-    FINISHED = auto()
 
 
 class Orchestrator:

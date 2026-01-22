@@ -7,7 +7,6 @@ from antikythera.models import Task
 from antikythera.models import TaskState
 from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
-from antikythera_orchestrator.orchestrator import OrchestratorState
 
 
 def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):

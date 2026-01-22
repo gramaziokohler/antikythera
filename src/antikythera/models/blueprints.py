@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from enum import auto
 from typing import Any
 from typing import Dict
 from typing import List
@@ -318,11 +319,11 @@ class Blueprint(Data):
 class BlueprintSessionState(StrEnum):
     """Enumeration of possible blueprint session states."""
 
-    PENDING = "PENDING"
-    RUNNING = "RUNNING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-    STOPPED = "STOPPED"
+    PENDING = auto()
+    RUNNING = auto()
+    COMPLETED = auto()
+    FAILED = auto()
+    STOPPED = auto()
 
 
 class BlueprintSession(Data):
