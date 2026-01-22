@@ -312,7 +312,6 @@ class Orchestrator:
         self.session: BlueprintSession = session
         self.composite_to_inner_blueprint_map: dict[str, str] = {}
         self.graph: Graph = None
-        self._state = OrchestratorState.IDLE
         self._completion_event = threading.Event()
 
         self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
@@ -350,6 +349,17 @@ class Orchestrator:
 
         self.register_instance(self)
 
+    @property
+    def state(self) -> BlueprintSessionState:
+        return self.session.state
+
+    @state.setter
+    def state(self, value: BlueprintSessionState) -> None:
+        self.session.state = value
+        self.session_storage.update_session_state(self.session.state)
+        if value in [BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED]:
+            self.session_storage.update_session_ended()
+
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
         # NOTE: this is a speculative change as I think we might need to keep track of multiple orchestrator
@@ -357,11 +367,11 @@ class Orchestrator:
         # multiple running orchestrators is a pain.
         cls._INSTANCES.append(instance)
         for inst in cls._INSTANCES[:]:
-            if inst._state == OrchestratorState.FINISHED:
+            if inst.state in [BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED]:
                 # keep track only of active instances
                 cls._INSTANCES.remove(inst)
 
-            if inst._state == OrchestratorState.RUNNING:
+            if inst.state == BlueprintSessionState.RUNNING:
                 LOG.warning("Another orchestrator instance is already running in the background.")
                 # TODO: kill it? should we allow multiple instances? Probably not..
                 # inst.stop()
@@ -376,8 +386,8 @@ class Orchestrator:
 
     def start(self) -> None:
         """Starts the orchestrator."""
-        if self._state == OrchestratorState.RUNNING:
-            LOG.warning("Orchestrator is already running.")
+        if self.state == BlueprintSessionState.RUNNING:
+            LOG.warning("Session is already running.")
             return
 
         self._reset_failed_tasks()
@@ -390,29 +400,19 @@ class Orchestrator:
         self.session.state = BlueprintSessionState.RUNNING
         self.session_storage.update_session_state(self.session.state)
         LOG.info(f"Orchestrator session with id {self.session.bsid} started!")
-        self._state = OrchestratorState.RUNNING
         self._schedule_tasks()
 
     def stop(self) -> None:
         """Stops the orchestrator."""
-        self._state = OrchestratorState.FINISHED
         self.task_completion_subscriber.unsubscribe()
         self.task_claim_subscriber.unsubscribe()
-        # NOTE: for now don't close session storage until we figure out how to better handle it on the API
-        # try:
-        #     self.session_storage.close()
-        # except Exception as exc:
-        #     LOG.error(f"Error closing session storage: {exc}")
-        if self.session.state == BlueprintSessionState.RUNNING:
-            self.session.state = BlueprintSessionState.STOPPED
-            self.session_storage.update_session_state(self.session.state)
+        if self.state == BlueprintSessionState.RUNNING:
+            self.state = BlueprintSessionState.STOPPED
         LOG.info(f"Execution of session id {self.session.bsid} completed!")
 
     def pause(self) -> None:
         """Pauses the orchestrator."""
-        self._state = OrchestratorState.PAUSED
-        self.session.state = BlueprintSessionState.STOPPED
-        self.session_storage.update_session_state(self.session.state)
+        self.state = BlueprintSessionState.STOPPED
         LOG.info(f"Orchestrator session with id {self.session.bsid} paused!")
 
     def await_completion(self, timeout: Optional[float] = None) -> bool:
@@ -545,8 +545,7 @@ class Orchestrator:
             except Exception as e:
                 LOG.exception(f"Failed to start task {task.id}: {e}")
                 task.state = TaskState.FAILED
-                self.session.state = BlueprintSessionState.FAILED
-                self.session_storage.update_session_state(self.session.state)
+                self.state = BlueprintSessionState.FAILED
                 self._completion_event.set()
 
         # Persist the updated blueprint state (with task states)
@@ -585,16 +584,13 @@ class Orchestrator:
 
             if processed_task.task.state == TaskState.FAILED:
                 LOG.error(f"Task {processed_task.task_id} failed, aborting session.")
-                self.session.state = BlueprintSessionState.FAILED
-                self.session_storage.update_session_state(self.session.state)
+                self.state = BlueprintSessionState.FAILED
                 self._completion_event.set()
                 self.stop()
                 return
 
             if self._is_last_task_in_blueprint(processed_task):
-                self.session.state = BlueprintSessionState.COMPLETED
-                self.session_storage.update_session_state(self.session.state)
-                self.session_storage.update_session_ended()
+                self.state = BlueprintSessionState.COMPLETED
                 self._completion_event.set()
                 self.stop()
 
@@ -605,7 +601,7 @@ class Orchestrator:
         # Persist the updated blueprint state (with task states)
         self.session_storage.update_session_blueprint_state(self.session.blueprint)
 
-        if self._state == OrchestratorState.RUNNING:
+        if self.state == BlueprintSessionState.RUNNING:
             self._schedule_tasks()
 
     def on_task_claim(self, message: TaskClaimRequest) -> None:
