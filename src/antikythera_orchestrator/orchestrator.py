@@ -356,7 +356,7 @@ class Orchestrator:
         # instances and, potentially, not allow multiple running at the same time. due to the event-diriven nature
         # multiple running orchestrators is a pain.
         cls._INSTANCES.append(instance)
-        for inst in cls._INSTANCES:
+        for inst in cls._INSTANCES[:]:
             if inst._state == OrchestratorState.FINISHED:
                 # keep track only of active instances
                 cls._INSTANCES.remove(inst)
