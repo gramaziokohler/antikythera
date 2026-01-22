@@ -59,7 +59,7 @@ def _update_index(client: ImmudbClient, index_key: bytes, items_to_add: list[str
         index_data = []
 
     index_data.extend(items_to_add)
-    index_data = list(set(index_data))  # Remove duplicates
+    index_data = list(dict.fromkeys(index_data))  # Remove duplicates
 
     for item_to_remove in items_to_remove:
         try:
