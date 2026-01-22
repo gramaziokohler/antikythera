@@ -144,7 +144,7 @@ def _start_blueprint_session(request: StartBlueprintRequest) -> str:
         LOG.exception("Failed to start orchestrator for session %s", session_id)
         raise HTTPException(status_code=500, detail=f"Unable to start orchestrator: {exc}")
 
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now()
     with _sessions_lock:
         _sessions[session_id] = ActiveSession(
             orchestrator=orchestrator,
@@ -179,10 +179,11 @@ def list_sessions() -> list[SessionInfo]:
             started_at = session_info.get("started_at")
             ended_at = session_info.get("ended_at")
 
+            # stored times are ISO format UTC
             if started_at:
-                started_at = datetime.fromisoformat(started_at)
+                started_at = datetime.fromisoformat(started_at).astimezone()
             if ended_at:
-                ended_at = datetime.fromisoformat(ended_at)
+                ended_at = datetime.fromisoformat(ended_at).astimezone()
 
             broker_host = "unavailable"
             broker_port = 0
@@ -223,7 +224,7 @@ def list_blueprints() -> list[BlueprintInfo]:
             version=metadata["version"],
             description=metadata.get("description"),
             task_count=metadata["task_count"],
-            uploaded_at=datetime.fromisoformat(metadata["uploaded_at"]),
+            uploaded_at=datetime.fromisoformat(metadata["uploaded_at"]).astimezone(),
         )
         for metadata in blueprints_metadata
     ]
@@ -385,7 +386,7 @@ def _revive_session(session_id: str, broker_host: str, broker_port: int) -> Acti
         blueprint_id=session.blueprint.id,
         broker_host=broker_host,
         broker_port=broker_port,
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(),
     )
 
     with _sessions_lock:
