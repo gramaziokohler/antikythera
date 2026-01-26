@@ -349,7 +349,7 @@ class Orchestrator:
     def state(self, value: BlueprintSessionState) -> None:
         self.session.state = value
         self.session_storage.update_session_state(self.session.state)
-        if value in [BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED]:
+        if value in (BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED):
             self.session_storage.update_session_ended()
 
     @classmethod
@@ -360,7 +360,7 @@ class Orchestrator:
         with cls._LOCK:
             cls._INSTANCES.append(instance)
             for inst in cls._INSTANCES[:]:
-                if inst.state in [BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED]:
+                if inst.state in (BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED):
                     # keep track only of active instances
                     cls._INSTANCES.remove(inst)
 
