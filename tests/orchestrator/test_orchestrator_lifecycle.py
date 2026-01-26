@@ -115,6 +115,8 @@ def test_orchestrator_stop(mock_immudb, mock_transport_orchestrator, mock_transp
     # 5. Start the session
     orchestrator.start()
 
+    assert orchestrator.state == BlueprintSessionState.RUNNING
+
     # 6. Stop the orchestrator immediately
     orchestrator.stop()
 
