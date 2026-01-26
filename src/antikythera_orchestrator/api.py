@@ -190,9 +190,10 @@ def list_sessions() -> list[SessionInfo]:
 
             if session_id in _sessions:
                 # only active sessions have useful broker info
-                active_session = _sessions[session_id]
-                broker_host = active_session.broker_host
-                broker_port = active_session.broker_port
+                with _sessions_lock:
+                    active_session = _sessions[session_id]
+                    broker_host = active_session.broker_host
+                    broker_port = active_session.broker_port
 
             session_infos.append(
                 SessionInfo(
