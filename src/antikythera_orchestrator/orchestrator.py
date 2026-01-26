@@ -267,7 +267,7 @@ class TaskScheduler:
             else:
                 duration = "1d"
             if task.is_start and dependencies == "":
-                dependencies = datetime.date.today().isoformat()
+                dependencies = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
 
             result.append("  {:40}   : {}{}, {}, {}".format(task_label, milestone, self._create_mermaid_task_id(blueprint_id, task), dependencies, duration))
 

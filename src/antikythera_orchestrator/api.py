@@ -144,7 +144,7 @@ def _start_blueprint_session(request: StartBlueprintRequest) -> str:
         LOG.exception("Failed to start orchestrator for session %s", session_id)
         raise HTTPException(status_code=500, detail=f"Unable to start orchestrator: {exc}")
 
-    started_at = datetime.now()
+    started_at = datetime.now(timezone.utc)
     with _sessions_lock:
         _sessions[session_id] = ActiveSession(
             orchestrator=orchestrator,
@@ -181,9 +181,9 @@ def list_sessions() -> list[SessionInfo]:
 
             # stored times are ISO format UTC
             if started_at:
-                started_at = datetime.fromisoformat(started_at).astimezone()
+                started_at = datetime.fromisoformat(started_at)
             if ended_at:
-                ended_at = datetime.fromisoformat(ended_at).astimezone()
+                ended_at = datetime.fromisoformat(ended_at)
 
             broker_host = "unavailable"
             broker_port = 0
@@ -225,7 +225,7 @@ def list_blueprints() -> list[BlueprintInfo]:
             version=metadata["version"],
             description=metadata.get("description"),
             task_count=metadata["task_count"],
-            uploaded_at=datetime.fromisoformat(metadata["uploaded_at"]).astimezone(),
+            uploaded_at=datetime.fromisoformat(metadata["uploaded_at"]),
         )
         for metadata in blueprints_metadata
     ]
@@ -351,7 +351,7 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
     with SessionStorage(session_id) as session_storage:
         session_info = session_storage.get_session_info()
         if not session_info:
-            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+            raise ValueError(f"Session {session_id} not found")
 
         state = session_info["state"]
         params = session_info.get("params", {})
@@ -387,7 +387,7 @@ def _revive_session(session_id: str, broker_host: str, broker_port: int) -> Acti
         blueprint_id=session.blueprint.id,
         broker_host=broker_host,
         broker_port=broker_port,
-        started_at=datetime.now(),
+        started_at=datetime.now(timezone.utc),
     )
 
     with _sessions_lock:

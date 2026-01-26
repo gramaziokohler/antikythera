@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from datetime import timezone
 from typing import Any, Optional
 from typing import Dict
 
@@ -92,7 +93,7 @@ class TaskAssignmentMessage(Data):
         self.inputs = inputs or {}
         self.output_keys = output_keys or []
         self.params = params or {}
-        self.timestamp = timestamp or datetime.now()
+        self.timestamp = timestamp or datetime.now(timezone.utc)
         self.execution_mode = execution_mode
 
     def __str__(self) -> str:
@@ -123,7 +124,7 @@ class TaskClaimRequest(Data):
         super().__init__()
         self.task_id = task_id
         self.agent_id = agent_id
-        self.timestamp = timestamp or datetime.now()
+        self.timestamp = timestamp or datetime.now(timezone.utc)
 
     def __str__(self) -> str:
         return f"TaskClaimRequest(task_id={self.task_id}, agent_id={self.agent_id}, timestamp={self.timestamp})"
@@ -144,7 +145,7 @@ class TaskAllocationMessage(Data):
         super().__init__()
         self.task_id = task_id
         self.assigned_agent_id = assigned_agent_id
-        self.timestamp = timestamp or datetime.now()
+        self.timestamp = timestamp or datetime.now(timezone.utc)
 
     def __str__(self) -> str:
         return f"TaskAllocationMessage(task_id={self.task_id}, assigned_agent_id={self.assigned_agent_id}, timestamp={self.timestamp})"
@@ -180,7 +181,7 @@ class TaskCompletionMessage(Data):
         self.state = state
         self.outputs = outputs or {}
         self.error = error
-        self.timestamp = timestamp or datetime.now()
+        self.timestamp = timestamp or datetime.now(timezone.utc)
         self.duration_ms = duration_ms
         self.agent_id = agent_id
 
@@ -220,7 +221,7 @@ class TaskCompletionAckMessage(Data):
         self.id = id
         self.state = state
         self.accepted_agent_id = accepted_agent_id
-        self.timestamp = timestamp or datetime.now()
+        self.timestamp = timestamp or datetime.now(timezone.utc)
 
     def __str__(self) -> str:
         return f"TaskCompletionAckMessage(id={self.id}, state={self.state}, accepted_agent_id={self.accepted_agent_id}, timestamp={self.timestamp})"
