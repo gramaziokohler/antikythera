@@ -354,9 +354,18 @@ class Orchestrator:
 
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
-        # NOTE: this is a speculative change as I think we might need to keep track of multiple orchestrator
-        # instances and, potentially, not allow multiple running at the same time. due to the event-driven nature
-        # multiple running orchestrators is a pain.
+        """
+        CK: this is a speculative change as I think we might need to keep track of multiple orchestrator
+        instances and, potentially, not allow multiple running at the same time. due to the event-driven nature
+        multiple running orchestrators is a pain.
+
+        GC:
+        I think we should allow this. Not in this PR, but multiple orchestrators are not problematic.
+        It's only two callbacks (on_task_completed and on_task_claim) that would need to include an identifier that
+        allows the orchestrator to know if it's a message for itself or not (I guess the bsid, since we should not have
+        two instances of the same bp session id running at the same time for sure)
+
+        """
         with cls._LOCK:
             cls._INSTANCES.append(instance)
             for inst in cls._INSTANCES[:]:
@@ -366,7 +375,6 @@ class Orchestrator:
 
                 if inst.state == BlueprintSessionState.RUNNING:
                     LOG.warning("Another orchestrator instance is already running in the background.")
-                    # TODO: kill it? should we allow multiple instances? Probably not..
                     # inst.stop()
 
     def _reset_failed_tasks(self) -> None:
