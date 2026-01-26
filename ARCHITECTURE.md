@@ -538,15 +538,31 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - [x] Fix `StrEnum` problem on python 3.9
 - [x] Add model to tool-context
 - [x] Implement and use Task status and ack messages
-- [ ] Implement Agent starts with a configuration file
-- [ ] PoC Grasshopper components: if inputs have values, treat them as params
-- [ ] Make state of sibling tasks available to dynamically expanded tasks
-- [ ] Add Sequencer factory/registry
+- [x] Add Sequencer factory/registry
 - [x] Implement pause/resume of Blueprint Session
-- [ ] Implement in-place editing of Blueprints/Sessions
-- [ ] Add MQTT log listener on the orchestrator and log agent entries (consider logging to DB?)
 - [x] Implement a Blueprint validator which validates uploaded blueprints
-- [ ] Web UI + React Flow 
+- [x] Add unittests with mocking for immudb
+
+- [ ] Implement Agent starts with a configuration file
+- [ ] Make state of sibling tasks available to dynamically expanded tasks
+- [ ] Add MQTT log listener on the orchestrator and log agent entries (consider logging to DB?)
 - [ ] Download blueprints: back to the JSON representation
-- [ ] Add unittests with mocking for immudb
 - [ ] Conceptualize map/reducer strategy for output data management in dynamic tasks. 
+
+- [ ] check that unittests are actually  verifying dynamic composite behavior
+- [ ] improve the specification of the argument mapping which is currently confusing and unintuitive
+- [ ] implement a WebXR agent
+  - [ ] extend the protocol to allow "competitive" execution where all agents get assigned 
+- [ ] PoC Grasshopper components
+ - [ ] Grasshopper should become a full fledged interface for antikythera
+
+- [ ] agent catalog 
+  - [ ] 
+
+- Protocol robustness
+  - [ ] explore Jespen for testing and verification
+  - [ ] explore erlang principles 
+
+- Implement in-place editing of Blueprints/Sessions
+  - [ ] Resume session from database ("dead" session) (need a list of sessions in DB?)
+  - [ ] Reorder tasks in paused blueprint (re-order only in same blueprint level, only non-finished tasks)

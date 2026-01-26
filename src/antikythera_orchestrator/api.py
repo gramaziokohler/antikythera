@@ -23,11 +23,13 @@ from pydantic import Field
 
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
+from antikythera.models import BlueprintSessionState
 from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.storage import BlueprintStorage
 from antikythera_orchestrator.storage import ModelStorage
 from antikythera_orchestrator.storage import RequestedBlueprintNotFound
 from antikythera_orchestrator.storage import RequestedModelNotFound
+from antikythera_orchestrator.storage import RequestedSessionNotFound
 from antikythera_orchestrator.storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
@@ -35,6 +37,8 @@ LOG = logging.getLogger(__name__)
 
 @dataclass
 class ActiveSession:
+    """Runtime wrapper for a currently active blueprint session."""
+
     orchestrator: Orchestrator
     blueprint_id: str
     broker_host: str
@@ -49,17 +53,25 @@ class StartBlueprintRequest(BaseModel):
     params: Dict[str, str] = Field(default_factory=dict, description="Arbitrary parameters for the session.")
 
 
+class RestartSessionRequest(BaseModel):
+    broker_host: str = Field("127.0.0.1", description="MQTT broker host.")
+    broker_port: int = Field(1883, ge=1, le=65535, description="MQTT broker port.")
+
+
 class StartBlueprintResponse(BaseModel):
     session_id: str
     message: str
 
 
 class SessionInfo(BaseModel):
+    """Response model for listing sessions."""
+
     session_id: str
     blueprint_id: str
     broker_host: str
     broker_port: int
-    started_at: datetime
+    started_at: Optional[datetime]
+    ended_at: Optional[datetime]
     state: str
 
 
@@ -154,19 +166,48 @@ def start_blueprint(payload: StartBlueprintRequest) -> StartBlueprintResponse:
 
 @app.get("/sessions", response_model=list[SessionInfo])
 def list_sessions() -> list[SessionInfo]:
-    with _sessions_lock:
-        infos = [
-            SessionInfo(
-                session_id=sid,
-                blueprint_id=session.blueprint_id,
-                broker_host=session.broker_host,
-                broker_port=session.broker_port,
-                started_at=session.started_at,
-                state=session.orchestrator.session.state,
+    sessions_in_storage = SessionStorage.list_sessions()
+
+    session_infos = []
+    for session_id in sessions_in_storage:
+        with SessionStorage(session_id) as storage:
+            session_info = storage.get_session_info()
+            if not session_info:
+                continue
+
+            blueprint_id = session_info["blueprint_id"]
+            state = session_info["state"]
+            started_at = session_info.get("started_at")
+            ended_at = session_info.get("ended_at")
+
+            # stored times are ISO format UTC
+            if started_at:
+                started_at = datetime.fromisoformat(started_at)
+            if ended_at:
+                ended_at = datetime.fromisoformat(ended_at)
+
+            broker_host = "unavailable"
+            broker_port = 0
+
+            if session_id in _sessions:
+                # only active sessions have useful broker info
+                with _sessions_lock:
+                    active_session = _sessions[session_id]
+                    broker_host = active_session.broker_host
+                    broker_port = active_session.broker_port
+
+            session_infos.append(
+                SessionInfo(
+                    session_id=session_id,
+                    blueprint_id=blueprint_id,
+                    broker_host=broker_host,
+                    broker_port=broker_port,
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    state=state,
+                )
             )
-            for sid, session in _sessions.items()
-        ]
-    return infos
+    return session_infos
 
 
 @app.get("/blueprints", response_model=list[BlueprintInfo])
@@ -307,16 +348,69 @@ def pause_session(session_id: str) -> SessionActionResponse:
     return SessionActionResponse(session_id=session_id, message="Session paused.")
 
 
+def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
+    with SessionStorage(session_id) as session_storage:
+        session_info = session_storage.get_session_info()
+        if not session_info:
+            raise RequestedSessionNotFound(f"session id: {session_id}")
+
+        state = session_info["state"]
+        params = session_info.get("params", {})
+        inner_blueprint_ids = session_info.get("inner_blueprint_ids", [])
+        blueprint = session_info["blueprint"]
+
+        inner_blueprints = {}
+        for inner_id in inner_blueprint_ids:
+            inner_blueprints[inner_id] = session_storage.get_blueprint(inner_id)
+
+    return BlueprintSession(
+        bsid=session_id,
+        blueprint=blueprint,
+        state=state,
+        params=params,
+        inner_blueprints=inner_blueprints,
+    )
+
+
+def _revive_session(session_id: str, broker_host: str, broker_port: int) -> ActiveSession:
+    """Revive a session from storage if it is not currently active in memory."""
+
+    session = _get_bp_session_from_storage(session_id)
+
+    if session.state == BlueprintSessionState.COMPLETED:
+        # NOTE: not sure if we actually want this restriction
+        raise ValueError("Cannot revive a completed session. Just start a new one.")
+
+    orchestrator = Orchestrator(session, broker_host=broker_host, broker_port=broker_port)
+
+    active_session = ActiveSession(
+        orchestrator=orchestrator,
+        blueprint_id=session.blueprint.id,
+        broker_host=broker_host,
+        broker_port=broker_port,
+        started_at=datetime.now(timezone.utc),
+    )
+
+    with _sessions_lock:
+        _sessions[session_id] = active_session
+
+    LOG.info(f"Revived session {session_id} from storage.")
+    return active_session
+
+
 @app.post("/sessions/{session_id}/start", response_model=SessionActionResponse)
-def start_session(session_id: str) -> SessionActionResponse:
+def start_session(session_id: str, request: RestartSessionRequest) -> SessionActionResponse:
     with _sessions_lock:
         session = _sessions.get(session_id)
 
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        # Check if it exists in storage and revive it
+        session = _revive_session(session_id, request.broker_host, request.broker_port)
 
     try:
         session.orchestrator.start()
+    except RequestedSessionNotFound as snf:
+        raise HTTPException(status_code=404, detail=f"Session not found: {snf}")
     except Exception as exc:
         LOG.exception(f"Failed to start session {session_id}")
         raise HTTPException(status_code=500, detail=f"Failed to start session: {exc}")

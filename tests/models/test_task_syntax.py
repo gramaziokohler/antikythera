@@ -1,4 +1,5 @@
-from antikythera.models import Task, DependencyType
+from antikythera.models import DependencyType
+from antikythera.models import Task
 
 
 def test_rshift_single():
