@@ -28,6 +28,12 @@ class RequestedModelNotFound(Exception):
     pass
 
 
+class RequestedSessionNotFound(Exception):
+    """Raised when a requested session is not found in storage."""
+
+    pass
+
+
 def _create_immudb_client(db_name: str) -> ImmudbClient:
     client = ImmudbClient()
     try:

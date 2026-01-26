@@ -29,6 +29,7 @@ from antikythera_orchestrator.storage import BlueprintStorage
 from antikythera_orchestrator.storage import ModelStorage
 from antikythera_orchestrator.storage import RequestedBlueprintNotFound
 from antikythera_orchestrator.storage import RequestedModelNotFound
+from antikythera_orchestrator.storage import RequestedSessionNotFound
 from antikythera_orchestrator.storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
@@ -351,7 +352,7 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
     with SessionStorage(session_id) as session_storage:
         session_info = session_storage.get_session_info()
         if not session_info:
-            raise ValueError(f"Session {session_id} not found")
+            raise RequestedSessionNotFound(f"session id: {session_id}")
 
         state = session_info["state"]
         params = session_info.get("params", {})
@@ -406,11 +407,10 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
         # Check if it exists in storage and revive it
         session = _revive_session(session_id, request.broker_host, request.broker_port)
 
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
     try:
         session.orchestrator.start()
+    except RequestedSessionNotFound as snf:
+        raise HTTPException(status_code=404, detail=f"Session not found: {snf}")
     except Exception as exc:
         LOG.exception(f"Failed to start session {session_id}")
         raise HTTPException(status_code=500, detail=f"Failed to start session: {exc}")
