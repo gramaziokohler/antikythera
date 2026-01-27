@@ -17,7 +17,7 @@
       "description": "Process element",
       "blueprint": {
         "dynamic": {
-          "blueprint": "TP6-inner",
+          "blueprint_id": "TP6-inner",
           "sequencer": "basic_sequencer"
         }
       },
