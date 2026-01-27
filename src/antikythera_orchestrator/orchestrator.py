@@ -398,8 +398,7 @@ class Orchestrator:
         self.task_completion_subscriber.subscribe()
         self.task_claim_subscriber.subscribe()
 
-        self.session.state = BlueprintSessionState.RUNNING
-        self.session_storage.update_session_state(self.session.state)
+        self.state = BlueprintSessionState.RUNNING
         LOG.info(f"Orchestrator session with id {self.session.bsid} started!")
         self._schedule_tasks()
 
