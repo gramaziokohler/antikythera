@@ -14,6 +14,9 @@ def in_memory_transport():
 
 @pytest.fixture
 def mock_immudb():
+    # Reset the mock storage before each test
+    MockImmudbClient._databases = {}
+    
     def side_effect(db_name):
         client = MockImmudbClient()
         client.login("user", "password")
