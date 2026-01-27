@@ -16,7 +16,7 @@ def in_memory_transport():
 def mock_immudb():
     # Reset the mock storage before each test
     MockImmudbClient._databases = {}
-    
+
     def side_effect(db_name):
         client = MockImmudbClient()
         client.login("user", "password")
@@ -39,6 +39,23 @@ def mock_transport_orchestrator(in_memory_transport):
 def mock_transport_launcher(in_memory_transport):
     with patch("antikythera_agents.launcher._get_eve_transport", return_value=in_memory_transport) as mock:
         yield mock
+
+
+@pytest.fixture
+def cleanup_manager():
+    """Fixture to manage cleanup of orchestrators and launchers."""
+    resources = []
+
+    class Manager:
+        def register(self, resource):
+            resources.append(resource)
+            return resource
+
+    yield Manager()
+
+    for resource in reversed(resources):
+        if hasattr(resource, "stop"):
+            resource.stop()
 
 
 @pytest.fixture(autouse=True)
