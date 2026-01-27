@@ -411,6 +411,11 @@ class Orchestrator:
         """Stops the orchestrator."""
         self.task_completion_subscriber.unsubscribe()
         self.task_claim_subscriber.unsubscribe()
+
+        # there might be pending completion messages in the scheduler queue of composite tasks
+        # set them back to PENDING when orchestrator is stopped so that they can be processed when the session resumes.
+        self._flush_scheduler_queue()
+
         if self.state == BlueprintSessionState.RUNNING:
             self.state = BlueprintSessionState.STOPPED
         LOG.info(f"Execution of session id {self.session.bsid} completed!")
@@ -665,6 +670,25 @@ class Orchestrator:
                         self.composite_to_inner_blueprint_map[fqn_task_id] = inner_bp_id
 
         LOG.debug(f"rebuilt blueprint map: {self.composite_to_inner_blueprint_map}")
+
+    def _flush_scheduler_queue(self) -> None:
+        # Drains the scheduler queue and resets pending tasks to PENDING state
+        if not self.scheduler or self.scheduler.queue.empty():
+            return
+
+        LOG.info("Flushing scheduler queue tasks to PENDING state...")
+        while not self.scheduler.queue.empty():
+            message = self.scheduler.queue.get()
+            fqn_task_id = message.id
+            if fqn_task_id in self.graph.node:
+                task = self.graph.node[fqn_task_id]["task"]
+                # Only reset tasks that are currently marked as RUNNING
+                # (meaning they finished execution but were waiting on dependencies in the queue)
+                if task.state == TaskState.RUNNING:
+                    LOG.debug(f"Resetting task {task.id} to PENDING for persistence.")
+                    task.state = TaskState.PENDING
+
+        self.session_storage.update_session_blueprint_state(self.session.blueprint)
 
     def _expand_dynamic_tasks(self, blueprint: Blueprint) -> None:
         expanded_something = True
