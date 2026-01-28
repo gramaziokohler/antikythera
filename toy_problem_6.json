@@ -24,7 +24,7 @@
                     "value": {
                         "dynamic": {
                             "blueprint": "TP6-inner",
-                            "sequencer": "antikythera_orchestrator.sequencers.ElementSequencer"
+                            "sequencer": "basic_element_sequencer"
                         }
                     }
                 },
