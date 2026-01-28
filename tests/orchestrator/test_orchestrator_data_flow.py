@@ -17,7 +17,7 @@ from antikythera_orchestrator.orchestrator import Orchestrator
 # Define a test agent
 # We use a unique type to avoid conflicts
 @agent(type="test_data_agent")
-class TestDataAgent(Agent):
+class DataProducerConsumerTestAgent(Agent):
     @tool(name="producer")
     def producer(self, task: Task) -> Dict[str, Any]:
         return {"value": 42}
