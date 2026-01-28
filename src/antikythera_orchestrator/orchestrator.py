@@ -693,14 +693,6 @@ class Orchestrator:
         else:
             LOG.info(f"Rejected claim for task {task_id} from agent {message.agent_id}. Task state is {task.state}")
 
-    def _init_session_data_for_task(self, blueprint_id: str, task: Task) -> None:
-        # some tasks my have inputs that are static, serialized data values
-        # put those into session data before execution starts
-        for key, value in task.inputs.items():
-            # NOTE: this is problematic for the situations in which you actually want to have strings as the actual value
-            if not isinstance(value, str):
-                self.session_storage.set(blueprint_id, key, value)
-
     def _expand_dynamic_tasks(self, blueprint: Blueprint) -> None:
         expanded_something = True
         while expanded_something:
@@ -730,7 +722,7 @@ class Orchestrator:
             self._expand_dynamic_tasks(blueprint)
 
             for task in blueprint.tasks:
-                self._init_session_data_for_task(blueprint.id, task)
+                # Removed _init_session_data_for_task call as it is deprecated
 
                 if task.is_composite:
                     LOG.debug(f"Loading inner blueprint for composite task {task.id} in blueprint {blueprint.id}")
