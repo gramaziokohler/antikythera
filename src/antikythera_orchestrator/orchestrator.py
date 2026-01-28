@@ -447,6 +447,13 @@ class Orchestrator:
 
             inputs_value = self.session_storage.get(blueprint_id, mapped_key)
 
+            # Static inputs: If not found in session and map is implicit, use static value
+            # This is to support things like the `test_orchestrator_composite` tests that
+            # set static inputs directly in the programmatic definition of the task
+            if inputs_value is None and not inp.get_from and inp.value is not None:
+                inputs[key] = inp.value
+                continue
+
             if task.is_dynamically_expanded:
                 # in dynamically expanded tasks, the value is always a mapping {"element_id": "value"}
                 # the aggregation happens in :meth:`_map_outputs_to_outer_session`
