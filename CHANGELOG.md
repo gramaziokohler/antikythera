@@ -12,7 +12,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New explicit accessor methods for `Task` values (`get_input_value`, `get_output_value`, `get_param_value`, `set_input_value`, `set_output_value`, `set_param_value`).
 
 ### Changed
-- `JSONBlueprintParser.parse_task` strictly rejects ambiguous data types (dicts/strings) for task properties.
 - Refactored `Task` class to enforce a single data access pattern.
 
 ### Removed
@@ -34,7 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - **REST API**: Comprehensive API for session management, blueprint uploading, and system monitoring.
 - **Blueprints**:
     - JSON-based definition format for fabrication processes.
-    - `JSONBlueprintParser` for type-safe loading of process definitions.
 - **Agents**:
     - **Plugin System**: Fully extensible agent architecture using `@agent` decorators and auto-discovery.
 

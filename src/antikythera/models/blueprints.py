@@ -9,7 +9,6 @@ from typing import Optional
 from typing import Union
 
 from compas.data import Data
-from compas.data import json_load
 
 from antikythera.compat import StrEnum
 
@@ -43,6 +42,54 @@ class Dependency(Data):
         return f"Dependency(id={self.id}, type={self.type})"
 
 
+class TaskIO(Data):
+    """Base class for task inputs, outputs, and parameters."""
+
+    def __init__(self, name: str, value: Any = None, type: Optional[str] = None, description: Optional[str] = None):
+        self.name = name
+        self.value = value
+        self.type = type
+        self.description = description
+
+    @property
+    def __data__(self) -> Dict[str, Any]:
+        data = {
+            "name": self.name,
+            "value": self.value,
+            "type": self.type,
+            "description": self.description,
+        }
+        return data
+
+
+class TaskInput(TaskIO):
+    def __init__(self, name: str, value: Any = None, type: Optional[str] = None, get_from: Optional[str] = None, description: Optional[str] = None):
+        super().__init__(name, value, type, description)
+        self.get_from = get_from
+
+    @property
+    def __data__(self) -> Dict[str, Any]:
+        data = super().__data__
+        data["get_from"] = self.get_from
+        return data
+
+
+class TaskOutput(TaskIO):
+    def __init__(self, name: str, value: Any = None, type: Optional[str] = None, set_to: Optional[str] = None, description: Optional[str] = None):
+        super().__init__(name, value, type, description)
+        self.set_to = set_to
+
+    @property
+    def __data__(self) -> Dict[str, Any]:
+        data = super().__data__
+        data["set_to"] = self.set_to
+        return data
+
+
+class TaskParam(TaskIO):
+    pass
+
+
 class Task(Data):
     """Represents a single task in a blueprint.
 
@@ -54,16 +101,14 @@ class Task(Data):
         The type of the task, which determines the agent that will execute it.
     description : str, optional
         A human-readable description of the task.
-    inputs : Dict[str, Any], optional
-        A dictionary of input data keys for the task.
-    outputs : Dict[str, Any], optional
-        A dictionary of output data keys for the task.
+    inputs : List[TaskInput], optional
+        A list of inputs for the task.
+    outputs : List[TaskOutput], optional
+        A list of outputs for the task.
     depends_on : List[Dependency], optional
         A list of dependencies on other tasks.
-    params : Dict[str, Any], optional
-        A dictionary of task-specific parameters.
-    argument_mapping : Dict[str, Dict[str, str]], optional
-        A dictionary to explicitly handle argument remapping configuration.
+    params : List[TaskParam], optional
+        A list of task-specific parameters.
 
     """
 
@@ -73,36 +118,120 @@ class Task(Data):
             "id": self.id,
             "type": self.type,
             "description": self.description,
-            "inputs": self.inputs,
-            "outputs": self.outputs,
+            "condition": self.condition,
+            "inputs": [task_input.__data__ for task_input in self.inputs],
+            "outputs": [task_output.__data__ for task_output in self.outputs],
+            "params": [task_param.__data__ for task_param in self.params],
             "depends_on": self.depends_on,
-            "params": self.params,
-            "argument_mapping": self.argument_mapping,
             "state": self.state,
         }
+
+    @classmethod
+    def __from_data__(cls, data: Dict[str, Any]) -> "Task":
+        if "inputs" in data:
+            data["inputs"] = [i if isinstance(i, TaskInput) else TaskInput(**i) for i in data["inputs"]]
+        if "outputs" in data:
+            data["outputs"] = [o if isinstance(o, TaskOutput) else TaskOutput(**o) for o in data["outputs"]]
+        if "params" in data:
+            data["params"] = [p if isinstance(p, TaskParam) else TaskParam(**p) for p in data["params"]]
+
+        if "depends_on" in data:
+            data["depends_on"] = [d if isinstance(d, Dependency) else Dependency(**d) for d in data["depends_on"]]
+
+        if "state" in data and isinstance(data["state"], str):
+            try:
+                data["state"] = TaskState(data["state"])
+            except ValueError:
+                data["state"] = TaskState.PENDING
+
+        return cls(**data)
 
     def __init__(
         self,
         id: str,
         type: str,
         description: Optional[str] = None,
-        inputs: Dict[str, Any] = None,
-        outputs: Dict[str, Any] = None,
+        condition: Optional[str] = None,
+        inputs: List[TaskInput] = None,
+        outputs: List[TaskOutput] = None,
+        params: List[TaskParam] = None,
         depends_on: List[Dependency] = None,
-        params: Dict[str, Any] = None,
-        argument_mapping: Dict[str, Dict[str, str]] = None,
         state: TaskState = TaskState.PENDING,
+        **kwargs,
     ) -> None:
         super().__init__()
         self.id = id
         self.type = type
         self.description = description
-        self.inputs = inputs or {}
-        self.outputs = outputs or {}
+        self.condition = condition
+
+        # Handle inputs
+        self.inputs = []
+        if inputs:
+            for item in inputs:
+                assert isinstance(item, TaskInput)
+                self.inputs.append(item)
+
+        # Handle outputs
+        self.outputs = []
+        if outputs:
+            for item in outputs:
+                assert isinstance(item, TaskOutput)
+                self.outputs.append(item)
+
+        # Handle params
+        self.params = []
+        if params:
+            for item in params:
+                assert isinstance(item, TaskParam)
+                self.params.append(item)
+
         self.depends_on = depends_on or []
-        self.params = params or {}
-        self.argument_mapping = argument_mapping or {}
         self.state = state
+
+    def get_input(self, name: str) -> Optional[TaskInput]:
+        for task_input in self.inputs:
+            if task_input.name == name:
+                return task_input
+        return None
+
+    def get_output(self, name: str) -> Optional[TaskOutput]:
+        for task_output in self.outputs:
+            if task_output.name == name:
+                return task_output
+        return None
+
+    def set_input_value(self, name: str, value: Any) -> None:
+        task_input = self.get_input(name)
+        if not task_input:
+            raise ValueError(f"Input '{name}' not found in task '{self.id}'")
+        task_input.value = value
+
+    def set_output_value(self, name: str, value: Any) -> None:
+        task_output = self.get_output(name)
+        if task_output:
+            task_output.value = value
+        else:
+            self.outputs.append(TaskOutput(name=name, value=value))
+
+    def set_param_value(self, name: str, value: Any) -> None:
+        param = self.get_param(name)
+        if param:
+            param.value = value
+        else:
+            self.params.append(TaskParam(name=name, value=value))
+
+    def get_input_value(self, name: str, default: Any = None) -> Any:
+        task_input = self.get_input(name)
+        return task_input.value if task_input else default
+
+    def get_output_value(self, name: str, default: Any = None) -> Any:
+        task_output = self.get_output(name)
+        return task_output.value if task_output else default
+
+    def get_param_value(self, name: str, default: Any = None) -> Any:
+        param = self.get_param(name)
+        return param.value if param else default
 
     def __repr__(self):
         return f"Task(id={self.id}, type={self.type}, dependencies={self.depends_on})"
@@ -153,15 +282,22 @@ class Task(Data):
         if not self.is_composite:
             return False
 
-        blueprint_params = self.params.get("blueprint", {})
-        return "dynamic" in blueprint_params
+        blueprint_param = self.get_param_value("blueprint")
+        if not blueprint_param:
+            return False
+
+        return "dynamic" in blueprint_param
 
     @property
     def is_dynamically_expanded(self) -> bool:
         if not self.is_composite:
             return False
 
-        dynamic_params = self.params.get("blueprint", {}).get("dynamic", {})
+        blueprint_param = self.get_param_value("blueprint")
+        if not blueprint_param:
+            return False
+
+        dynamic_params = blueprint_param.get("dynamic", {})
         return dynamic_params.get("expanded", False)
 
     @classmethod
@@ -183,26 +319,44 @@ class Task(Data):
             The newly created expanded task.
 
         """
-        inner_blueprint_id = dynamic_task.params["blueprint"]["dynamic"]["blueprint"]
+        blueprint_param = dynamic_task.get_param_value("blueprint")
+        assert blueprint_param, "Dynamic task missing 'blueprint' parameter"
 
-        new_task_params = deepcopy(dynamic_task.params)
-        new_task_params["blueprint"]["dynamic"]["blueprint_id"] = inner_blueprint_id
-        new_task_params["blueprint"]["dynamic"]["element"] = {"element_id": element_id}
-        new_task_params["blueprint"]["dynamic"]["expanded"] = True
+        inner_blueprint_id = blueprint_param["dynamic"]["blueprint_id"]
+
+        # Deepcopy params to avoid modifying the original task
+        new_params = [TaskParam(name=p.name, value=deepcopy(p.value), type=p.type, description=p.description) for p in dynamic_task.params]
+
+        # Determine index of blueprint param or find it in new list
+        for p in new_params:
+            if p.name == "blueprint":
+                p.value["dynamic"]["blueprint_id"] = inner_blueprint_id
+                p.value["dynamic"]["element"] = {"element_id": element_id}
+                p.value["dynamic"]["expanded"] = True
+                break
 
         return cls(
             id=new_task_id,
             type=SystemTaskType.COMPOSITE,
             description=f"{dynamic_task.description} - {element_id}",
-            params=new_task_params,
-            inputs=deepcopy(dynamic_task.inputs),
-            outputs=deepcopy(dynamic_task.outputs),
+            params=new_params,
+            inputs=[TaskInput(name=i.name, value=deepcopy(i.value), type=i.type, get_from=i.get_from) for i in dynamic_task.inputs],
+            outputs=[TaskOutput(name=o.name, value=deepcopy(o.value), type=o.type, set_to=o.set_to) for o in dynamic_task.outputs],
             depends_on=[],
         )
 
     def try_get_element_id(self) -> str:
         """Returns the element_id of a dynamically expanded task, or None if not applicable."""
-        return self.params.get("blueprint", {}).get("dynamic", {}).get("element", {}).get("element_id")
+        blueprint_param = self.get_param_value("blueprint")
+        if not blueprint_param:
+            return None
+        return blueprint_param.get("dynamic", {}).get("element", {}).get("element_id")
+
+    def get_param(self, name: str) -> Optional[TaskParam]:
+        for p in self.params:
+            if p.name == name:
+                return p
+        return None
 
 
 class Blueprint(Data):
@@ -230,19 +384,20 @@ class Blueprint(Data):
             "name": self.name,
             "version": self.version,
             "description": self.description,
-            "tasks": self.tasks,
+            "tasks": [t.__data__ for t in self.tasks],
         }
 
     @classmethod
     def __from_data__(cls, data: Dict[str, Any]) -> "Blueprint":
         # TODO: revisit this method, it's not really aligned with COMPAS Data patterns
-        task_defs = data.get("tasks", [])
+        tasks_data = data.get("tasks", [])
         tasks = []
-        for task_def in task_defs:
-            if isinstance(task_def, Task):
-                tasks.append(task_def)
+        for t_data in tasks_data:
+            if isinstance(t_data, Task):
+                tasks.append(t_data)
             else:
-                tasks.append(_parse_task(task_def))
+                # Expecting strict dict matching Task.__data__
+                tasks.append(Task.__from_data__(t_data))
 
         return cls(
             id=data["id"],
@@ -295,26 +450,6 @@ class Blueprint(Data):
                 if dep.id not in task_ids:
                     raise ValueError(f"Task '{task.id}' depends on non-existent task '{dep.id}'.")
 
-    @classmethod
-    def from_file(cls, filepath: str) -> "Blueprint":
-        """Loads a blueprint from a JSON file.
-
-        Args:
-            filepath: The path to the JSON file.
-
-        Returns:
-            An instance of Blueprint.
-        """
-        with open(filepath, "r") as f:
-            data = json_load(f)
-
-        if isinstance(data, cls):
-            return data
-
-        blueprint = cls.__from_data__(data)
-        blueprint.validate()
-        return blueprint
-
 
 class BlueprintSessionState(StrEnum):
     """Enumeration of possible blueprint session states."""
@@ -363,30 +498,3 @@ class BlueprintSession(Data):
         self.inner_blueprints = inner_blueprints or {}
         self.state = state
         self.params = params or {}
-
-
-def _parse_task(task_def: Dict[str, Any]) -> Task:
-    """Parses a task definition dictionary into a Task object."""
-    known_fields = {"id", "type", "description", "depends_on", "params", "inputs", "outputs", "argument_mapping"}
-    params = task_def.get("params", {})
-    # Add any other unknown fields to params
-    params.update({k: v for k, v in task_def.items() if k not in known_fields and not k.startswith("_")})
-
-    dependencies_defs = task_def.get("depends_on", [])
-    dependencies = []
-    for dep_data in dependencies_defs:
-        if "type" in dep_data:
-            dep_data["type"] = DependencyType(dep_data["type"])
-        dependencies.append(Dependency(**dep_data))
-
-    return Task(
-        id=task_def["id"],
-        type=task_def["type"],
-        description=task_def.get("description"),
-        inputs=task_def.get("inputs", {}),
-        outputs=task_def.get("outputs", {}),
-        depends_on=dependencies,
-        params=params,
-        argument_mapping=task_def.get("argument_mapping", {}),
-        state=TaskState.PENDING,
-    )

@@ -1,7 +1,7 @@
 import json
 
-from antikythera.models import Blueprint
 from antikythera.models import Task
+from antikythera.parsers import BlueprintJsonParser
 
 
 def test_task_condition_property():
@@ -30,7 +30,7 @@ def test_blueprint_serialization_with_condition(tmp_path):
         json.dump(bp_dict, f)
 
     # Read back
-    bp = Blueprint.from_file(str(p))
+    bp = BlueprintJsonParser.from_file(str(p))
     t1 = next(t for t in bp.tasks if t.id == "t1")
 
     assert t1.id == "t1"

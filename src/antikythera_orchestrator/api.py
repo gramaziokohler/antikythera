@@ -24,6 +24,7 @@ from pydantic import Field
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
+from antikythera.parsers import BlueprintJsonParser
 from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.storage import BlueprintStorage
 from antikythera_orchestrator.storage import ModelStorage
@@ -259,13 +260,13 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
     try:
         content = await file.read()
 
-        # Create a temporary file to use Blueprint.from_file
+        # Create a temporary file to use BlueprintJsonParser.from_file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp_file:
             tmp_file.write(content.decode())
             tmp_file_path = tmp_file.name
 
         try:
-            blueprint = Blueprint.from_file(tmp_file_path)
+            blueprint = BlueprintJsonParser.from_file(tmp_file_path)
         finally:
             # Clean up temp file
             Path(tmp_file_path).unlink(missing_ok=True)
