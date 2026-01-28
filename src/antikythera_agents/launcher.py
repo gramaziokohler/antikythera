@@ -16,12 +16,10 @@ from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskClaimRequest
 from antikythera.models import TaskCompletionAckMessage
 from antikythera.models import TaskCompletionMessage
-from antikythera.models import TaskOutput
 from antikythera.models import TaskState
 from antikythera.models.conversions import dict_to_inputs
 from antikythera.models.conversions import dict_to_params
 from antikythera.models.conversions import keys_to_outputs
-from antikythera.models.conversions import outputs_to_dict
 from antikythera_agents.cli import Colors
 
 THREAD_JOIN_TIMEOUT = 10
