@@ -183,7 +183,7 @@ class Task(Data):
             The newly created expanded task.
 
         """
-        inner_blueprint_id = dynamic_task.params["blueprint"]["dynamic"]["blueprint"]
+        inner_blueprint_id = dynamic_task.params["blueprint"]["dynamic"]["blueprint_id"]
 
         new_task_params = deepcopy(dynamic_task.params)
         new_task_params["blueprint"]["dynamic"]["blueprint_id"] = inner_blueprint_id

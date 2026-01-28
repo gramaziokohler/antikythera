@@ -139,11 +139,8 @@ def _start_blueprint_session(request: StartBlueprintRequest) -> str:
     session = BlueprintSession(bsid=session_id, blueprint=blueprint, params=request.params)
     orchestrator = Orchestrator(session, broker_host=request.broker_host, broker_port=request.broker_port)
 
-    try:
-        orchestrator.start()
-    except Exception as exc:  # pragma: no cover - runtime safety
-        LOG.exception("Failed to start orchestrator for session %s", session_id)
-        raise HTTPException(status_code=500, detail=f"Unable to start orchestrator: {exc}")
+    # Not starting the orchestrator yet, just creating the session and storing it
+    # The user can now inspect the session in "preview" mode and hit resume when it's time to run.
 
     started_at = datetime.now(timezone.utc)
     with _sessions_lock:
