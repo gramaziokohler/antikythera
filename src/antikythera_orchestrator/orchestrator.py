@@ -503,6 +503,60 @@ class Orchestrator:
                 model = storage.get_model(model_id)
         return model
 
+    def _evaluate_skip_condition(self, task: Task, inputs: Dict[str, Any], blueprint_id: str) -> bool:
+        """Determines if a task should be skipped based on conditions or parent states."""
+
+        # 1. Explicit Condition Check
+        condition = task.condition
+        if not condition:
+            # Backward compatibility check
+            condition_param = task.get_param("condition")
+            condition = condition_param.value if condition_param else None
+
+        if condition:
+            try:
+                allowed_names = inputs.copy()
+                # allow access to params as well, e.g. params["my_param"]
+                # But usually params are static config, might be useful to check them?
+                # For flat access, we can merge them?
+                # Let's merge params into context as top-level vars if no collision
+                for p in task.params:
+                    if p.name not in allowed_names:
+                        allowed_names[p.name] = p.value
+
+                if not safe_eval_condition(condition, allowed_names):
+                    LOG.info(f"Task {task.id} skipped due to condition: {condition}")
+                    return True
+            except Exception as e:
+                LOG.error(f"Error evaluating condition '{condition}' for task {task.id}: {e}")
+                # If error in condition (e.g. variable not found), we treat it as skipped-with-error?
+                # Or we let it proceed? Proceeding might crash task.
+                # Getting skipped prevents crash but might hide logic error.
+                # Let's return True (skip) to be safe.
+                return True
+
+        # 2. Implicit Skip Propagation (if all parents were skipped)
+        fqn_task_id = _create_global_id(blueprint_id, task)
+        parent_ids = list(self.graph.neighbors_in(fqn_task_id))
+
+        if parent_ids:
+            all_parents_skipped = all(self.graph.node[pid]["task"].state == TaskState.SKIPPED for pid in parent_ids)
+
+            if all_parents_skipped:
+                LOG.info(f"Task {task.id} skipped because all parent tasks were skipped.")
+                return True
+
+        return False
+
+    def _handle_skipped_task(self, task: Task, blueprint_id: str) -> None:
+        """Handles the completion logic for a skipped task."""
+        task.state = TaskState.SKIPPED
+        fqn_task_id = _create_global_id(blueprint_id, task)
+
+        completion_msg = TaskCompletionMessage(id=fqn_task_id, state=TaskState.SKIPPED, outputs={}, agent_id="system")
+
+        self.on_task_completed(completion_msg)
+
     def _schedule_tasks(self) -> None:
         """Schedules tasks for execution."""
         pending_tasks = self.scheduler.get_pending_tasks()
@@ -520,6 +574,10 @@ class Orchestrator:
 
                 # Prepare inputs to pass to the task
                 inputs = self._map_inputs_from_session(blueprint_id, task)
+
+                if self._evaluate_skip_condition(task, inputs, blueprint_id):
+                    self._handle_skipped_task(task, blueprint_id)
+                    continue
 
                 # Handle inputs for inner blueprints
                 if task.is_composite:
