@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass
+from queue import Empty
 from queue import LifoQueue
 from queue import Queue
 from typing import Optional
@@ -678,7 +679,11 @@ class Orchestrator:
 
         LOG.info("Flushing scheduler queue tasks to PENDING state...")
         while not self.scheduler.queue.empty():
-            message = self.scheduler.queue.get()
+            try:
+                # Non-blocking get to avoid deadlock
+                message = self.scheduler.queue.get_nowait()
+            except Empty:
+                break
             fqn_task_id = message.id
             if fqn_task_id in self.graph.node:
                 task = self.graph.node[fqn_task_id]["task"]
