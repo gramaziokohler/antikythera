@@ -31,6 +31,8 @@ from antikythera.models import TaskClaimRequest
 from antikythera.models import TaskCompletionAckMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
+from antikythera.models.conversions import outputs_to_keys
+from antikythera.models.conversions import params_to_dict
 
 from .conditionals import safe_eval_condition
 from .sequencers import SequencerRegistry
@@ -600,8 +602,8 @@ class Orchestrator:
                         id=_create_global_id(blueprint_id, task),
                         type=task.type,
                         inputs=inputs,
-                        output_keys=[o.name for o in task.outputs],
-                        params={p.name: p.value for p in task.params},
+                        output_keys=outputs_to_keys(task.outputs),
+                        params=params_to_dict(task.params),
                         execution_mode=execution_mode,
                     )
                 )

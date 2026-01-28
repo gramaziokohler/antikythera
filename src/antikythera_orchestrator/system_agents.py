@@ -14,12 +14,12 @@ from antikythera_agents.decorators import tool
 @agent(type="system")
 class SystemAgent(Agent):
     @tool(name="composite")
-    def composite(self, task: Task) -> List[TaskOutput]:
+    def composite(self, task: Task) -> Dict[str, Any]:
         print(f"{Colors.OKBLUE}✅ [{task.id}][{task.type}] Composite trigger {Colors.ENDC}")
 
-        # Composite tasks need to return a clean list of expected outputs
-        # Since they are virtual, they don't produce values, so we return explicit TaskOutputs with None values.
-        return [TaskOutput(name=o.name, value=None) for o in task.outputs]
+        # Composite tasks need to return a clean list of expected outputs.
+        # Since they are virtual, they don't produce values, so we return keys with None values.
+        return {o.name: None for o in task.outputs}
 
     @tool(name="start")
     def start_process(self, task: Task) -> Dict[str, Any]:

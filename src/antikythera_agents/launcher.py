@@ -16,7 +16,12 @@ from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskClaimRequest
 from antikythera.models import TaskCompletionAckMessage
 from antikythera.models import TaskCompletionMessage
+from antikythera.models import TaskOutput
 from antikythera.models import TaskState
+from antikythera.models.conversions import dict_to_inputs
+from antikythera.models.conversions import dict_to_params
+from antikythera.models.conversions import keys_to_outputs
+from antikythera.models.conversions import outputs_to_dict
 from antikythera_agents.cli import Colors
 
 THREAD_JOIN_TIMEOUT = 10
@@ -104,12 +109,18 @@ class AgentLauncher:
         print(f"Total agents initialized: {len(self.agents)}")
 
     def on_task_start(self, message: TaskAssignmentMessage) -> None:
+        # Reconstruct valid Task object from assignment message
+
+        inputs = dict_to_inputs(message.inputs)
+        outputs = keys_to_outputs(message.output_keys)
+        params = dict_to_params(message.params) if message.params else []
+
         task = Task(
             id=message.id,
             type=message.type,
-            inputs=message.inputs,
-            outputs={key: None for key in message.output_keys},
-            params=message.params,
+            inputs=inputs,
+            outputs=outputs,
+            params=params,
         )
 
         for agent_type, agent in self.agents.items():
@@ -150,6 +161,8 @@ class AgentLauncher:
 
         try:
             outputs = agent.execute_task(task)
+            if not isinstance(outputs, dict):
+                raise ValueError(f"Agent tools must return a dict of outputs. Got {type(outputs)} instead.")
             state = TaskState.SUCCEEDED
         except Exception as e:
             print(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Agent Error: {e}{Colors.ENDC}")
