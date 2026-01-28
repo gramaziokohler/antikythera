@@ -4,6 +4,8 @@ from typing import Dict
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import Task
+from antikythera.models import TaskInput
+from antikythera.models import TaskOutput
 from antikythera.models import TaskState
 from antikythera_agents.base_agent import Agent
 from antikythera_agents.decorators import agent
@@ -22,13 +24,13 @@ class TestDataAgent(Agent):
 
     @tool(name="consumer")
     def consumer(self, task: Task) -> Dict[str, Any]:
-        input_val = task.inputs.get("input_value")
+        input_val = task.get_input_value("input_value")
         # We return what we received to verify it in the test
         return {"received": input_val}
 
     @tool(name="static_consumer")
     def static_consumer(self, task: Task) -> Dict[str, Any]:
-        static_val = task.inputs.get("static_val")
+        static_val = task.get_input_value("static_val")
         return {"received": static_val}
 
 
@@ -38,11 +40,20 @@ def test_data_passing_between_tasks(mock_immudb, mock_transport_orchestrator, mo
 
     # Task A: Produces {"value": 42}
     # We want output 'value' to be stored as 'value' in session (default behavior)
-    task_a = Task(id="task_a", type="test_data_agent.producer", outputs={"value": None})
+    task_a = Task(
+        id="task_a",
+        type="test_data_agent.producer",
+        outputs=[TaskOutput(name="value")],
+    )
 
     # Task B: Consumes "value" as "input_value"
     # We need to map session key 'value' to task input 'input_value'
-    task_b = Task(id="task_b", type="test_data_agent.consumer", inputs={"input_value": None}, argument_mapping={"inputs": {"input_value": "value"}}, outputs={"received": None})
+    task_b = Task(
+        id="task_b",
+        type="test_data_agent.consumer",
+        inputs=[TaskInput(name="input_value", get_from="value")],
+        outputs=[TaskOutput(name="received")],
+    )
 
     task_end = Task(id="end", type="system.end")
 
@@ -94,9 +105,8 @@ def test_static_inputs(mock_immudb, mock_transport_orchestrator, mock_transport_
     task_static = Task(
         id="task_static",
         type="test_data_agent.static_consumer",
-        inputs={"static_val": 123},  # Static integer
-        argument_mapping={"outputs": {"received": "received_static"}},
-        outputs={"received": None},
+        inputs=[TaskInput(name="static_val", value=123)],  # Static integer
+        outputs=[TaskOutput(name="received", set_to="received_static")],
     )
 
     task_end = Task(id="end", type="system.end")

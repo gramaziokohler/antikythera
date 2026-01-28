@@ -1,73 +1,97 @@
 {
-  "version": "1.0",
-  "id": "TP4",
-  "name": "Toy Problem 4",
-  "description": "Inner blueprints using composite",
-  "tasks": [
-    {
-      "id": "start",
-      "type": "system.start",
-      "outputs": {
-        "process_start_time": "timestamp"
-      }
-    },
-    {
-      "id": "X1",
-      "type": "user_interaction.user_input",
-      "description": "Wait for user input",
-      "outputs": {
-        "something": "str"
-      },
-      "depends_on": [
-        {"id": "start"}
-      ]
-    },
-
-    {
-      "id": "X2",
-      "type": "system.composite",
-      "description": "Call inner blueprint",
-      "inputs": {
-          "something": "str"
-      },
-      "outputs": {
-          "result1": "str"
-      },
-      "argument_mapping": {
-        "outputs": {
-          "result1": "something_else"
+    "version": "1.0",
+    "id": "TP4",
+    "name": "Toy Problem 4",
+    "description": "Inner blueprints using composite",
+    "tasks": [
+        {
+            "id": "start",
+            "type": "system.start",
+            "outputs": [
+                {
+                    "name": "process_start_time",
+                    "type": "timestamp"
+                }
+            ]
+        },
+        {
+            "id": "X1",
+            "type": "user_interaction.user_input",
+            "description": "Wait for user input",
+            "outputs": [
+                {
+                    "name": "something",
+                    "type": "str"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ]
+        },
+        {
+            "id": "X2",
+            "type": "system.composite",
+            "description": "Call inner blueprint",
+            "inputs": [
+                {
+                    "name": "something",
+                    "type": "str"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "result1",
+                    "type": "str",
+                    "set_to": "something_else"
+                }
+            ],
+            "params": [
+                {
+                    "name": "blueprint",
+                    "value": {
+                        "static": "TP4_PnP"
+                    }
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "X1",
+                    "type": "FS"
+                }
+            ]
+        },
+        {
+            "id": "X3",
+            "type": "user_interaction.user_output",
+            "description": "Print result",
+            "inputs": [
+                {
+                    "name": "something_else",
+                    "type": "str"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "X2"
+                }
+            ]
+        },
+        {
+            "id": "end",
+            "type": "system.end",
+            "outputs": [
+                {
+                    "name": "process_end_time",
+                    "type": "timestamp"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "X3"
+                }
+            ]
         }
-      },
-      "blueprint": {
-        "static": "TP4_PnP"
-      },
-
-      "depends_on": [
-        {"id": "X1", "type": "FS"}
-      ]
-    },
-
-    {
-      "id": "X3",
-      "type": "user_interaction.user_output",
-      "description": "Print result",
-      "inputs": {
-        "something_else": "str"
-      },
-      "depends_on": [
-        {"id": "X2"}
-      ]
-    },
-
-    {
-      "id": "end",
-      "type": "system.end",
-      "outputs": {
-        "process_end_time": "timestamp"
-      },
-      "depends_on": [
-        {"id": "X3"}
-      ]
-    }
-  ]
+    ]
 }

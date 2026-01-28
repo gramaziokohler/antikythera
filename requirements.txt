@@ -1,3 +1,4 @@
+asteval
 compas >= 2,<3
 compas_eve >= 2,<3
 compas_model==0.9.1

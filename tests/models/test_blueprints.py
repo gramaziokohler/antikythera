@@ -22,7 +22,7 @@ def sample_blueprint_json():
                 "id": "TASK_B",
                 "type": "test.task.b",
                 "depends_on": [{"id": "TASK_A", "type": "FS"}],
-                "params": {"extra_param": "value"},
+                "params": [{"name": "extra_param", "value": "value"}],
             },
             {"id": "TASK_C", "type": "system.end", "description": "Last task", "depends_on": [{"id": "TASK_B", "type": "FS"}]},
         ],
@@ -64,7 +64,7 @@ def test_task_parsing(tmp_path, sample_blueprint_json):
     assert isinstance(task_b.depends_on[0], Dependency)
     assert task_b.depends_on[0].id == "TASK_A"
     assert task_b.depends_on[0].type == DependencyType.FS
-    assert task_b.params == {"extra_param": "value"}
+    assert task_b.get_param_value("extra_param") == "value"
 
     assert isinstance(task_c, Task)
     assert task_c.type == "system.end"

@@ -3,6 +3,7 @@ import time
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import Task
+from antikythera.models import TaskParam
 from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
@@ -13,11 +14,11 @@ def test_parallel_execution(mock_immudb, mock_transport_orchestrator, mock_trans
 
     task_start = Task(id="start", type="system.start")
 
-    task_a = Task(id="task_a", type="system.sleep", params={"duration": 0.5})
-    task_b = Task(id="task_b", type="system.sleep", params={"duration": 0.5})
+    task_a = Task(id="task_a", type="system.sleep", params=[TaskParam(name="duration", value=0.5)])
+    task_b = Task(id="task_b", type="system.sleep", params=[TaskParam(name="duration", value=0.5)])
 
     # Task C depends on A and B (Wait, explicit dependencies)
-    task_c = Task(id="task_c", type="system.sleep", params={"duration": 0.1})
+    task_c = Task(id="task_c", type="system.sleep", params=[TaskParam(name="duration", value=0.1)])
 
     task_end = Task(id="end", type="system.end")
 

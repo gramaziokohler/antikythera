@@ -5,6 +5,8 @@ import threading
 from dataclasses import dataclass
 from queue import LifoQueue
 from queue import Queue
+from typing import Any
+from typing import Dict
 from typing import Optional
 from typing import cast
 
@@ -30,6 +32,7 @@ from antikythera.models import TaskCompletionAckMessage
 from antikythera.models import TaskCompletionMessage
 from antikythera.models import TaskState
 
+from .conditionals import safe_eval_condition
 from .sequencers import SequencerRegistry
 from .storage import BlueprintStorage
 from .storage import ModelStorage
@@ -118,7 +121,7 @@ class TaskScheduler:
         for dep in ff_deps:
             dep_task = self.graph.node[dep.id]["task"]
 
-            if dep_task.state != TaskState.SUCCEEDED:
+            if dep_task.state not in (TaskState.SUCCEEDED, TaskState.SKIPPED):
                 all_ff_succeeded = False
                 break
         return all_ff_succeeded
@@ -131,13 +134,15 @@ class TaskScheduler:
             task.state = TaskState.SUCCEEDED
         elif message.state == TaskState.FAILED.value:
             task.state = TaskState.FAILED
+        elif message.state == TaskState.SKIPPED.value:
+            task.state = TaskState.SKIPPED
         else:
             raise ValueError(f"Invalid task state: {message.state}")
 
-        if task.outputs:
-            task.outputs = message.outputs
-        else:
-            task.outputs = {}
+        if message.outputs:
+            for k, v in message.outputs.items():
+                task.set_output_value(k, v)
+
         return ProcessedTask(task_id=task.id, blueprint_id=blueprint_id, task=task)
 
     def process_queue(self) -> list[ProcessedTask]:
@@ -184,9 +189,9 @@ class TaskScheduler:
                 dependency_type = dep.type
 
                 if dependency_type == DependencyType.FS:
-                    dependency_preconditions.append(dep_task.state == TaskState.SUCCEEDED)
+                    dependency_preconditions.append(dep_task.state in (TaskState.SUCCEEDED, TaskState.SKIPPED))
                 elif dependency_type == DependencyType.SS:
-                    dependency_preconditions.append(dep_task.state in (TaskState.RUNNING, TaskState.SUCCEEDED))
+                    dependency_preconditions.append(dep_task.state in (TaskState.RUNNING, TaskState.SUCCEEDED, TaskState.SKIPPED))
                 # NOTE: Finish-type dependencies (ie. FF and SF) are implemented in the queue processing stage
 
             if all(dependency_preconditions):
@@ -433,11 +438,11 @@ class Orchestrator:
 
     def _map_inputs_from_session(self, blueprint_id: str, task: Task) -> dict:
         """Resolve task inputs from session data applying argument remapping."""
-        input_mapping = task.argument_mapping.get("inputs", {}) if task.argument_mapping else {}
-
         inputs = {}
-        for key in task.inputs:
-            mapped_key = input_mapping.get(key) or key
+        for inp in task.inputs:
+            key = inp.name
+            mapped_key = inp.get_from or key
+
             inputs_value = self.session_storage.get(blueprint_id, mapped_key)
 
             if task.is_dynamically_expanded:
@@ -452,13 +457,12 @@ class Orchestrator:
 
     def _map_outputs_to_session(self, blueprint_id: str, task: Task) -> dict:
         """Map task outputs to the names used in session data."""
-        output_mapping = task.argument_mapping.get("outputs", {}) if task.argument_mapping else {}
-        task_outputs = task.outputs or {}
-
         outputs = {}
-        for key, value in task_outputs.items():
-            mapped_key = output_mapping.get(key) or key
-            outputs[mapped_key] = value
+        # Iterate over output keys defined in the task configuration
+        for out in task.outputs:
+            # Get the configured mapping name or default to the key itself
+            mapped_key = out.set_to or out.name
+            outputs[mapped_key] = out.value
 
         # TODO: Should use set_all() here
         # I implemented set_all in SessionStorage but commented it out for now
@@ -478,9 +482,9 @@ class Orchestrator:
         if task.is_dynamically_expanded:
             element = self.session_storage.get(inner_blueprint_id, "element")
 
-        for key in task.outputs:
-            mapped_key = task.argument_mapping.get("outputs", {}).get(key) or key
-            value = self.session_storage.get(inner_blueprint_id, key)
+        for out in task.outputs:
+            mapped_key = out.set_to or out.name
+            value = self.session_storage.get(inner_blueprint_id, out.name)
 
             if element:
                 # If dynamic, we aggregate into a dictionary in the outer session
@@ -526,10 +530,10 @@ class Orchestrator:
                         self.session_storage.set(inner_blueprint_id, key, value)
 
                 # TODO: Implement other execution modes (execution mode should probably be defined in the blueprint?)
-                execution_mode = task.params.get("execution_mode", ExecutionMode.EXCLUSIVE)
+                execution_mode = task.get_param_value("execution_mode", ExecutionMode.EXCLUSIVE)
 
                 if model:
-                    task.params["model"] = model
+                    task.set_param_value("model", model)
 
                 # TODO: what do we do if no agent even claims the task.. should there be some timeout?
                 task.state = TaskState.READY
@@ -538,8 +542,8 @@ class Orchestrator:
                         id=_create_global_id(blueprint_id, task),
                         type=task.type,
                         inputs=inputs,
-                        output_keys=task.outputs,
-                        params=task.params,
+                        output_keys=[o.name for o in task.outputs],
+                        params={p.name: p.value for p in task.params},
                         execution_mode=execution_mode,
                     )
                 )
@@ -644,10 +648,10 @@ class Orchestrator:
             # Iterate over a copy of tasks to allow modification of the blueprint
             for task in list(blueprint.tasks):
                 if task.is_dynamic and not task.is_dynamically_expanded:
-                    blueprint_params = task.params.get("blueprint") or {}
+                    blueprint_params = task.get_param_value("blueprint", {})
                     dynamic_params = blueprint_params.get("dynamic") or {}
-                    sequencer_name = dynamic_params["sequencer"]
 
+                    sequencer_name = dynamic_params["sequencer"]
                     sequencer = SequencerRegistry.get_sequencer(sequencer_name, self.session)
 
                     blueprint = sequencer.expand(task, blueprint)
@@ -692,15 +696,16 @@ class Orchestrator:
         # json_dump(self.session, f"orchestrator_preprocessed_session_{self.session.bsid}.json")
 
     def _load_inner_blueprint(self, task: Task) -> Blueprint:
-        assert "blueprint" in task.params
+        blueprint_param = task.get_param_value("blueprint")
+        assert blueprint_param is not None
 
-        if "static" in task.params["blueprint"]:
-            blueprint_id = task.params["blueprint"]["static"]
+        if "static" in blueprint_param:
+            blueprint_id = blueprint_param["static"]
             return self.blueprint_storage.get_blueprint(blueprint_id)
-        if "dynamic" in task.params["blueprint"]:
+        if "dynamic" in blueprint_param:
             # Get data from the expanded dynamic blueprint task data
-            blueprint_id = task.params["blueprint"]["dynamic"]["blueprint_id"]
-            element = task.params["blueprint"]["dynamic"]["element"]
+            blueprint_id = blueprint_param["dynamic"]["blueprint_id"]
+            element = blueprint_param["dynamic"]["element"]
 
             # The expanded ID is used to avoid ID collisions
             # because multiple elements are processed with the same base blueprint
@@ -714,7 +719,7 @@ class Orchestrator:
             blueprint.id = expanded_blueprint_id
 
             # NOTE: this isn't needed per se, but it's useful for debugging/logging purposes
-            task.params["blueprint"]["dynamic"]["blueprint_id"] = expanded_blueprint_id
+            blueprint_param["dynamic"]["blueprint_id"] = expanded_blueprint_id
 
             LOG.debug(f"Loaded dynamic inner blueprint with new ID {expanded_blueprint_id} for task {task.id}")
 

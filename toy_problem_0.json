@@ -7,38 +7,58 @@
     {
       "id": "start",
       "type": "system.start",
-      "outputs": {
-        "process_start_time": "timestamp"
-      }
+      "outputs": [
+        {
+          "name": "process_start_time",
+          "type": "timestamp"
+        }
+      ]
     },
     {
       "id": "A1",
       "type": "system.sleep",
       "description": "Sleep for 5 seconds",
-      "duration": 5,
+      "params": [
+        {
+          "name": "duration",
+          "value": 5
+        }
+      ],
       "depends_on": [
-        {"id": "start"}
+        {
+          "id": "start"
+        }
       ]
     },
     {
       "id": "A2",
       "type": "user_interaction.user_output",
       "description": "Print result",
-      "inputs": {
-        "process_start_time": "timestamp"
-      },
+      "inputs": [
+        {
+          "name": "process_start_time",
+          "type": "timestamp"
+        }
+      ],
       "depends_on": [
-        {"id": "A1"}
+        {
+          "id": "A1"
+        }
       ]
     },
     {
       "id": "end",
       "type": "system.end",
-      "outputs": {
-        "process_end_time": "timestamp"
-      },
+      "outputs": [
+        {
+          "name": "process_end_time",
+          "type": "timestamp"
+        }
+      ],
       "depends_on": [
-        {"id": "A2"}
+        {
+          "id": "A2"
+        }
       ]
     }
   ]

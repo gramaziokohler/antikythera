@@ -86,7 +86,7 @@ class MoveItPlannerAgent(Agent):
 
     @tool(name="pnp.calculate_ik")
     def calculate_ik(self, task: Task) -> Dict[str, Any]:
-        element_id = task.params["element_id"]
+        element_id = task.get_param_value("element_id")
         element = self.model.element_by_guid(element_id)
 
         # # Check if element is inside a slab (parent)
@@ -108,8 +108,8 @@ class MoveItPlannerAgent(Agent):
         # else:
         #     align_to_world_origin = element.transformation.inverse()
 
-        tx_to_pickup_location = Transformation.from_frame(task.inputs["pickup_location_frame"])
-        tx_to_placement_location = Transformation.from_frame(task.inputs["placement_location_frame"])
+        tx_to_pickup_location = Transformation.from_frame(task.get_input_value("pickup_location_frame"))
+        tx_to_placement_location = Transformation.from_frame(task.get_input_value("placement_location_frame"))
 
         sx = Scale.from_factors([0.001] * 3)
 
@@ -123,10 +123,10 @@ class MoveItPlannerAgent(Agent):
 
         # Create approach frames
         grasp_frame_approach = grasp_frame.copy()
-        grasp_frame_approach.point += grasp_frame_approach.to_world_coordinates(task.params["approach_vector"])
+        grasp_frame_approach.point += grasp_frame_approach.to_world_coordinates(task.get_param_value("approach_vector"))
 
         place_frame_approach = place_frame.copy()
-        place_frame_approach.point += place_frame_approach.to_world_coordinates(task.params["approach_vector"])
+        place_frame_approach.point += place_frame_approach.to_world_coordinates(task.get_param_value("approach_vector"))
 
         # Reset planner cell with the assembly table
         self.planner.set_robot_cell(self.robot_cell)
@@ -142,17 +142,17 @@ class MoveItPlannerAgent(Agent):
         # start_state = task.inputs["start_state"]
         try:
             self.logger.debug("[MoveItPlannerAgent] 1...")
-            place_state = self._calculate_ik_for_frame_target(place_frame, start_state, task.params["group"])
+            place_state = self._calculate_ik_for_frame_target(place_frame, start_state, task.get_param_value("group"))
             self.logger.debug("[MoveItPlannerAgent] 2...")
-            place_state_approach = self._calculate_ik_for_frame_target(place_frame_approach, place_state, task.params["group"])
+            place_state_approach = self._calculate_ik_for_frame_target(place_frame_approach, place_state, task.get_param_value("group"))
             json_dump(
                 {"place_state": place_state, "place_state_approach": place_state_approach},
                 "/Users/gcasas/eth/projects/gramaziokohler/antikythera/toy_problem_5_inner_pnp_ik_solutions_up_to_step_2.json",
             )
             self.logger.debug("[MoveItPlannerAgent] 3...")
-            grasp_state_approach = self._calculate_ik_for_frame_target(grasp_frame_approach, place_state_approach, task.params["group"])
+            grasp_state_approach = self._calculate_ik_for_frame_target(grasp_frame_approach, place_state_approach, task.get_param_value("group"))
             self.logger.debug("[MoveItPlannerAgent] 4...")
-            grasp_state = self._calculate_ik_for_frame_target(grasp_frame, grasp_state_approach, task.params["group"])
+            grasp_state = self._calculate_ik_for_frame_target(grasp_frame, grasp_state_approach, task.get_param_value("group"))
             json_dump(
                 {"place_state": place_state, "place_state_approach": place_state_approach, "grasp_state": grasp_state, "grasp_state_approach": grasp_state_approach},
                 "/Users/gcasas/eth/projects/gramaziokohler/antikythera/toy_problem_5_inner_pnp_ik_solutions_up_to_step_4.json",
@@ -195,7 +195,7 @@ class MoveItPlannerAgent(Agent):
 
     @tool(name="plan_pick")
     def plan_pick(self, task: Task) -> Dict[str, Any]:
-        element_id = task.params["element_id"]
+        element_id = task.get_param_value("element_id")
         element = self.model.element_by_guid(element_id)
 
         # Check if element is inside a slab (parent)
@@ -212,7 +212,7 @@ class MoveItPlannerAgent(Agent):
 
         # tx_to_assembly_table = Transformation.from_frame(assembly_table_frame)
         # tx_to_stock_table = Transformation.from_frame(stock_table_frame)
-        tx_to_pick_location = Transformation.from_frame(task.inputs["pickup_location_frame"])
+        tx_to_pick_location = Transformation.from_frame(task.get_input_value("pickup_location_frame"))
 
         # element_at_stock_table = element.geometry.transformed(sx * stock_table_transform * align_to_world_origin)
         element_at_cnc_pick = element.geometry.transformed(tx_to_cnc_pick * sx * align_to_world_origin)

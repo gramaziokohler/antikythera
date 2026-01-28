@@ -7,37 +7,56 @@
     {
       "id": "start",
       "type": "system.start",
-      "outputs": {
-        "process_start_time": "timestamp"
-      }
+      "outputs": [
+        {
+          "name": "process_start_time",
+          "type": "timestamp"
+        }
+      ]
     },
-
     {
       "id": "X1",
       "type": "system.composite",
       "description": "Pick and Place",
-      "inputs": {
-          "something": "str"
-      },
-      "outputs": {
-          "result1": "str"
-      },
-      "blueprint": {
-        "static": "toy_problem_5_inner_pnp.json"
-      },
+      "inputs": [
+        {
+          "name": "something",
+          "type": "str"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result1",
+          "type": "str"
+        }
+      ],
+      "params": [
+        {
+          "name": "blueprint",
+          "value": {
+            "static": "toy_problem_5_inner_pnp.json"
+          }
+        }
+      ],
       "depends_on": [
-        {"id": "start"}
+        {
+          "id": "start"
+        }
       ]
     },
-
     {
       "id": "end",
       "type": "system.end",
-      "outputs": {
-        "process_end_time": "timestamp"
-      },
+      "outputs": [
+        {
+          "name": "process_end_time",
+          "type": "timestamp"
+        }
+      ],
       "depends_on": [
-        {"id": "X1"}
+        {
+          "id": "X1"
+        }
       ]
     }
   ]
