@@ -22,7 +22,6 @@ from antikythera_orchestrator.storage import ModelStorage
 from antikythera_orchestrator.storage import SessionStorage
 
 
-@agent(type="test_dynamic")
 class TestDynamicAgent(Agent):
     @tool(name="process")
     def process_element(self, task: Task) -> Dict[str, Any]:
@@ -156,7 +155,6 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
 
     blocking_event = threading.Event()
 
-    @agent(type="test_dynamic")
     class BlockingTestAgent(Agent):
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
@@ -278,7 +276,6 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
 
     blocking_event = threading.Event()
 
-    @agent(type="test_dynamic")
     class BlockingTestAgent(Agent):
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
