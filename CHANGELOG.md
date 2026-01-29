@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Refactored `Task` class to enforce a single data access pattern.
+- Changed build system to `hatchling` to hook the protobuf compilation into the build process.
 
 ### Removed
 - `Task.input_values` and `Task.param_values` convenience properties have been removed to prevent ambiguity.
