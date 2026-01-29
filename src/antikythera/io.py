@@ -183,7 +183,7 @@ class BaseSerializerV1:
 class BlueprintJsonSerializeV1(BaseSerializerV1):
     """Handles Input/Output for Blueprint JSON files (Read, Write, Validate)."""
 
-    SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "models", "schema.json")
+    SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "models", "blueprint.v1.schema.json")
 
     @classmethod
     def load_schema(cls) -> Dict[str, Any]:

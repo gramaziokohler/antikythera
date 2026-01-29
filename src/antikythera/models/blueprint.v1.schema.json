@@ -1,6 +1,6 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "$id": "http://gramaziokohler.github.io/antikythera/blueprint.schema.json",
+    "$id": "https://raw.githubusercontent.com/gramaziokohler/antikythera/refs/heads/main/src/antikythera/models/blueprint.v1.schema.json",
     "title": "Antikythera Blueprint",
     "description": "Schema for Antikythera Blueprint files",
     "type": "object",
