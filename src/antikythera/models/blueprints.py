@@ -46,6 +46,7 @@ class TaskIO(Data):
     """Base class for task inputs, outputs, and parameters."""
 
     def __init__(self, name: str, value: Any = None, type: Optional[str] = None, description: Optional[str] = None):
+        super().__init__()
         self.name = name
         self.value = value
         self.type = type
@@ -119,32 +120,12 @@ class Task(Data):
             "type": self.type,
             "description": self.description,
             "condition": self.condition,
-            "inputs": [task_input.__data__ for task_input in self.inputs],
-            "outputs": [task_output.__data__ for task_output in self.outputs],
-            "params": [task_param.__data__ for task_param in self.params],
+            "inputs": self.inputs,
+            "outputs": self.outputs,
+            "params": self.params,
             "depends_on": self.depends_on,
             "state": self.state,
         }
-
-    @classmethod
-    def __from_data__(cls, data: Dict[str, Any]) -> "Task":
-        if "inputs" in data:
-            data["inputs"] = [i if isinstance(i, TaskInput) else TaskInput(**i) for i in data["inputs"]]
-        if "outputs" in data:
-            data["outputs"] = [o if isinstance(o, TaskOutput) else TaskOutput(**o) for o in data["outputs"]]
-        if "params" in data:
-            data["params"] = [p if isinstance(p, TaskParam) else TaskParam(**p) for p in data["params"]]
-
-        if "depends_on" in data:
-            data["depends_on"] = [d if isinstance(d, Dependency) else Dependency(**d) for d in data["depends_on"]]
-
-        if "state" in data and isinstance(data["state"], str):
-            try:
-                data["state"] = TaskState(data["state"])
-            except ValueError:
-                data["state"] = TaskState.PENDING
-
-        return cls(**data)
 
     def __init__(
         self,
@@ -164,30 +145,11 @@ class Task(Data):
         self.type = type
         self.description = description
         self.condition = condition
-
-        # Handle inputs
-        self.inputs = []
-        if inputs:
-            for item in inputs:
-                assert isinstance(item, TaskInput)
-                self.inputs.append(item)
-
-        # Handle outputs
-        self.outputs = []
-        if outputs:
-            for item in outputs:
-                assert isinstance(item, TaskOutput)
-                self.outputs.append(item)
-
-        # Handle params
-        self.params = []
-        if params:
-            for item in params:
-                assert isinstance(item, TaskParam)
-                self.params.append(item)
-
+        self.inputs = inputs or []
+        self.outputs = outputs or []
+        self.params = params or []
         self.depends_on = depends_on or []
-        self.state = state
+        self.state = TaskState(state)
 
     def get_input(self, name: str) -> Optional[TaskInput]:
         for task_input in self.inputs:
@@ -384,28 +346,8 @@ class Blueprint(Data):
             "name": self.name,
             "version": self.version,
             "description": self.description,
-            "tasks": [t.__data__ for t in self.tasks],
+            "tasks": self.tasks,
         }
-
-    @classmethod
-    def __from_data__(cls, data: Dict[str, Any]) -> "Blueprint":
-        # TODO: revisit this method, it's not really aligned with COMPAS Data patterns
-        tasks_data = data.get("tasks", [])
-        tasks = []
-        for t_data in tasks_data:
-            if isinstance(t_data, Task):
-                tasks.append(t_data)
-            else:
-                # Expecting strict dict matching Task.__data__
-                tasks.append(Task.__from_data__(t_data))
-
-        return cls(
-            id=data["id"],
-            name=data["name"],
-            version=data.get("version"),
-            description=data.get("description"),
-            tasks=tasks,
-        )
 
     def __init__(
         self,
