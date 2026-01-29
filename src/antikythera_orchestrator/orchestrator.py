@@ -133,15 +133,10 @@ class TaskScheduler:
         # THIS METHOD MUTATES `task`
         # updated the task state according to the reported state in the message
         # create and return a ProcessedTask object
-        if message.state == TaskState.SUCCEEDED.value:
-            task.state = TaskState.SUCCEEDED
-        elif message.state == TaskState.FAILED.value:
-            task.state = TaskState.FAILED
-        elif message.state == TaskState.SKIPPED.value:
-            task.state = TaskState.SKIPPED
-        else:
+        if message.state not in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.SKIPPED):
             raise ValueError(f"Invalid task state: {message.state}")
 
+        task.state = TaskState(message.state)
         if message.outputs:
             for k, v in message.outputs.items():
                 task.set_output_value(k, v)
