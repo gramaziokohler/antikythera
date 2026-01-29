@@ -57,7 +57,6 @@ Forum = "https://forum.compas-framework.org/"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-include-package-data = true
 zip-safe = false
 
 [tool.setuptools.dynamic]
@@ -67,6 +66,9 @@ optional-dependencies = { dev = { file = "requirements-dev.txt" } }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+antikythera = ["**/*.json", "**/*.proto"]
 
 # ============================================================================
 # replace pytest.ini
