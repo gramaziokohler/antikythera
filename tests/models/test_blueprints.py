@@ -2,12 +2,12 @@ import json
 
 import pytest
 
+from antikythera.io import BlueprintJsonSerializer
 from antikythera.models import Blueprint
 from antikythera.models import Dependency
 from antikythera.models import DependencyType
 from antikythera.models import Task
 from antikythera.models import TaskState
-from antikythera.parsers import BlueprintJsonParser
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def sample_blueprint_json():
     return {
         "id": "test-proc-1",
         "name": "Test Blueprint",
-        "version": "0.1.0",
+        "version": "1.0.0",
         "description": "A sample blueprint for testing.",
         "tasks": [
             {"id": "TASK_A", "type": "system.start", "description": "First task"},
@@ -35,7 +35,7 @@ def test_blueprint_from_file(tmp_path, sample_blueprint_json):
     with open(blueprint_file, "w") as f:
         json.dump(sample_blueprint_json, f)
 
-    blueprint = BlueprintJsonParser.from_file(str(blueprint_file))
+    blueprint = BlueprintJsonSerializer.from_file(str(blueprint_file))
 
     assert isinstance(blueprint, Blueprint)
     assert blueprint.id == "test-proc-1"
@@ -48,7 +48,7 @@ def test_task_parsing(tmp_path, sample_blueprint_json):
     with open(blueprint_file, "w") as f:
         json.dump(sample_blueprint_json, f)
 
-    blueprint = BlueprintJsonParser.from_file(str(blueprint_file))
+    blueprint = BlueprintJsonSerializer.from_file(str(blueprint_file))
 
     task_a = next(t for t in blueprint.tasks if t.id == "TASK_A")
     task_b = next(t for t in blueprint.tasks if t.id == "TASK_B")

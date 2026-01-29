@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Strict validation for Blueprint JSON files, requiring explicit list-of-dictionary formats for inputs, outputs, and parameters.
 - New explicit accessor methods for `Task` values (`get_input_value`, `get_output_value`, `get_param_value`, `set_input_value`, `set_output_value`, `set_param_value`).
+- New JSON Schema for strictly validating Blueprint files.
+- `BlueprintJsonParser` now supports full validation and symmetric read/write of Blueprints.
 
 ### Changed
 - Refactored `Task` class to enforce a single data access pattern.

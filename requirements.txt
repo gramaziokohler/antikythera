@@ -11,3 +11,4 @@ python-dotenv
 python-multipart
 uvicorn >= 0.25,<1
 watchdog
+jsonschema
