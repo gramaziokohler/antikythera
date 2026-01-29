@@ -7,54 +7,64 @@
     {
       "id": "start",
       "type": "system.start",
-      "outputs": {
-        "process_start_time": "timestamp"
-      }
+      "outputs": [
+        {
+          "name": "process_start_time",
+          "type": "timestamp"
+        }
+      ]
     },
     {
       "id": "A1",
       "type": "fall_demonstrator.select_frames",
       "description": "Select frames for planning process",
-      "outputs": {
-        "frames": "list[compas.geometry.Frame]"
-      },
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "list[compas.geometry.Frame]"
+        }
+      ],
       "depends_on": [
-        {"id": "start"}
-      ]
-    },
-    {
-      "id": "B1",
-      "type": "user_interaction.user_output",
-      "description": "Print result",
-      "inputs": {
-        "frames": "list[compas.geometry.Frame]"
-      },
-      "depends_on": [
-        {"id": "A1"}
+        {
+          "id": "start"
+        }
       ]
     },
     {
       "id": "A2",
-      "type": "fall_demonstrator.plan_trajectory",
-      "description": "Plan trajectory for selected frames",
-      "inputs": {
-        "frames": "list[compas.geometry.Frame]"
-      },
-      "outputs": {
-        "trajectory": "compas_fab.robots.Trajectory"
-      },
+      "type": "fall_demonstrator.plan_motion",
+      "description": "Plan motion for frames",
+      "inputs": [
+        {
+          "name": "frames",
+          "type": "list[compas.geometry.Frame]"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "trajectory",
+          "type": "compas_fab.robots.Trajectory"
+        }
+      ],
       "depends_on": [
-        {"id": "A1"}
+        {
+          "id": "A1"
+        }
       ]
     },
     {
       "id": "end",
       "type": "system.end",
-      "outputs": {
-        "process_end_time": "timestamp"
-      },
+      "outputs": [
+        {
+          "name": "process_end_time",
+          "type": "timestamp"
+        }
+      ],
       "depends_on": [
-        {"id": "B1"}
+        {
+          "id": "A2"
+        }
       ]
     }
   ]

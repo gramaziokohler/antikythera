@@ -7,23 +7,35 @@
     {
       "id": "start",
       "type": "system.start",
-      "outputs": {
-        "process_start_time": "timestamp"
-      }
+      "outputs": [
+        {
+          "name": "process_start_time",
+          "type": "timestamp"
+        }
+      ]
     },
     {
       "id": "A1-ask-user",
       "type": "user_prompt.confirm",
-      "params": {
-        "message": "Do you want to proceed?",
-        "options": [
-          "Yes",
-          "No"
-        ]
-      },
-      "outputs": {
-        "result": "str"
-      },
+      "params": [
+        {
+          "name": "message",
+          "value": "Do you want to proceed?"
+        },
+        {
+          "name": "options",
+          "value": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result",
+          "type": "str"
+        }
+      ],
       "depends_on": [
         {
           "id": "start"
@@ -34,7 +46,12 @@
       "id": "A2",
       "type": "system.sleep",
       "description": "Sleep for 5 seconds",
-      "duration": 5,
+      "params": [
+        {
+          "name": "duration",
+          "value": 5
+        }
+      ],
       "depends_on": [
         {
           "id": "start"
@@ -45,30 +62,36 @@
       "id": "B1",
       "type": "user_interaction.user_output",
       "description": "Print result",
-      "inputs": {
-        "result": "str",
-        "frame_world_xy": {
-          "dtype": "compas.geometry/Frame",
-          "data": {
-            "point": [
-              0.0,
-              0.0,
-              0.0
-            ],
-            "xaxis": [
-              1.0,
-              0.0,
-              0.0
-            ],
-            "yaxis": [
-              0.0,
-              1.0,
-              0.0
-            ]
-          },
-          "guid": "55982853-464f-49f0-a85a-f5a4a8b11de7"
+      "inputs": [
+        {
+          "name": "result",
+          "type": "str"
+        },
+        {
+          "name": "frame_world_xy",
+          "value": {
+            "dtype": "compas.geometry/Frame",
+            "data": {
+              "point": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "xaxis": [
+                1.0,
+                0.0,
+                0.0
+              ],
+              "yaxis": [
+                0.0,
+                1.0,
+                0.0
+              ]
+            },
+            "guid": "55982853-464f-49f0-a85a-f5a4a8b11de7"
+          }
         }
-      },
+      ],
       "depends_on": [
         {
           "id": "A1-ask-user",
@@ -83,9 +106,12 @@
     {
       "id": "end",
       "type": "system.end",
-      "outputs": {
-        "process_end_time": "timestamp"
-      },
+      "outputs": [
+        {
+          "name": "process_end_time",
+          "type": "timestamp"
+        }
+      ],
       "depends_on": [
         {
           "id": "B1"

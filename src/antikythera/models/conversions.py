@@ -1,3 +1,5 @@
+from typing import Any
+
 from compas_pb.core import _deserialize_any
 from compas_pb.core import _serializer_any
 from compas_pb.registry import pb_deserializer
@@ -5,6 +7,9 @@ from compas_pb.registry import pb_serializer
 
 from antikythera.proto import antikythera_pb2
 
+from .blueprints import TaskInput
+from .blueprints import TaskOutput
+from .blueprints import TaskParam
 from .tasks import ExecutionMode
 from .tasks import TaskAllocationMessage
 from .tasks import TaskAssignmentMessage
@@ -55,6 +60,46 @@ def taskassignment_from_pb(pb: antikythera_pb2.TaskAssignmentMessage) -> TaskAss
         timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,
         execution_mode=_execution_mode_from_pb(pb.execution_mode),
     )
+
+
+def inputs_to_dict(inputs: list[TaskInput]) -> dict[str, Any]:
+    """Convert a list of TaskInput to a dictionary."""
+    return {i.name: i.value for i in inputs}
+
+
+def dict_to_inputs(data: dict[str, Any]) -> list[TaskInput]:
+    """Convert a dictionary to a list of TaskInput."""
+    return [TaskInput(name=k, value=v) for k, v in data.items()]
+
+
+def params_to_dict(params: list[TaskParam]) -> dict[str, Any]:
+    """Convert a list of TaskParam to a dictionary."""
+    return {p.name: p.value for p in params}
+
+
+def dict_to_params(data: dict[str, Any]) -> list[TaskParam]:
+    """Convert a dictionary to a list of TaskParam."""
+    return [TaskParam(name=k, value=v) for k, v in data.items()]
+
+
+def outputs_to_dict(outputs: list[TaskOutput]) -> dict[str, Any]:
+    """Convert a list of TaskOutput to a dictionary."""
+    return {o.name: o.value for o in outputs}
+
+
+def dict_to_outputs(data: dict[str, Any]) -> list[TaskOutput]:
+    """Convert a dictionary to a list of TaskOutput."""
+    return [TaskOutput(name=k, value=v) for k, v in data.items()]
+
+
+def keys_to_outputs(keys: list[str]) -> list[TaskOutput]:
+    """Convert a list of keys to a list of TaskOutput."""
+    return [TaskOutput(name=k) for k in keys]
+
+
+def outputs_to_keys(outputs: list[TaskOutput]) -> list[str]:
+    """Extract output keys from a list of TaskOutput."""
+    return [o.name for o in outputs]
 
 
 TASK_STATE_TO_PB = {

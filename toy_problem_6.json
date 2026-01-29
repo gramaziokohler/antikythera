@@ -1,43 +1,70 @@
 {
-  "version": "1.0",
-  "id": "TP6",
-  "name": "Toy Problem 6",
-  "description": "Model and basic element sequencer",
-  "tasks": [
-    {
-      "id": "start",
-      "type": "system.start",
-      "outputs": {
-        "process_start_time": "timestamp"
-      }
-    },
-    {
-      "id": "X1",
-      "type": "system.composite",
-      "description": "Process element",
-      "blueprint": {
-        "dynamic": {
-          "blueprint_id": "TP6-inner",
-          "sequencer": "basic_sequencer"
-        }
-      },
-      "depends_on": [
+    "version": "1.0",
+    "id": "TP6",
+    "name": "Toy Problem 6",
+    "description": "Model and basic element sequencer",
+    "tasks": [
         {
-          "id": "start"
-        }
-      ]
-    },
-    {
-      "id": "end",
-      "type": "system.end",
-      "outputs": {
-        "process_end_time": "timestamp"
-      },
-      "depends_on": [
+            "id": "start",
+            "type": "system.start",
+            "outputs": [
+                {
+                    "name": "process_start_time",
+                    "type": "timestamp"
+                }
+            ]
+        },
         {
-          "id": "X1"
+            "id": "X1",
+            "type": "system.composite",
+            "description": "Process element",
+            "params": [
+                {
+                    "name": "blueprint",
+                    "value": {
+                        "dynamic": {
+                            "blueprint": "TP6-inner",
+                            "sequencer": "basic_element_sequencer"
+                        }
+                    }
+                },
+                {
+                    "name": "execution_mode",
+                    "value": "COMPETITIVE"
+                }
+            ],
+            "inputs": [
+                {
+                    "name": "model_id",
+                    "type": "str"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "result",
+                    "type": "str"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ]
+        },
+        {
+            "id": "end",
+            "type": "system.end",
+            "outputs": [
+                {
+                    "name": "process_end_time",
+                    "type": "timestamp"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "X1"
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }

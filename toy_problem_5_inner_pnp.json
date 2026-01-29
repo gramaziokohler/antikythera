@@ -1,81 +1,93 @@
-    // # Agent: PybulletPlannerAgent - params: urdf_path, robot_name
-    // # Agent: MoveItPlannerAgent, TBD: how to deal with cell state
-
-    // # params: place_frame (in WCF), approach_vector, pick_frame (in WCF), HARDCODE START CONFIG (CELL STATE)
-
-  "#  plan move to element (plan pick)", 
-    "calculate grasp frame (wrt to element)",
-    "calculate pickup frame (using grasp frame and pickup location frame)",
-    "calculate approach frame (using pickup frame)",
-    "plan trajectory safe config to approach frame - trajectory1",
-    "plan trajectory approach config to pickup frame  - trajectory2",
-
-  "#  plan move with element (plan place)", 
-    "calculate grasp frame (wrt to element)",
-    "calculate placement frame (using grasp frame and pickup location frame)",
-    "calculate approach placement frame (using placement frame)",
-    "plan trajectory safe config to placement frame - trajectory3",
-    "plan trajectory placement config to pickup frame  - trajectory4",
-
 {
   "version": "1.0",
-  "id": "TP5",
+  "id": "TP5-inner",
   "name": "Toy Problem 5: Pick and Place",
   "description": "Pick and place",
   "tasks": [
     {
       "id": "start",
       "type": "system.start",
-      "outputs": {
-        "process_start_time": "timestamp"
-      }
+      "outputs": [
+        {
+          "name": "process_start_time",
+          "type": "timestamp"
+        }
+      ]
     },
-
     {
       "id": "pnp0",
       "type": "compas_fab.moveit.generate_pick_location_frame",
-      "outputs": {
-        "pickup_location_frame": "compas.geometry.Frame"
-      },
+      "outputs": [
+        {
+          "name": "pickup_location_frame",
+          "type": "compas.geometry.Frame"
+        }
+      ],
       "depends_on": [
-        {"id": "start"}
+        {
+          "id": "start"
+        }
       ]
     },
-
     {
       "id": "pnp1",
       "type": "compas_fab.moveit.plan_pick",
-      "element_id": "1515240e-882e-4a8a-8399-a3efa866f49b",
-      // # this should be a proper compas.data thingy, with a COMPAS Vector
-      "approach_vector": "(1, 0, 0)", 
-      // "start_config": 
-      "inputs": {
-        "pickup_location_frame": "compas.geometry.Frame"
-      },
-      "outputs": {
-        "trajectories": "list[compas_fab.robots.Trajectory]"
-      },
+      "params": [
+        {
+          "name": "element_id",
+          "value": "1515240e-882e-4a8a-8399-a3efa866f49b"
+        },
+        {
+          "name": "approach_vector",
+          "value": "(1, 0, 0)"
+        }
+      ],
+      "inputs": [
+        {
+          "name": "pickup_location_frame",
+          "type": "compas.geometry.Frame"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "trajectories",
+          "type": "list[compas_fab.robots.Trajectory]"
+        }
+      ],
       "depends_on": [
-        {"id": "pnp0"}
+        {
+          "id": "pnp0"
+        }
       ]
     },
-
     {
       "id": "pnp2",
       "type": "compas_fab.moveit.plan_place",
-      "outputs": {
-        "process_start_time": "timestamp"
-      }
+      "outputs": [
+        {
+          "name": "process_start_time",
+          "type": "timestamp"
+        }
+      ],
+      "depends_on": [
+        {
+          "id": "pnp1"
+        }
+      ]
     },
-
     {
       "id": "end",
       "type": "system.end",
-      "outputs": {
-        "process_end_time": "timestamp"
-      },
+      "outputs": [
+        {
+          "name": "process_end_time",
+          "type": "timestamp"
+        }
+      ],
       "depends_on": [
-        {"id": "start"}
+        {
+          "id": "pnp2"
+        }
       ]
     }
   ]

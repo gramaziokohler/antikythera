@@ -2,6 +2,7 @@ from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
 from antikythera.models import Task
+from antikythera.models import TaskParam
 from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
@@ -9,7 +10,7 @@ from antikythera_orchestrator.orchestrator import Orchestrator
 def test_start_simple_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define a simple blueprint
     task_start = Task(id="start", type="system.start")
-    task_sleep = Task(id="sleep_task", type="system.sleep", params={"duration": 0.1})
+    task_sleep = Task(id="sleep_task", type="system.sleep", params=[TaskParam(name="duration", value=0.1)])
     task_end = Task(id="end", type="system.end")
 
     # Chain tasks: start -> sleep -> end

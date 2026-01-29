@@ -9,8 +9,12 @@ from compas_model.models import Model  # Verify import if possible
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import Task
+from antikythera.models import TaskInput
+from antikythera.models import TaskOutput
+from antikythera.models import TaskParam
 from antikythera.models.blueprints import BlueprintSessionState
 from antikythera_agents.base_agent import Agent
+from antikythera_agents.decorators import agent
 from antikythera_agents.decorators import tool
 from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
@@ -19,7 +23,8 @@ from antikythera_orchestrator.storage import ModelStorage
 from antikythera_orchestrator.storage import SessionStorage
 
 
-class TestDynamicAgent(Agent):
+@agent(type="test_dynamic")
+class DynamicExpansionTestAgent(Agent):
     @tool(name="process")
     def process_element(self, task: Task) -> Dict[str, Any]:
         return {"processed": True}
@@ -39,10 +44,7 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
 
     inner_start = Task(id="inner_start", type="system.start")
 
-    inner_process = Task(
-        id="process",
-        type="test_dynamic.process",
-    )
+    inner_process = Task(id="mark_processed", type="test_dynamic.process", outputs=[TaskOutput(name="processed")])
 
     inner_end = Task(id="inner_end", type="system.end")
 
@@ -58,7 +60,9 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
     dynamic_task = Task(
         id="dynamic_process",
         type="system.composite",
-        params={"blueprint": {"dynamic": {"blueprint_id": "test_inner_bp", "sequencer": "basic_sequencer"}}},
+        params=[
+            TaskParam(name="blueprint", value={"dynamic": {"blueprint_id": "test_inner_bp", "sequencer": "basic_sequencer"}}),
+        ],
     )
 
     assert dynamic_task.is_dynamic
@@ -78,7 +82,7 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
     orchestrator = cleanup_manager.register(Orchestrator(session))
 
     launcher = cleanup_manager.register(AgentLauncher())
-    launcher.agents["test_dynamic"] = TestDynamicAgent()
+    launcher.agents["test_dynamic"] = DynamicExpansionTestAgent()
     launcher.start()
 
     orchestrator.start()
@@ -96,6 +100,11 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
     task_1 = next(t for t in graph_tasks if t.id == "dynamic_process_1")
     assert str(task_0.try_get_element_id()) == str(element1.guid)
     assert str(task_1.try_get_element_id()) == str(element2.guid)
+
+    subtasks = [t for t in graph_tasks if t.id == "mark_processed"]
+    for subtask in subtasks:
+        assert subtask.get_output_value("processed")
+
     assert session.state == BlueprintSessionState.COMPLETED
 
 
@@ -117,8 +126,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     inner_process = Task(
         id="process",
         type="test_dynamic.process",
-        inputs={"element": None},
-        argument_mapping={"inputs": {"element": "element"}},
+        inputs=[TaskInput(name="element")],
     )
     inner_end = Task(id="inner_end", type="system.end")
     inner_start >> inner_process >> inner_end
@@ -132,7 +140,9 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     dynamic_task = Task(
         id="dynamic_process",
         type="system.composite",
-        params={"blueprint": {"dynamic": {"blueprint_id": "test_inner_bp_pr", "sequencer": "basic_sequencer"}}},
+        params=[
+            TaskParam(name="blueprint", value={"dynamic": {"blueprint_id": "test_inner_bp_pr", "sequencer": "basic_sequencer"}}),
+        ],
     )
     outer_end = Task(id="end", type="system.end")
     outer_start >> dynamic_task >> outer_end
@@ -236,7 +246,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     inner_process = Task(
         id="process",
         type="test_dynamic.process",
-        inputs={"element": "dict"},
+        inputs=[TaskInput(name="element")],
     )
     inner_end = Task(id="end", type="system.end")
     inner_start >> inner_process >> inner_end
@@ -250,7 +260,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     dynamic_task = Task(
         id="dynamic_process",
         type="system.composite",
-        params={"blueprint": {"dynamic": {"blueprint_id": "test_inner_bp_pr", "sequencer": "basic_sequencer"}}},
+        params=[TaskParam(name="blueprint", value={"dynamic": {"blueprint_id": "test_inner_bp_pr", "sequencer": "basic_sequencer"}})],
     )
     outer_end = Task(id="end", type="system.end")
     outer_start >> dynamic_task >> outer_end
@@ -277,8 +287,8 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
             # Wait for event
-            model = task.params["model"]
-            element_guid = task.inputs.get("element", {}).get("element_id")
+            model = task.get_param_value("model")
+            element_guid = task.get_input_value("element", {}).get("element_id")
             element = model._elements[element_guid]
             if element.name == "Element 2":
                 blocking_event.wait(timeout=5)

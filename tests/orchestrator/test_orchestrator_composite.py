@@ -1,7 +1,16 @@
+from typing import Any
+from typing import Dict
+
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import Task
+from antikythera.models import TaskInput
+from antikythera.models import TaskOutput
+from antikythera.models import TaskParam
 from antikythera.models import TaskState
+from antikythera_agents.base_agent import Agent
+from antikythera_agents.decorators import agent
+from antikythera_agents.decorators import tool
 from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.storage import BlueprintStorage
@@ -15,33 +24,32 @@ def test_composite_task_execution(mock_immudb, mock_transport_orchestrator, mock
     # I'll define a simple agent here as well or move TestDataAgent to conftest or a shared file.
     # For simplicity, I'll redefine a similar agent here with a different type name.
 
-    from typing import Any
-    from typing import Dict
-
-    from antikythera_agents.base_agent import Agent
-    from antikythera_agents.decorators import agent
-    from antikythera_agents.decorators import tool
-
     @agent(type="composite_test_agent")
     class CompositeTestAgent(Agent):
         @tool(name="multiplier")
         def multiplier(self, task: Task) -> Dict[str, Any]:
-            val = task.inputs.get("val")
-            if val is None:
-                # Handle cases where input might be missing if mapping fails
-                return {"result": 0}
+            val = task.get_input_value("val")
             return {"result": val * 2}
 
     # Inner Blueprint tasks
     inner_start = Task(id="inner_start", type="system.start")
 
-    inner_task = Task(id="inner_task", type="composite_test_agent.multiplier", inputs={"val": None}, argument_mapping={"inputs": {"val": "inner_input"}}, outputs={"result": None})
+    inner_task = Task(
+        id="inner_task",
+        type="composite_test_agent.multiplier",
+        inputs=[TaskInput(name="val", get_from="inner_input")],
+        outputs=[TaskOutput(name="result")],
+    )
 
     inner_end = Task(id="inner_end", type="system.end")
 
     inner_start >> inner_task >> inner_end
 
-    inner_blueprint = Blueprint(id="inner_bp", name="Inner Blueprint", tasks=[inner_start, inner_task, inner_end])
+    inner_blueprint = Blueprint(
+        id="inner_bp",
+        name="Inner Blueprint",
+        tasks=[inner_start, inner_task, inner_end],
+    )
 
     # 2. Store Inner Blueprint
     # We need to store it so Orchestrator can find it by ID
@@ -55,8 +63,8 @@ def test_composite_task_execution(mock_immudb, mock_transport_orchestrator, mock
     task_start = Task(
         id="start",
         type="composite_test_agent.multiplier",
-        inputs={"val": 5},  # Static input 5
-        outputs={"result": None},  # Output 'result' = 10. Mapped to session key 'result'
+        inputs=[TaskInput(name="val", value=5)],  # Static input 5
+        outputs=[TaskOutput(name="result")],  # Output 'result' = 10. Mapped to session key 'result'
     )
 
     # Task 2: Composite Task
@@ -69,13 +77,9 @@ def test_composite_task_execution(mock_immudb, mock_transport_orchestrator, mock
     task_composite = Task(
         id="composite",
         type="system.composite",
-        params={"blueprint": {"static": "inner_bp"}},
-        inputs={"inner_input": None},
-        argument_mapping={
-            "inputs": {"inner_input": "result"},  # Map outer 'result' to inner 'inner_input'
-            "outputs": {"result": "final_result"},  # Map inner 'result' to outer 'final_result'
-        },
-        outputs={"result": None},  # We expect 'result' from inner blueprint
+        params=[TaskParam(name="blueprint", value={"static": "inner_bp"})],
+        inputs=[TaskInput(name="inner_input", get_from="result")],  # Map outer 'result' to inner 'inner_input'
+        outputs=[TaskOutput(name="result", set_to="final_result")],  # Map inner 'result' to outer 'final_result'
     )
 
     task_end_sys = Task(id="sys_end", type="system.end")

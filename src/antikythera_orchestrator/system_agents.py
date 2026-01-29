@@ -15,8 +15,9 @@ class SystemAgent(Agent):
     def composite(self, task: Task) -> Dict[str, Any]:
         print(f"{Colors.OKBLUE}✅ [{task.id}][{task.type}] Composite trigger {Colors.ENDC}")
 
-        # Composite tasks need to return a clean dict of all expected output keys
-        return {k: None for k in task.outputs.keys()}
+        # Composite tasks need to return a clean list of expected outputs.
+        # Since they are virtual, they don't produce values, so we return keys with None values.
+        return {o.name: None for o in task.outputs}
 
     @tool(name="start")
     def start_process(self, task: Task) -> Dict[str, Any]:
@@ -34,7 +35,7 @@ class SystemAgent(Agent):
 
     @tool(name="sleep")
     def sleep_process(self, task: Task) -> Dict[str, Any]:
-        duration = task.params.get("duration", 1)
+        duration = task.get_param_value("duration", 1)
         print(f"{Colors.OKBLUE}😴 [{task.id}][{task.type}] Sleeping for {duration}s...{Colors.ENDC}")
         time.sleep(duration)
         print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Finished sleeping.{Colors.ENDC}")

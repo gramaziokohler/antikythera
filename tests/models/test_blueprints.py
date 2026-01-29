@@ -7,6 +7,7 @@ from antikythera.models import Dependency
 from antikythera.models import DependencyType
 from antikythera.models import Task
 from antikythera.models import TaskState
+from antikythera.parsers import BlueprintJsonParser
 
 
 @pytest.fixture
@@ -22,7 +23,7 @@ def sample_blueprint_json():
                 "id": "TASK_B",
                 "type": "test.task.b",
                 "depends_on": [{"id": "TASK_A", "type": "FS"}],
-                "params": {"extra_param": "value"},
+                "params": [{"name": "extra_param", "value": "value"}],
             },
             {"id": "TASK_C", "type": "system.end", "description": "Last task", "depends_on": [{"id": "TASK_B", "type": "FS"}]},
         ],
@@ -34,7 +35,7 @@ def test_blueprint_from_file(tmp_path, sample_blueprint_json):
     with open(blueprint_file, "w") as f:
         json.dump(sample_blueprint_json, f)
 
-    blueprint = Blueprint.from_file(str(blueprint_file))
+    blueprint = BlueprintJsonParser.from_file(str(blueprint_file))
 
     assert isinstance(blueprint, Blueprint)
     assert blueprint.id == "test-proc-1"
@@ -47,7 +48,7 @@ def test_task_parsing(tmp_path, sample_blueprint_json):
     with open(blueprint_file, "w") as f:
         json.dump(sample_blueprint_json, f)
 
-    blueprint = Blueprint.from_file(str(blueprint_file))
+    blueprint = BlueprintJsonParser.from_file(str(blueprint_file))
 
     task_a = next(t for t in blueprint.tasks if t.id == "TASK_A")
     task_b = next(t for t in blueprint.tasks if t.id == "TASK_B")
@@ -64,7 +65,7 @@ def test_task_parsing(tmp_path, sample_blueprint_json):
     assert isinstance(task_b.depends_on[0], Dependency)
     assert task_b.depends_on[0].id == "TASK_A"
     assert task_b.depends_on[0].type == DependencyType.FS
-    assert task_b.params == {"extra_param": "value"}
+    assert task_b.get_param_value("extra_param") == "value"
 
     assert isinstance(task_c, Task)
     assert task_c.type == "system.end"

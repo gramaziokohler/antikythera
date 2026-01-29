@@ -5,6 +5,8 @@ from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
 from antikythera.models import Task
+from antikythera.models import TaskInput
+from antikythera.models import TaskOutput
 from antikythera.models import TaskState
 from antikythera_agents.base_agent import Agent
 from antikythera_agents.decorators import agent
@@ -18,7 +20,7 @@ class FailingAgent(Agent):
     @tool(name="fail_sometimes")
     def fail_sometimes(self, task: Task) -> Dict[str, Any]:
         print(f"Task Inputs: {task.inputs}")
-        should_fail = task.inputs.get("should_fail", True)
+        should_fail = task.get_input_value("should_fail", True)
         if should_fail:
             raise RuntimeError("Planned failure")
         return {"result": "success"}
@@ -37,9 +39,8 @@ def test_task_failure_and_retry(mock_immudb, mock_transport_orchestrator, mock_t
     task = Task(
         id="failable_task",
         type="failing_agent.fail_sometimes",
-        inputs={"should_fail": None},
-        argument_mapping={"inputs": {"should_fail": "fail_flag"}},
-        outputs={"result": "result"},
+        inputs=[TaskInput(name="should_fail", get_from="fail_flag")],
+        outputs=[TaskOutput(name="result", set_to="result")],
     )
 
     task_end = Task(id="end", type="system.end")

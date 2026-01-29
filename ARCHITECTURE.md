@@ -48,7 +48,7 @@ The technologies above were selected to provide a balance between reliability, p
 
 ### Orchestrator
 
-The **orchestrator** is in charge of coordinating the execution of a **blueprint** described as a **DAG** (Directed Acyclic Graph). The DAG is composed by **tasks** in the nodes, and their dependencies in the edges. A task has a state (`PENDING`, `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`), it declaratively defines input and output data so that data dependencies can be defined between nodes.
+The **orchestrator** is in charge of coordinating the execution of a **blueprint** described as a **DAG** (Directed Acyclic Graph). The DAG is composed by **tasks** in the nodes, and their dependencies in the edges. A task has a state (`PENDING`, `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `SKIPPED`), it declaratively defines input and output data so that data dependencies can be defined between nodes.
 
 Each task is executed by an **agent**, either remote or local. The overall system has location transparency, so agents can be running in one or more machines in the same or different networks.
 
@@ -200,43 +200,47 @@ The blueprint is defined in a structured JSON format. The schema is under develo
     {
       "id": "start",
       "type": "system.start",
-      "outputs": {
-        "start_time": "timestamp"
-      }
+      "outputs": [
+        {"name": "start_time", "type": "timestamp"}
+      ]
     },
     {
       "id": "A1",
       "type": "user_interaction.user_input",
       "description": "Wait for user input",
-      "outputs": {
-        "result1": "str"
-      },
+      "outputs": [
+        {
+          "name": "result1",
+          "type": "str",
+          "__doc__": "All COMPAS-serializable types are supported via compas_pb: primitives, geometry objects, data structures, and custom objects."
+          }
+      ],
       "depends_on": [
         {"id": "start"}
-      ],
-      "_docs": {
-        "result1": "All COMPAS-serializable types are supported via compas_pb: primitives, geometry objects, data structures, and custom objects."
-      }
+      ]
     },
     {
       "id": "A2",
       "type": "system.sleep",
       "description": "Sleep for 5 seconds",
-      "duration": 5,
+      "params": [
+        {
+          "name": "duration", 
+          "value": 5,
+          "__doc__": "Duration in seconds. This is a task parameter, not an input from blueprint session data."
+        }
+      ],
       "depends_on": [
         {"id": "start"}
-      ],
-      "_docs": {
-        "duration": "Duration in seconds. This is a task parameter, not an input from blueprint session data."
-      }
+      ]
     },
     {
       "id": "B1",
       "type": "user_interaction.user_output",
       "description": "Print result",
-      "inputs": {
-        "result1": "str"
-      },
+      "inputs": [
+        {"name": "result1", "type": "str"}
+      ],
       "depends_on": [
         {"id": "A1", "type": "FS"},
         {"id": "A2", "type": "FS"}
@@ -245,9 +249,9 @@ The blueprint is defined in a structured JSON format. The schema is under develo
     {
       "id": "end",
       "type": "system.end",
-      "outputs": {
-        "end_time": "timestamp"
-      },
+      "outputs": [
+        {"name": "end_time", "type": "timestamp"}
+      ],
       "depends_on": [
         {"id": "B1"}
       ]
@@ -258,30 +262,54 @@ The blueprint is defined in a structured JSON format. The schema is under develo
 
 This schema will evolve as the system matures.
 
-#### Argument mapping
+#### Input and Output Mapping
 
-Tasks can optionally declare an `argument_mapping` block to remap task-level input/output names to the names used in blueprint session data. This helps avoid key collisions and lets an agent-specific signature stay stable while the surrounding blueprint uses different data keys.
+Tasks can optionally declare a `get_from` field within their `inputs` and a `set_to` field within their `outputs` definitions to remap task-level names to the names used in blueprint session data. This helps avoid key collisions and lets an agent-specific signature stay stable while the surrounding blueprint uses different data keys.
 
 ```json
 {
   "id": "calculate_ik",
   "type": "moveit_planner.pnp_",
-  "inputs": {
-    "start_state": "compas_fab.robots.RobotCellState"
-  },
-  "outputs": {
-    "grasp_frame": "compas.geometry.Frame"
-  },
-  "argument_mapping": {
-    "inputs": {
-      "start_state": "some_blueprint_state_name"
-    },
-    "outputs": {
-      "grasp_frame": "framecito"
-    }
-  }
+  "inputs": [
+    {"name": "start_state", "type": "compas_fab.robots.RobotCellState", "get_from": "some_blueprint_state_name"}
+  ],
+  "outputs": [
+    {"name": "grasp_frame", "type": "compas.geometry.Frame", "set_to": "framecito"}
+  ]
 }
 ```
+
+#### Conditional Execution
+
+Tasks can optionally be skipped based on a runtime condition. This is achieved by adding a `condition` definition to the task. The `condition` value is a Python expression string that evaluates to `True` (task runs) or `False` (task is skipped).
+
+The expression context includes:
+- Task parameters (by name)
+- Task inputs (by name)
+
+**Example:**
+Skip a task if the user decision was not "Yes":
+
+```json
+{
+  "id": "conditional_task",
+  "type": "some.task",
+  "condition": "decision == 'Yes'",
+  "inputs": [
+    {
+      "name": "decision",
+      "type": "str",
+      "get_from": "user_choice_from_previous_task"
+    }
+  ],
+  "depends_on": ...
+}
+```
+
+When a task is skipped:
+1. Its state is set to `SKIPPED`.
+2. Any downstream tasks that depend on it are also recursively skipped (unless they have other parents that are valid, logic TBD). *Currently implemented strict propagation: if any parent is skipped, the child is likely skipped or logic handles it as a non-run path.*
+
 
 ### COG Archive
 
@@ -508,7 +536,7 @@ Antikythera is designed to be extensible. Custom agents can be implemented in se
 - **M4 (Toy problem 4):**: Inner blueprints using `system.composite` (static): 1) Implement static inner blueprint and agent, 2) Inputs and Outputs of inner blueprints.
 - **M5 (Toy problem 5):** Pick and place for a single element using a 6-DoF robot with inner blueprints. Tasks: 1) `Plan Pick` and `Plan Place` for `MoveIt` planner agent. 2) For next Milestote: Model is read-only and globally accessible inside inner blueprints, but the element sequencer will assign additional information: current element id + list of state (built/not built) of all elements.
 - **M6 (Toy problem 6):**: Add `compas_model` to M5, including element ids referenced from tasks and dynamic inner blueprint expansion based on calls to some kind of sequencer (sequencing the model's elements).
-
+- **M8 (Toy problem 8):**: Implement conditional logical execution of tasks based on input data and/or parameters.
 
 * Two possible levels of agents (can both exist in Antikythera):
  - Type 1: Simple wrapper for some Python code (e.g. inverse_kinematics(config) -> Frame, forward_kinematics(Frame) -> config)

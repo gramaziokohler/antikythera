@@ -1,8 +1,8 @@
 {
     "version": "1.0",
-    "id": "toy-problem-1",
-    "name": "Toy Problem 1",
-    "description": "A sample fabrication process definition",
+    "id": "toy-problem-8",
+    "name": "Toy Problem 8",
+    "description": "Conditional execution based on previous result",
     "tasks": [
         {
             "id": "start",
@@ -15,18 +15,68 @@
             ]
         },
         {
-            "id": "A1",
-            "type": "user_interaction.user_input",
-            "description": "Wait for user input",
+            "id": "A1-ask-user",
+            "type": "user_prompt.confirm",
+            "params": [
+                {
+                    "name": "message",
+                    "value": "Do you want to proceed?"
+                },
+                {
+                    "name": "options",
+                    "value": [
+                        "Yes",
+                        "No"
+                    ]
+                }
+            ],
             "outputs": [
                 {
-                    "name": "result1",
+                    "name": "result",
                     "type": "str"
                 }
             ],
             "depends_on": [
                 {
                     "id": "start"
+                }
+            ]
+        },
+        {
+            "id": "A1-extra",
+            "type": "user_prompt.confirm",
+            "description": "Conditional prompt that only runs if user said Yes",
+            "condition": "decision == 'Yes'",
+            "params": [
+                {
+                    "name": "message",
+                    "value": "You chose Yes. Are you absolutely sure?"
+                },
+                {
+                    "name": "options",
+                    "value": [
+                        "I am sure",
+                        "Actually no"
+                    ]
+                }
+            ],
+            "inputs": [
+                {
+                    "name": "decision",
+                    "type": "str",
+                    "get_from": "result"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "result",
+                    "type": "str",
+                    "set_to": "result_extra"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "A1-ask-user"
                 }
             ]
         },
@@ -52,8 +102,14 @@
             "description": "Print result",
             "inputs": [
                 {
-                    "name": "result1",
+                    "name": "result",
                     "type": "str"
+                },
+                {
+                    "name": "extra_info",
+                    "type": "str",
+                    "get_from": "result_extra",
+                    "value": "N/A"
                 },
                 {
                     "name": "frame_world_xy",
@@ -82,7 +138,7 @@
             ],
             "depends_on": [
                 {
-                    "id": "A1",
+                    "id": "A1-extra",
                     "type": "FS"
                 },
                 {

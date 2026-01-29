@@ -4,6 +4,7 @@ from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
 from antikythera.models import Task
+from antikythera.models import TaskParam
 from antikythera.models import TaskState
 from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
@@ -14,9 +15,9 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
     task_start = Task(id="start", type="system.start")
 
     # Task 1: Sleep for a bit to give us time to pause
-    task_1 = Task(id="task_1", type="system.sleep", params={"duration": 0.5})
+    task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=0.5)])
     # Task 2: Another sleep
-    task_2 = Task(id="task_2", type="system.sleep", params={"duration": 0.1})
+    task_2 = Task(id="task_2", type="system.sleep", params=[TaskParam(name="duration", value=0.1)])
 
     task_end = Task(id="end", type="system.end")
 
@@ -95,7 +96,7 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
 def test_orchestrator_stop(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define a simple blueprint
     task_start = Task(id="start", type="system.start")
-    task_1 = Task(id="task_1", type="system.sleep", params={"duration": 1.0})
+    task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=1.0)])
     task_end = Task(id="end", type="system.end")
 
     task_start.then(task_1).then(task_end)
