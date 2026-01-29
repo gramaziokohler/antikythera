@@ -3,11 +3,8 @@ from abc import ABC
 from contextlib import contextmanager
 from typing import Any
 from typing import Dict
-from typing import List
-from typing import Union
 
 from antikythera.models import Task
-from antikythera.models import TaskOutput
 from antikythera_agents.decorators import get_agent_tools
 
 
@@ -71,7 +68,7 @@ class Agent(ABC):
         except Exception:
             return False
 
-    def execute_task(self, task: Task) -> Union[Dict[str, Any], List[TaskOutput]]:
+    def execute_task(self, task: Task) -> Dict[str, Any]:
         """Execute a task using the appropriate tool.
 
         Parameters
@@ -81,8 +78,8 @@ class Agent(ABC):
 
         Returns
         -------
-        dict or List[TaskOutput]
-            Dictionary of outputs from the tool execution or list of TaskOutput objects
+        dict
+            Dictionary of outputs from the tool execution
 
         Raises
         ------
