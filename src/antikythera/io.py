@@ -17,8 +17,6 @@ from antikythera.models.blueprints import TaskOutput
 from antikythera.models.blueprints import TaskParam
 from antikythera.models.blueprints import TaskState
 
-SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "models", "schema.json")
-
 
 class BaseSerializerV1:
     class TaskIOSerializer:
@@ -189,12 +187,14 @@ BaseSerializer = BaseSerializerV1
 class BlueprintJsonSerializer(BaseSerializerV1):
     """Handles Input/Output for Blueprint JSON files (Read, Write, Validate)."""
 
+    SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "models", "schema.json")
+
     @classmethod
     def load_schema(cls) -> Dict[str, Any]:
         """Load the JSON schema for Antikythera Blueprints."""
-        if not os.path.exists(SCHEMA_FILE):
-            raise FileNotFoundError(f"Schema file not found at {SCHEMA_FILE}")
-        with open(SCHEMA_FILE, "r") as f:
+        if not os.path.exists(cls.SCHEMA_FILE):
+            raise FileNotFoundError(f"Schema file not found at {cls.SCHEMA_FILE}")
+        with open(cls.SCHEMA_FILE, "r") as f:
             return json.load(f)
 
     @classmethod
