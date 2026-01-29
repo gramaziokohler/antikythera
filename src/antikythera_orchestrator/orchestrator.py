@@ -529,14 +529,8 @@ class Orchestrator:
 
         if condition:
             try:
-                allowed_names = inputs.copy()
-                # allow access to params as well, e.g. params["my_param"]
-                # But usually params are static config, might be useful to check them?
-                # For flat access, we can merge them?
-                # Let's merge params into context as top-level vars if no collision
-                for p in task.params:
-                    if p.name not in allowed_names:
-                        allowed_names[p.name] = p.value
+                allowed_names = params_to_dict(task.params)
+                allowed_names.update(inputs.copy())
 
                 if not safe_eval_condition(condition, allowed_names):
                     LOG.info(f"Task {task.id} skipped due to condition: {condition}")

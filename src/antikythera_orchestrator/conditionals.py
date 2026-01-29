@@ -14,8 +14,6 @@ def safe_eval_condition(expression: str, context: Dict[str, Any]) -> bool:
         result = aeval(expression)
 
         if len(aeval.error) > 0:
-            # asteval suppresses exceptions by default and adds them to aeval.error
-            # We want to know if something went wrong
             msg = [str(e.get_error()) for e in aeval.error]
             raise ValueError(f"Error evaluating condition: {msg}")
 
