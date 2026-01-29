@@ -133,15 +133,10 @@ class TaskScheduler:
         # THIS METHOD MUTATES `task`
         # updated the task state according to the reported state in the message
         # create and return a ProcessedTask object
-        if message.state == TaskState.SUCCEEDED.value:
-            task.state = TaskState.SUCCEEDED
-        elif message.state == TaskState.FAILED.value:
-            task.state = TaskState.FAILED
-        elif message.state == TaskState.SKIPPED.value:
-            task.state = TaskState.SKIPPED
-        else:
+        if message.state not in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.SKIPPED):
             raise ValueError(f"Invalid task state: {message.state}")
 
+        task.state = TaskState(message.state)
         if message.outputs:
             for k, v in message.outputs.items():
                 task.set_output_value(k, v)
@@ -534,25 +529,15 @@ class Orchestrator:
 
         if condition:
             try:
-                allowed_names = inputs.copy()
-                # allow access to params as well, e.g. params["my_param"]
-                # But usually params are static config, might be useful to check them?
-                # For flat access, we can merge them?
-                # Let's merge params into context as top-level vars if no collision
-                for p in task.params:
-                    if p.name not in allowed_names:
-                        allowed_names[p.name] = p.value
+                allowed_names = params_to_dict(task.params)
+                allowed_names.update(inputs.copy())
 
                 if not safe_eval_condition(condition, allowed_names):
                     LOG.info(f"Task {task.id} skipped due to condition: {condition}")
                     return True
             except Exception as e:
                 LOG.error(f"Error evaluating condition '{condition}' for task {task.id}: {e}")
-                # If error in condition (e.g. variable not found), we treat it as skipped-with-error?
-                # Or we let it proceed? Proceeding might crash task.
-                # Getting skipped prevents crash but might hide logic error.
-                # Let's return True (skip) to be safe.
-                return True
+                raise
 
         # 2. Implicit Skip Propagation (if all parents were skipped)
         fqn_task_id = _create_global_id(blueprint_id, task)
