@@ -287,7 +287,7 @@ class Task(Data):
         inner_blueprint_id = blueprint_param["dynamic"]["blueprint_id"]
 
         # Deepcopy params to avoid modifying the original task
-        new_params = [TaskParam(name=p.name, value=deepcopy(p.value), type=p.type, description=p.description) for p in dynamic_task.params]
+        new_params = deepcopy(dynamic_task.params)
 
         # Determine index of blueprint param or find it in new list
         for p in new_params:
@@ -302,8 +302,8 @@ class Task(Data):
             type=SystemTaskType.COMPOSITE,
             description=f"{dynamic_task.description} - {element_id}",
             params=new_params,
-            inputs=[TaskInput(name=i.name, value=deepcopy(i.value), type=i.type, get_from=i.get_from) for i in dynamic_task.inputs],
-            outputs=[TaskOutput(name=o.name, value=deepcopy(o.value), type=o.type, set_to=o.set_to) for o in dynamic_task.outputs],
+            inputs=deepcopy(dynamic_task.inputs),
+            outputs=deepcopy(dynamic_task.outputs),
             depends_on=[],
         )
 
