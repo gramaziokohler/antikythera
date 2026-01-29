@@ -180,11 +180,7 @@ class BaseSerializerV1:
         raise ValueError(f"No serializer found for type {type(obj)}")
 
 
-# Current version alias
-BaseSerializer = BaseSerializerV1
-
-
-class BlueprintJsonSerializer(BaseSerializerV1):
+class BlueprintJsonSerializeV1(BaseSerializerV1):
     """Handles Input/Output for Blueprint JSON files (Read, Write, Validate)."""
 
     SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "models", "schema.json")
@@ -263,11 +259,16 @@ class BlueprintJsonSerializer(BaseSerializerV1):
         if validate:
             cls.validate_file(filepath)
 
-        blueprint = BaseSerializer.BlueprintSerializer.from_dict(data)
+        blueprint = cls.BlueprintSerializer.from_dict(data)
         blueprint.validate()
         return blueprint
 
-    @staticmethod
-    def to_file(blueprint: Blueprint, filepath: str, pretty: bool = True) -> None:
-        data = BaseSerializer.serialize(blueprint)
+    @classmethod
+    def to_file(cls, blueprint: Blueprint, filepath: str, pretty: bool = True) -> None:
+        data = cls.serialize(blueprint)
         json_dump(data, filepath, pretty=pretty)
+
+
+# Current version alias
+BaseSerializer = BaseSerializerV1
+BlueprintJsonSerializer = BlueprintJsonSerializeV1
