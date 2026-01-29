@@ -6,6 +6,7 @@ from typing import Dict
 import jsonschema
 from compas.data import json_dump
 from compas.data import json_load
+from packaging.version import Version
 
 from antikythera.models.blueprints import Blueprint
 from antikythera.models.blueprints import Dependency
@@ -19,7 +20,7 @@ from antikythera.models.blueprints import TaskState
 SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "models", "schema.json")
 
 
-class BaseSerializer:
+class BaseSerializerV1:
     class TaskIOSerializer:
         @staticmethod
         def to_dict(obj: Any) -> Dict[str, Any]:
@@ -34,7 +35,7 @@ class BaseSerializer:
     class TaskInputSerializer:
         @staticmethod
         def to_dict(obj: TaskInput) -> Dict[str, Any]:
-            data = BaseSerializer.TaskIOSerializer.to_dict(obj)
+            data = BaseSerializerV1.TaskIOSerializer.to_dict(obj)
             if obj.get_from:
                 data["get_from"] = obj.get_from
             return data
@@ -46,7 +47,7 @@ class BaseSerializer:
     class TaskOutputSerializer:
         @staticmethod
         def to_dict(obj: TaskOutput) -> Dict[str, Any]:
-            data = BaseSerializer.TaskIOSerializer.to_dict(obj)
+            data = BaseSerializerV1.TaskIOSerializer.to_dict(obj)
             if obj.set_to:
                 data["set_to"] = obj.set_to
             return data
@@ -58,7 +59,7 @@ class BaseSerializer:
     class TaskParamSerializer:
         @staticmethod
         def to_dict(obj: TaskParam) -> Dict[str, Any]:
-            return BaseSerializer.TaskIOSerializer.to_dict(obj)
+            return BaseSerializerV1.TaskIOSerializer.to_dict(obj)
 
         @staticmethod
         def from_dict(data: Dict[str, Any]) -> TaskParam:
@@ -86,13 +87,13 @@ class BaseSerializer:
             }
 
             if task.inputs:
-                data["inputs"] = [BaseSerializer.TaskInputSerializer.to_dict(i) for i in task.inputs]
+                data["inputs"] = [BaseSerializerV1.TaskInputSerializer.to_dict(i) for i in task.inputs]
             if task.outputs:
-                data["outputs"] = [BaseSerializer.TaskOutputSerializer.to_dict(o) for o in task.outputs]
+                data["outputs"] = [BaseSerializerV1.TaskOutputSerializer.to_dict(o) for o in task.outputs]
             if task.params:
-                data["params"] = [BaseSerializer.TaskParamSerializer.to_dict(p) for p in task.params]
+                data["params"] = [BaseSerializerV1.TaskParamSerializer.to_dict(p) for p in task.params]
             if task.depends_on:
-                data["depends_on"] = [BaseSerializer.DependencySerializer.to_dict(d) for d in task.depends_on]
+                data["depends_on"] = [BaseSerializerV1.DependencySerializer.to_dict(d) for d in task.depends_on]
 
             return {k: v for k, v in data.items() if v is not None}
 
@@ -100,16 +101,16 @@ class BaseSerializer:
         def from_dict(data: Dict[str, Any]) -> Task:
             """Parses a task definition dictionary into a Task object."""
             raw_inputs = data.get("inputs", [])
-            inputs = [BaseSerializer.TaskInputSerializer.from_dict(i) for i in raw_inputs]
+            inputs = [BaseSerializerV1.TaskInputSerializer.from_dict(i) for i in raw_inputs]
 
             raw_outputs = data.get("outputs", [])
-            outputs = [BaseSerializer.TaskOutputSerializer.from_dict(o) for o in raw_outputs]
+            outputs = [BaseSerializerV1.TaskOutputSerializer.from_dict(o) for o in raw_outputs]
 
             raw_params = data.get("params", [])
-            params = [BaseSerializer.TaskParamSerializer.from_dict(p) for p in raw_params]
+            params = [BaseSerializerV1.TaskParamSerializer.from_dict(p) for p in raw_params]
 
             raw_dependencies = data.get("depends_on", [])
-            dependencies = [BaseSerializer.DependencySerializer.from_dict(d) for d in raw_dependencies]
+            dependencies = [BaseSerializerV1.DependencySerializer.from_dict(d) for d in raw_dependencies]
 
             id = data["id"]
             state = data.get("state", TaskState.PENDING)
@@ -139,7 +140,7 @@ class BaseSerializer:
                 "name": blueprint.name,
                 "version": blueprint.version,
                 "description": blueprint.description,
-                "tasks": [BaseSerializer.TaskSerializer.to_dict(t) for t in blueprint.tasks],
+                "tasks": [BaseSerializerV1.TaskSerializer.to_dict(t) for t in blueprint.tasks],
             }
             return {k: v for k, v in data.items() if v is not None}
 
@@ -151,12 +152,16 @@ class BaseSerializer:
                 if isinstance(task_def, Task):
                     tasks.append(task_def)
                 else:
-                    tasks.append(BaseSerializer.TaskSerializer.from_dict(task_def))
+                    tasks.append(BaseSerializerV1.TaskSerializer.from_dict(task_def))
+
+            version = Version(data["version"])
+            if version.major != 1:
+                raise ValueError(f"Unsupported blueprint version: {version}")
 
             return Blueprint(
                 id=data["id"],
                 name=data["name"],
-                version=data.get("version"),
+                version=str(version),
                 description=data.get("description"),
                 tasks=tasks,
             )
@@ -164,12 +169,12 @@ class BaseSerializer:
     @staticmethod
     def serialize(obj: Any) -> Any:
         serializers = {
-            Blueprint: BaseSerializer.BlueprintSerializer,
-            Task: BaseSerializer.TaskSerializer,
-            TaskInput: BaseSerializer.TaskInputSerializer,
-            TaskOutput: BaseSerializer.TaskOutputSerializer,
-            TaskParam: BaseSerializer.TaskParamSerializer,
-            Dependency: BaseSerializer.DependencySerializer,
+            Blueprint: BaseSerializerV1.BlueprintSerializer,
+            Task: BaseSerializerV1.TaskSerializer,
+            TaskInput: BaseSerializerV1.TaskInputSerializer,
+            TaskOutput: BaseSerializerV1.TaskOutputSerializer,
+            TaskParam: BaseSerializerV1.TaskParamSerializer,
+            Dependency: BaseSerializerV1.DependencySerializer,
         }
         serializer = serializers.get(type(obj))
         if serializer:
@@ -177,19 +182,23 @@ class BaseSerializer:
         raise ValueError(f"No serializer found for type {type(obj)}")
 
 
-class BlueprintJsonSerializer(BaseSerializer):
+# Current version alias
+BaseSerializer = BaseSerializerV1
+
+
+class BlueprintJsonSerializer(BaseSerializerV1):
     """Handles Input/Output for Blueprint JSON files (Read, Write, Validate)."""
 
-    @staticmethod
-    def load_schema() -> Dict[str, Any]:
+    @classmethod
+    def load_schema(cls) -> Dict[str, Any]:
         """Load the JSON schema for Antikythera Blueprints."""
         if not os.path.exists(SCHEMA_FILE):
             raise FileNotFoundError(f"Schema file not found at {SCHEMA_FILE}")
         with open(SCHEMA_FILE, "r") as f:
             return json.load(f)
 
-    @staticmethod
-    def validate(data: Dict[str, Any]) -> None:
+    @classmethod
+    def validate(cls, data: Dict[str, Any]) -> None:
         """Validate a blueprint dictionary against the schema.
 
         Parameters
@@ -202,11 +211,11 @@ class BlueprintJsonSerializer(BaseSerializer):
         jsonschema.ValidationError
             If the data does not match the schema.
         """
-        schema = BlueprintJsonSerializer.load_schema()
+        schema = cls.load_schema()
         jsonschema.validate(instance=data, schema=schema)
 
-    @staticmethod
-    def validate_file(filepath: str) -> None:
+    @classmethod
+    def validate_file(cls, filepath: str) -> None:
         """Validate a blueprint JSON file against the schema.
 
         Parameters
@@ -225,10 +234,11 @@ class BlueprintJsonSerializer(BaseSerializer):
         """
         with open(filepath, "r") as f:
             data = json.load(f)
-        BlueprintJsonSerializer.validate(data)
 
-    @staticmethod
-    def from_file(filepath: str, validate: bool = True) -> Blueprint:
+        cls.validate(data)
+
+    @classmethod
+    def from_file(cls, filepath: str, validate: bool = True) -> Blueprint:
         """Loads a blueprint from a Blueprint JSON file.
 
         Parameters
@@ -251,7 +261,7 @@ class BlueprintJsonSerializer(BaseSerializer):
 
         # If we reach here, it means it's a "Blueprint JSON" file format, not a COMPAS-serialized Blueprint
         if validate:
-            BlueprintJsonSerializer.validate_file(filepath)
+            cls.validate_file(filepath)
 
         blueprint = BaseSerializer.BlueprintSerializer.from_dict(data)
         blueprint.validate()

@@ -15,7 +15,7 @@ def sample_blueprint_json():
     return {
         "id": "test-proc-1",
         "name": "Test Blueprint",
-        "version": "0.1.0",
+        "version": "1.0.0",
         "description": "A sample blueprint for testing.",
         "tasks": [
             {"id": "TASK_A", "type": "system.start", "description": "First task"},
