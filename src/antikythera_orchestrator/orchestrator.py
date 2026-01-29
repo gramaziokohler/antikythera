@@ -537,11 +537,7 @@ class Orchestrator:
                     return True
             except Exception as e:
                 LOG.error(f"Error evaluating condition '{condition}' for task {task.id}: {e}")
-                # If error in condition (e.g. variable not found), we treat it as skipped-with-error?
-                # Or we let it proceed? Proceeding might crash task.
-                # Getting skipped prevents crash but might hide logic error.
-                # Let's return True (skip) to be safe.
-                return True
+                raise
 
         # 2. Implicit Skip Propagation (if all parents were skipped)
         fqn_task_id = _create_global_id(blueprint_id, task)
