@@ -33,10 +33,6 @@ def test_roundtrip_blueprint():
             assert data["id"] == "test_bp"
             assert "dtype" not in data
 
-            # Check inner compas object
-            # Tasks logic in __data__ flattening is hand-rolled in Task.__data__
-            # so it matches schema.
-            # But values inside should utilize compas serialization
             tasks = data["tasks"]
             start_task = next(t for t in tasks if t["id"] == "start")
             output_val = start_task["outputs"][0]["value"]

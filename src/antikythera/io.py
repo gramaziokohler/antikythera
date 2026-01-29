@@ -19,7 +19,165 @@ from antikythera.models.blueprints import TaskState
 SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "models", "schema.json")
 
 
-class BlueprintJsonSerializer:
+class BaseSerializer:
+    class TaskIOSerializer:
+        @staticmethod
+        def to_dict(obj: Any) -> Dict[str, Any]:
+            data = {
+                "name": obj.name,
+                "value": obj.value,
+                "type": obj.type,
+                "description": obj.description,
+            }
+            return {k: v for k, v in data.items() if v is not None}
+
+    class TaskInputSerializer:
+        @staticmethod
+        def to_dict(obj: TaskInput) -> Dict[str, Any]:
+            data = BaseSerializer.TaskIOSerializer.to_dict(obj)
+            if obj.get_from:
+                data["get_from"] = obj.get_from
+            return data
+
+        @staticmethod
+        def from_dict(data: Dict[str, Any]) -> TaskInput:
+            return TaskInput(**data)
+
+    class TaskOutputSerializer:
+        @staticmethod
+        def to_dict(obj: TaskOutput) -> Dict[str, Any]:
+            data = BaseSerializer.TaskIOSerializer.to_dict(obj)
+            if obj.set_to:
+                data["set_to"] = obj.set_to
+            return data
+
+        @staticmethod
+        def from_dict(data: Dict[str, Any]) -> TaskOutput:
+            return TaskOutput(**data)
+
+    class TaskParamSerializer:
+        @staticmethod
+        def to_dict(obj: TaskParam) -> Dict[str, Any]:
+            return BaseSerializer.TaskIOSerializer.to_dict(obj)
+
+        @staticmethod
+        def from_dict(data: Dict[str, Any]) -> TaskParam:
+            return TaskParam(**data)
+
+    class DependencySerializer:
+        @staticmethod
+        def to_dict(obj: Dependency) -> Dict[str, Any]:
+            return {"id": obj.id, "type": obj.type}
+
+        @staticmethod
+        def from_dict(data: Dict[str, Any]) -> Dependency:
+            if "type" in data:
+                data["type"] = DependencyType(data["type"])
+            return Dependency(**data)
+
+    class TaskSerializer:
+        @staticmethod
+        def to_dict(task: Task) -> Dict[str, Any]:
+            data = {
+                "id": task.id,
+                "type": task.type,
+                "description": task.description,
+                "condition": task.condition,
+            }
+
+            if task.inputs:
+                data["inputs"] = [BaseSerializer.TaskInputSerializer.to_dict(i) for i in task.inputs]
+            if task.outputs:
+                data["outputs"] = [BaseSerializer.TaskOutputSerializer.to_dict(o) for o in task.outputs]
+            if task.params:
+                data["params"] = [BaseSerializer.TaskParamSerializer.to_dict(p) for p in task.params]
+            if task.depends_on:
+                data["depends_on"] = [BaseSerializer.DependencySerializer.to_dict(d) for d in task.depends_on]
+
+            return {k: v for k, v in data.items() if v is not None}
+
+        @staticmethod
+        def from_dict(data: Dict[str, Any]) -> Task:
+            """Parses a task definition dictionary into a Task object."""
+            raw_inputs = data.get("inputs", [])
+            inputs = [BaseSerializer.TaskInputSerializer.from_dict(i) for i in raw_inputs]
+
+            raw_outputs = data.get("outputs", [])
+            outputs = [BaseSerializer.TaskOutputSerializer.from_dict(o) for o in raw_outputs]
+
+            raw_params = data.get("params", [])
+            params = [BaseSerializer.TaskParamSerializer.from_dict(p) for p in raw_params]
+
+            raw_dependencies = data.get("depends_on", [])
+            dependencies = [BaseSerializer.DependencySerializer.from_dict(d) for d in raw_dependencies]
+
+            id = data["id"]
+            state = data.get("state", TaskState.PENDING)
+            if isinstance(state, str):
+                try:
+                    state = TaskState(state)
+                except ValueError:
+                    state = TaskState.PENDING
+
+            return Task(
+                id=id,
+                type=data["type"],
+                description=data.get("description"),
+                condition=data.get("condition"),
+                inputs=inputs,
+                outputs=outputs,
+                params=params,
+                depends_on=dependencies,
+                state=state,
+            )
+
+    class BlueprintSerializer:
+        @staticmethod
+        def to_dict(blueprint: Blueprint) -> Dict[str, Any]:
+            data = {
+                "id": blueprint.id,
+                "name": blueprint.name,
+                "version": blueprint.version,
+                "description": blueprint.description,
+                "tasks": [BaseSerializer.TaskSerializer.to_dict(t) for t in blueprint.tasks],
+            }
+            return {k: v for k, v in data.items() if v is not None}
+
+        @staticmethod
+        def from_dict(data: Dict[str, Any]) -> Blueprint:
+            task_defs = data.get("tasks", [])
+            tasks = []
+            for task_def in task_defs:
+                if isinstance(task_def, Task):
+                    tasks.append(task_def)
+                else:
+                    tasks.append(BaseSerializer.TaskSerializer.from_dict(task_def))
+
+            return Blueprint(
+                id=data["id"],
+                name=data["name"],
+                version=data.get("version"),
+                description=data.get("description"),
+                tasks=tasks,
+            )
+
+    @staticmethod
+    def serialize(obj: Any) -> Any:
+        serializers = {
+            Blueprint: BaseSerializer.BlueprintSerializer,
+            Task: BaseSerializer.TaskSerializer,
+            TaskInput: BaseSerializer.TaskInputSerializer,
+            TaskOutput: BaseSerializer.TaskOutputSerializer,
+            TaskParam: BaseSerializer.TaskParamSerializer,
+            Dependency: BaseSerializer.DependencySerializer,
+        }
+        serializer = serializers.get(type(obj))
+        if serializer:
+            return serializer.to_dict(obj)
+        raise ValueError(f"No serializer found for type {type(obj)}")
+
+
+class BlueprintJsonSerializer(BaseSerializer):
     """Handles Input/Output for Blueprint JSON files (Read, Write, Validate)."""
 
     @staticmethod
@@ -95,120 +253,11 @@ class BlueprintJsonSerializer:
         if validate:
             BlueprintJsonSerializer.validate_file(filepath)
 
-        task_defs = data.get("tasks", [])
-        tasks = []
-        for task_def in task_defs:
-            if isinstance(task_def, Task):
-                tasks.append(task_def)
-            else:
-                tasks.append(BlueprintJsonSerializer.parse_task(task_def))
-
-        blueprint = Blueprint(
-            id=data["id"],
-            name=data["name"],
-            version=data.get("version"),
-            description=data.get("description"),
-            tasks=tasks,
-        )
-
-        # Validate effectively checks the graph structure
+        blueprint = BaseSerializer.BlueprintSerializer.from_dict(data)
         blueprint.validate()
         return blueprint
 
     @staticmethod
-    def _clean_data(data: Any) -> Any:
-        """Recursively remove keys with None values or empty lists, and remove 'state' key."""
-        if isinstance(data, dict):
-            new_data = {}
-            for k, v in data.items():
-                if k == "state":
-                    continue
-
-                cleaned_v = BlueprintJsonSerializer._clean_data(v)
-
-                if cleaned_v is None:
-                    continue
-
-                if isinstance(cleaned_v, list) and len(cleaned_v) == 0:
-                    continue
-
-                new_data[k] = cleaned_v
-            return new_data
-
-        elif isinstance(data, list):
-            return [BlueprintJsonSerializer._clean_data(v) for v in data]
-        else:
-            return data
-
-    @staticmethod
     def to_file(blueprint: Blueprint, filepath: str, pretty: bool = True) -> None:
-        # We manually use __data__ to ensure we write the raw JSON structure
-        # instead of a wrapped COMPAS object {"dtype": ..., "data": ...}
-        # compas.data.json_dump will recursively handle inner COMPAS objects in values
-        data = BlueprintJsonSerializer._clean_data(blueprint.__data__)
+        data = BaseSerializer.serialize(blueprint)
         json_dump(data, filepath, pretty=pretty)
-
-    @staticmethod
-    def parse_task(task_def: Dict[str, Any]) -> Task:
-        """Parses a task definition dictionary into a Task object."""
-
-        id = task_def["id"]
-
-        # Handle inputs
-        inputs = []
-        raw_inputs = task_def.get("inputs", [])
-        if not isinstance(raw_inputs, list):
-            raise ValueError(f"Task '{id}' inputs must be a list of dictionaries.")
-        for item in raw_inputs:
-            if isinstance(item, dict):
-                inputs.append(TaskInput(**item))
-            else:
-                raise ValueError(f"Task '{id}' input item must be a dictionary. Got {type(item)}")
-
-        # Handle outputs
-        outputs = []
-        raw_outputs = task_def.get("outputs", [])
-        if not isinstance(raw_outputs, list):
-            raise ValueError(f"Task '{id}' outputs must be a list of dictionaries.")
-        for item in raw_outputs:
-            if isinstance(item, dict):
-                outputs.append(TaskOutput(**item))
-            else:
-                raise ValueError(f"Task '{id}' output item must be a dictionary.")
-
-        # Handle Params
-        params = []
-        raw_params = task_def.get("params", [])
-        if not isinstance(raw_params, list):
-            raise ValueError(f"Task '{id}' params must be a list of dictionaries.")
-        for item in raw_params:
-            if isinstance(item, dict):
-                params.append(TaskParam(**item))
-            else:
-                raise ValueError(f"Task '{id}' param item must be a dictionary.")
-
-        dependencies_defs = task_def.get("depends_on", [])
-        dependencies = []
-        for dep_data in dependencies_defs:
-            if "type" in dep_data:
-                dep_data["type"] = DependencyType(dep_data["type"])
-            dependencies.append(Dependency(**dep_data))
-
-        state = task_def.get("state", TaskState.PENDING)
-        if isinstance(state, str):
-            try:
-                state = TaskState(state)
-            except ValueError:
-                state = TaskState.PENDING
-
-        return Task(
-            id=id,
-            type=task_def["type"],
-            description=task_def.get("description"),
-            condition=task_def.get("condition"),
-            inputs=inputs,
-            outputs=outputs,
-            params=params,
-            depends_on=dependencies,
-            state=state,
-        )
