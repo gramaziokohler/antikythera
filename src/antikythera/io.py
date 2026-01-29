@@ -1,6 +1,10 @@
+import json
+import os
 from typing import Any
 from typing import Dict
 
+import jsonschema
+from compas.data import json_dump
 from compas.data import json_load
 
 from antikythera.models.blueprints import Blueprint
@@ -12,18 +16,69 @@ from antikythera.models.blueprints import TaskOutput
 from antikythera.models.blueprints import TaskParam
 from antikythera.models.blueprints import TaskState
 
+SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "models", "schema.json")
 
-class BlueprintJsonParser:
-    """Parses blueprint definitions from Blueprint JSON files."""
+
+class BlueprintJsonSerializer:
+    """Handles Input/Output for Blueprint JSON files (Read, Write, Validate)."""
 
     @staticmethod
-    def from_file(filepath: str) -> Blueprint:
+    def load_schema() -> Dict[str, Any]:
+        """Load the JSON schema for Antikythera Blueprints."""
+        if not os.path.exists(SCHEMA_FILE):
+            raise FileNotFoundError(f"Schema file not found at {SCHEMA_FILE}")
+        with open(SCHEMA_FILE, "r") as f:
+            return json.load(f)
+
+    @staticmethod
+    def validate(data: Dict[str, Any]) -> None:
+        """Validate a blueprint dictionary against the schema.
+
+        Parameters
+        ----------
+        data : Dict[str, Any]
+            The blueprint data to validation.
+
+        Raises
+        ------
+        jsonschema.ValidationError
+            If the data does not match the schema.
+        """
+        schema = BlueprintJsonSerializer.load_schema()
+        jsonschema.validate(instance=data, schema=schema)
+
+    @staticmethod
+    def validate_file(filepath: str) -> None:
+        """Validate a blueprint JSON file against the schema.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the JSON file.
+
+        Raises
+        ------
+        jsonschema.ValidationError
+            If the data does not match the schema.
+        FileNotFoundError
+            If the file does not exist.
+        json.JSONDecodeError
+            If the file is not valid JSON.
+        """
+        with open(filepath, "r") as f:
+            data = json.load(f)
+        BlueprintJsonSerializer.validate(data)
+
+    @staticmethod
+    def from_file(filepath: str, validate: bool = True) -> Blueprint:
         """Loads a blueprint from a Blueprint JSON file.
 
         Parameters
         ----------
         filepath : str
             The path to the Blueprint JSON file.
+        validate : bool, optional
+            Whether to validate the file against the schema, by default True.
 
         Returns
         -------
@@ -36,13 +91,17 @@ class BlueprintJsonParser:
         if isinstance(data, Blueprint):
             return data
 
+        # If we reach here, it means it's a "Blueprint JSON" file format, not a COMPAS-serialized Blueprint
+        if validate:
+            BlueprintJsonSerializer.validate_file(filepath)
+
         task_defs = data.get("tasks", [])
         tasks = []
         for task_def in task_defs:
             if isinstance(task_def, Task):
                 tasks.append(task_def)
             else:
-                tasks.append(BlueprintJsonParser.parse_task(task_def))
+                tasks.append(BlueprintJsonSerializer.parse_task(task_def))
 
         blueprint = Blueprint(
             id=data["id"],
@@ -55,6 +114,39 @@ class BlueprintJsonParser:
         # Validate effectively checks the graph structure
         blueprint.validate()
         return blueprint
+
+    @staticmethod
+    def _clean_data(data: Any) -> Any:
+        """Recursively remove keys with None values or empty lists, and remove 'state' key."""
+        if isinstance(data, dict):
+            new_data = {}
+            for k, v in data.items():
+                if k == "state":
+                    continue
+
+                cleaned_v = BlueprintJsonSerializer._clean_data(v)
+
+                if cleaned_v is None:
+                    continue
+
+                if isinstance(cleaned_v, list) and len(cleaned_v) == 0:
+                    continue
+
+                new_data[k] = cleaned_v
+            return new_data
+
+        elif isinstance(data, list):
+            return [BlueprintJsonSerializer._clean_data(v) for v in data]
+        else:
+            return data
+
+    @staticmethod
+    def to_file(blueprint: Blueprint, filepath: str, pretty: bool = True) -> None:
+        # We manually use __data__ to ensure we write the raw JSON structure
+        # instead of a wrapped COMPAS object {"dtype": ..., "data": ...}
+        # compas.data.json_dump will recursively handle inner COMPAS objects in values
+        data = BlueprintJsonSerializer._clean_data(blueprint.__data__)
+        json_dump(data, filepath, pretty=pretty)
 
     @staticmethod
     def parse_task(task_def: Dict[str, Any]) -> Task:

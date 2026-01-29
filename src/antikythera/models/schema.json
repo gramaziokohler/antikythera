@@ -1,0 +1,185 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "http://gramaziokohler.github.io/antikythera/blueprint.schema.json",
+    "title": "Antikythera Blueprint",
+    "description": "Schema for Antikythera Blueprint files",
+    "type": "object",
+    "required": [
+        "id",
+        "name",
+        "version"
+    ],
+    "properties": {
+        "id": {
+            "type": "string",
+            "description": "Unique identifier for the blueprint"
+        },
+        "name": {
+            "type": "string",
+            "description": "A human-readable name for the blueprint"
+        },
+        "version": {
+            "type": "string",
+            "description": "The version of the blueprint schema"
+        },
+        "description": {
+            "type": "string",
+            "description": "A human-readable description of the blueprint"
+        },
+        "tasks": {
+            "type": "array",
+            "description": "A list of tasks that make up the blueprint",
+            "items": {
+                "$ref": "#/definitions/Task"
+            }
+        }
+    },
+    "definitions": {
+        "Task": {
+            "type": "object",
+            "required": [
+                "id",
+                "type"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Unique identifier for the task"
+                },
+                "type": {
+                    "type": "string",
+                    "description": "The type of the task"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "A human-readable description of the task"
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A condition expression for the task execution"
+                },
+                "inputs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/TaskInput"
+                    }
+                },
+                "outputs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/TaskOutput"
+                    }
+                },
+                "params": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/TaskParam"
+                    }
+                },
+                "depends_on": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/Dependency"
+                    }
+                },
+                "state": {
+                    "$ref": "#/definitions/TaskState"
+                }
+            }
+        },
+        "TaskInput": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/TaskIO"
+                },
+                {
+                    "properties": {
+                        "get_from": {
+                            "type": "string",
+                            "description": "Key to retrieve the input value from"
+                        }
+                    }
+                }
+            ]
+        },
+        "TaskOutput": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/TaskIO"
+                },
+                {
+                    "properties": {
+                        "set_to": {
+                            "type": "string",
+                            "description": "Key to set the output value to"
+                        }
+                    }
+                }
+            ]
+        },
+        "TaskParam": {
+            "$ref": "#/definitions/TaskIO"
+        },
+        "TaskIO": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name of the IO item"
+                },
+                "value": {
+                    "description": "Value of the IO item (can be any type)"
+                },
+                "type": {
+                    "type": "string",
+                    "description": "Type of the IO item"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Description of the IO item"
+                }
+            }
+        },
+        "Dependency": {
+            "type": "object",
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "ID of the task to depend on"
+                },
+                "type": {
+                    "$ref": "#/definitions/DependencyType"
+                }
+            }
+        },
+        "DependencyType": {
+            "type": "string",
+            "enum": [
+                "FS",
+                "FF",
+                "SS",
+                "SF"
+            ],
+            "default": "FS"
+        },
+        "TaskState": {
+            "type": "string",
+            "enum": [
+                "PENDING",
+                "READY",
+                "RUNNING",
+                "SUCCEEDED",
+                "FAILED",
+                "SKIPPED",
+                "UNSPECIFIED"
+            ],
+            "default": "PENDING"
+        }
+    }
+}

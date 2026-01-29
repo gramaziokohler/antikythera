@@ -122,7 +122,7 @@ class Task(Data):
             "inputs": [task_input.__data__ for task_input in self.inputs],
             "outputs": [task_output.__data__ for task_output in self.outputs],
             "params": [task_param.__data__ for task_param in self.params],
-            "depends_on": self.depends_on,
+            "depends_on": [d.__data__ for d in self.depends_on],
             "state": self.state,
         }
 
