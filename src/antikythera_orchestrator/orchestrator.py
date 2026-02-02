@@ -513,6 +513,7 @@ class Orchestrator:
     def _get_model_if_available(self) -> Tuple[Optional[Model], Any]:
         model_id = self.session.params.get("model_id")
         model: Optional[Model] = None
+        nesting = None
         if model_id is not None:
             with ModelStorage() as storage:
                 model = storage.get_model(model_id)
