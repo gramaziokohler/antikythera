@@ -12,10 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New explicit accessor methods for `Task` values (`get_input_value`, `get_output_value`, `get_param_value`, `set_input_value`, `set_output_value`, `set_param_value`).
 - New JSON Schema for strictly validating Blueprint files.
 - `BlueprintJsonParser` now supports full validation and symmetric read/write of Blueprints.
+- Added `proto` file to release artifacts
 - Added paging to sessions list API.
 
 ### Changed
 - Refactored `Task` class to enforce a single data access pattern.
+- Changed build system to `hatchling` to hook the protobuf compilation into the build process.
 
 ### Removed
 - `Task.input_values` and `Task.param_values` convenience properties have been removed to prevent ambiguity.
