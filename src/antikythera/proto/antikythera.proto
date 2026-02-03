@@ -35,6 +35,9 @@ message TaskAssignmentMessage {
 
   // Optional: execution mode
   ExecutionMode execution_mode = 7;
+
+  // Optional: additional task context map
+  map<string, compas_pb.data.AnyData> context = 8;
 }
 
 // Task claim request sent by agents to orchestrator

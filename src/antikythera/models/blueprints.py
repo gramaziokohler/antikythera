@@ -138,6 +138,7 @@ class Task(Data):
         params: List[TaskParam] = None,
         depends_on: List[Dependency] = None,
         state: TaskState = TaskState.PENDING,
+        context: Dict[str, Any] = None,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -150,6 +151,7 @@ class Task(Data):
         self.params = params or []
         self.depends_on = depends_on or []
         self.state = TaskState(state)
+        self.context = context or {}
 
     def get_input(self, name: str) -> Optional[TaskInput]:
         for task_input in self.inputs:

@@ -54,7 +54,7 @@ class TaskError(Data):
     def __data__(self) -> Dict[str, Any]:
         return {"code": self.code, "message": self.message, "details": self.details}
 
-    def __init__(self, code: str, message: str, details: Optional[Any] = None) -> Dict[str, Any]:
+    def __init__(self, code: str, message: str, details: Optional[Any] = None) -> None:
         self.code = code
         self.message = message
         self.details = details
@@ -74,6 +74,7 @@ class TaskAssignmentMessage(Data):
             "inputs": self.inputs,
             "output_keys": self.output_keys,
             "params": self.params,
+            "context": self.context,
             "timestamp": self.timestamp.isoformat(),
             "execution_mode": self.execution_mode,
         }
@@ -85,6 +86,7 @@ class TaskAssignmentMessage(Data):
         inputs: Dict[str, Any] = None,
         output_keys: list[str] = None,
         params: Dict[str, Any] = None,
+        context: Dict[str, Any] = None,
         timestamp: datetime = None,
         execution_mode: ExecutionMode = ExecutionMode.EXCLUSIVE,
     ) -> None:
@@ -94,6 +96,7 @@ class TaskAssignmentMessage(Data):
         self.inputs = inputs or {}
         self.output_keys = output_keys or []
         self.params = params or {}
+        self.context = context or {}
         self.timestamp = timestamp or datetime.now(timezone.utc)
         self.execution_mode = execution_mode
 
@@ -105,6 +108,7 @@ class TaskAssignmentMessage(Data):
             f"inputs={self.inputs}, "
             f"output_keys={self.output_keys}, "
             f"params={self.params}, "
+            f"context={self.context}, "
             f"timestamp={self.timestamp}, "
             f"execution_mode={self.execution_mode})"
         )

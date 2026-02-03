@@ -306,7 +306,8 @@ class Orchestrator:
     def __init__(self, session: BlueprintSession, broker_host="127.0.0.1", broker_port=1883) -> None:
         super(Orchestrator, self).__init__()
         self.session: BlueprintSession = session
-        self.composite_to_inner_blueprint_map: dict[str, str] = {}
+        self.composite_to_inner_blueprint_map: dict[str, str] = {}  # TODO: move to BlueprintSession maybe?
+        self.blueprint_contexts: dict[str, Any] = {}  # TODO: move to BlueprintSession maybe?
         self.graph: Graph = None
         self._completion_event = threading.Event()
 
@@ -364,16 +365,7 @@ class Orchestrator:
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
         """
-        CK: this is a speculative change as I think we might need to keep track of multiple orchestrator
-        instances and, potentially, not allow multiple running at the same time. due to the event-driven nature
-        multiple running orchestrators is a pain.
-
-        GC:
-        I think we should allow this. Not in this PR, but multiple orchestrators are not problematic.
-        It's only two callbacks (on_task_completed and on_task_claim) that would need to include an identifier that
-        allows the orchestrator to know if it's a message for itself or not (I guess the bsid, since we should not have
-        two instances of the same bp session id running at the same time for sure)
-
+        Registers an orchestrator instance and tracks active instances.
         """
         with cls._LOCK:
             cls._INSTANCES.append(instance)
@@ -510,6 +502,14 @@ class Orchestrator:
             else:
                 self.session_storage.set(outer_blueprint_id, mapped_key, value)
 
+    def _add_composite_blueprint_context(self, blueprint_id: str, task: Task) -> None:
+        # make context of composite tasks available to the tasks in the inner blueprint they invoke
+        context = dict(element_id=task.try_get_element_id())
+        self.blueprint_contexts[blueprint_id] = context
+
+    def _get_composite_blueprint_context(self, blueprint_id: str) -> Optional[Dict]:
+        return self.blueprint_contexts.get(blueprint_id)
+
     def _get_model_if_available(self) -> Tuple[Optional[Model], Any]:
         model_id = self.session.params.get("model_id")
         model: Optional[Model] = None
@@ -606,7 +606,9 @@ class Orchestrator:
                 if nesting:
                     task.set_param_value("nesting", nesting)
 
-                # TODO: what do we do if no agent even claims the task.. should there be some timeout?
+                context = self._get_composite_blueprint_context(blueprint_id)
+
+                # TODO: what do we do if no agent even claims the task.. should there be some timeout? YES!
                 task.state = TaskState.READY
                 self.task_start_publisher.publish(
                     TaskAssignmentMessage(
@@ -616,6 +618,7 @@ class Orchestrator:
                         output_keys=outputs_to_keys(task.outputs),
                         params=params_to_dict(task.params),
                         execution_mode=execution_mode,
+                        context=context,
                     )
                 )
             except Exception as e:
@@ -724,6 +727,7 @@ class Orchestrator:
 
                     if inner_bp_id:
                         self.composite_to_inner_blueprint_map[fqn_task_id] = inner_bp_id
+                        self._add_composite_blueprint_context(inner_bp_id, task)
 
         LOG.debug(f"rebuilt blueprint map: {self.composite_to_inner_blueprint_map}")
 
@@ -790,6 +794,9 @@ class Orchestrator:
                     fqn_task_id = _create_global_id(blueprint.id, task)
                     self.composite_to_inner_blueprint_map[fqn_task_id] = inner_blueprint.id
 
+                    if task.is_dynamic:
+                        self._add_composite_blueprint_context(inner_blueprint.id, task)
+
         # Update session storage with inner blueprint IDs
         self.session_storage.update_session_blueprints(list(self.session.inner_blueprints.keys()))
         # Update session storage with the expanded blueprint
@@ -833,9 +840,6 @@ class Orchestrator:
             blueprint_param["dynamic"]["blueprint_id"] = expanded_blueprint_id
 
             LOG.debug(f"Loaded dynamic inner blueprint with new ID {expanded_blueprint_id} for task {task.id}")
-
-            # We need to store an input param into the expanded blueprint to pass on the element details
-            self.session_storage.set(expanded_blueprint_id, "element", element)
 
             return blueprint
 

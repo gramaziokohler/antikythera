@@ -27,6 +27,8 @@ from antikythera_orchestrator.storage import SessionStorage
 class DynamicExpansionTestAgent(Agent):
     @tool(name="process")
     def process_element(self, task: Task) -> Dict[str, Any]:
+        guid = task.try_get_element_id()
+        print(f"#### Processing element with GUID: {guid}")
         return {"processed": True}
 
 
@@ -71,6 +73,38 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
 
     outer_start >> dynamic_task >> outer_end
 
+    """
+    Before expansion
+
+    test_outer_bp
+    ├── start (system.start)
+    ├── dynamic_process (system.composite)
+           (test_inner_bp)
+    ├───── inner_start (system.start)
+    ├───── mark_processed (test_dynamic.process)
+    ├───── inner_end (system.end)
+    └── end (system.end)
+
+    """
+    """
+    After expansion
+
+    test_outer_bp
+    ├── start (system.start)
+    ├── dynamic_process_0 (system.composite)
+          (test_inner_bp_xxx)
+    ├───── inner_start (system.start)
+    ├───── mark_processed (test_dynamic.process)
+    ├───── inner_end (system.end)
+    ├── dynamic_process_1 (system.composite)
+          (test_inner_bp_xxx)
+    ├───── inner_start (system.start)
+    ├───── mark_processed (test_dynamic.process)
+    ├───── inner_end (system.end)
+    └── end (system.end)
+
+    """
+
     outer_blueprint = Blueprint(id="test_outer_bp", name="Test Outer Dynamic Blueprint", tasks=[outer_start, dynamic_task, outer_end])
 
     session = BlueprintSession(
@@ -98,6 +132,7 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
 
     task_0 = next(t for t in graph_tasks if t.id == "dynamic_process_0")
     task_1 = next(t for t in graph_tasks if t.id == "dynamic_process_1")
+
     assert str(task_0.try_get_element_id()) == str(element1.guid)
     assert str(task_1.try_get_element_id()) == str(element2.guid)
 
@@ -288,7 +323,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
         def process_element(self, task: Task) -> Dict[str, Any]:
             # Wait for event
             model = task.get_param_value("model")
-            element_guid = task.get_input_value("element", {}).get("element_id")
+            element_guid = task.context["element_id"]
             element = model._elements[element_guid]
             if element.name == "Element 2":
                 blocking_event.wait(timeout=5)
