@@ -247,6 +247,8 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
         params = session_info.get("params", {})
         inner_blueprint_ids = session_info.get("inner_blueprint_ids", [])
         blueprint = session_info["blueprint"]
+        composite_to_inner_blueprint_map = session_info.get("composite_to_inner_blueprint_map", {})
+        blueprint_contexts = session_info.get("blueprint_contexts", {})
 
         inner_blueprints = {}
         for inner_id in inner_blueprint_ids:
@@ -258,6 +260,8 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
         state=state,
         params=params,
         inner_blueprints=inner_blueprints,
+        composite_to_inner_blueprint_map=composite_to_inner_blueprint_map,
+        blueprint_contexts=blueprint_contexts,
     )
 
 
@@ -309,9 +313,9 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     )
 
     orchestrator = cleanup_manager.register(Orchestrator(session))
-    original_map = dict(orchestrator.composite_to_inner_blueprint_map)
+    original_map = dict(orchestrator.session.composite_to_inner_blueprint_map)
     # The map will contain the expanded tasks, not the original dynamic_process task
-    # assert orchestrator.composite_to_inner_blueprint_map == {"test_outer_bp_pr.dynamic_process": "test_inner_bp_pr"}
+    # assert orchestrator.session.composite_to_inner_blueprint_map == {"test_outer_bp_pr.dynamic_process": "test_inner_bp_pr"}
 
     # 5. Start Execution with Blocking Agent
     launcher = cleanup_manager.register(AgentLauncher())
@@ -354,7 +358,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     session = _get_bp_session_from_storage("test_session_pause_resume_ds")
     orchestrator = cleanup_manager.register(Orchestrator(session))
 
-    assert orchestrator.composite_to_inner_blueprint_map == original_map
+    assert orchestrator.session.composite_to_inner_blueprint_map == original_map
 
     orchestrator.start()
 

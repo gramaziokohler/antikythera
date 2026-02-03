@@ -306,8 +306,6 @@ class Orchestrator:
     def __init__(self, session: BlueprintSession, broker_host="127.0.0.1", broker_port=1883) -> None:
         super(Orchestrator, self).__init__()
         self.session: BlueprintSession = session
-        self.composite_to_inner_blueprint_map: dict[str, str] = {}  # TODO: move to BlueprintSession maybe?
-        self.blueprint_contexts: dict[str, Any] = {}  # TODO: move to BlueprintSession maybe?
         self.graph: Graph = None
         self._completion_event = threading.Event()
 
@@ -334,11 +332,6 @@ class Orchestrator:
         existing_session = self.session_storage.get_session_info()
         if existing_session:
             self.session.state = BlueprintSessionState(existing_session["state"])
-
-            # NOTE: this is normally done as part of the pre-processing (expansion) of the blueprint(s)
-            # but sessions loaded from storage are already expanded, the missing step is rebuilding the composite task to inner blueprint map
-            self._rebuild_composite_map()
-
             LOG.info(f"Resuming session {self.session.bsid} with state {self.session.state}")
         else:
             self.session_storage.register_session(self.session.blueprint.id, self.session.params, state=self.session.state)
@@ -483,7 +476,7 @@ class Orchestrator:
 
     def _map_outputs_to_outer_session(self, outer_blueprint_id: str, task: Task):
         """maps outputs from an inner blueprint to the session storage namespace of the outer blueprint."""
-        inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(outer_blueprint_id, task)]
+        inner_blueprint_id = self.session.composite_to_inner_blueprint_map[_create_global_id(outer_blueprint_id, task)]
 
         element = None
         if task.is_dynamically_expanded:
@@ -505,10 +498,10 @@ class Orchestrator:
     def _add_composite_blueprint_context(self, blueprint_id: str, task: Task) -> None:
         # make context of composite tasks available to the tasks in the inner blueprint they invoke
         context = dict(element_id=task.try_get_element_id())
-        self.blueprint_contexts[blueprint_id] = context
+        self.session.blueprint_contexts[blueprint_id] = context
 
     def _get_composite_blueprint_context(self, blueprint_id: str) -> Optional[Dict]:
-        return self.blueprint_contexts.get(blueprint_id)
+        return self.session.blueprint_contexts.get(blueprint_id)
 
     def _get_model_if_available(self) -> Tuple[Optional[Model], Any]:
         model_id = self.session.params.get("model_id")
@@ -592,7 +585,7 @@ class Orchestrator:
 
                 # Handle inputs for inner blueprints
                 if task.is_composite:
-                    inner_blueprint_id = self.composite_to_inner_blueprint_map[_create_global_id(blueprint_id, task)]
+                    inner_blueprint_id = self.session.composite_to_inner_blueprint_map[_create_global_id(blueprint_id, task)]
                     # NOTE: See above for why set_all() is commented out
                     # self.session_storage.set_all(inner_blueprint_id, inputs)
                     for key, value in inputs.items():
@@ -707,30 +700,6 @@ class Orchestrator:
         else:
             LOG.info(f"Rejected claim for task {task_id} from agent {message.agent_id}. Task state is {task.state}")
 
-    def _rebuild_composite_map(self) -> None:
-        """Rebuilds the composite to inner blueprint map from loaded session data."""
-        all_blueprints = [self.session.blueprint] + list(self.session.inner_blueprints.values())
-
-        for blueprint in all_blueprints:
-            for task in blueprint.tasks:
-                if task.is_composite:
-                    fqn_task_id = _create_global_id(blueprint.id, task)
-
-                    inner_bp_id = None
-                    bp_params = task.get_param_value("blueprint", {})
-
-                    if "static" in bp_params:
-                        inner_bp_id = bp_params["static"]
-                    elif "dynamic" in bp_params:
-                        # For dynamic tasks that were expanded, blueprint_id points to the inner specific blueprint
-                        inner_bp_id = bp_params["dynamic"].get("blueprint_id")
-
-                    if inner_bp_id:
-                        self.composite_to_inner_blueprint_map[fqn_task_id] = inner_bp_id
-                        self._add_composite_blueprint_context(inner_bp_id, task)
-
-        LOG.debug(f"rebuilt blueprint map: {self.composite_to_inner_blueprint_map}")
-
     def _flush_scheduler_queue(self) -> None:
         # Drains the scheduler queue and resets pending tasks to PENDING state
         if not self.scheduler or self.scheduler.queue.empty():
@@ -792,7 +761,7 @@ class Orchestrator:
                     blueprint_queue.put(inner_blueprint)
 
                     fqn_task_id = _create_global_id(blueprint.id, task)
-                    self.composite_to_inner_blueprint_map[fqn_task_id] = inner_blueprint.id
+                    self.session.composite_to_inner_blueprint_map[fqn_task_id] = inner_blueprint.id
 
                     if task.is_dynamic:
                         self._add_composite_blueprint_context(inner_blueprint.id, task)
@@ -801,6 +770,8 @@ class Orchestrator:
         self.session_storage.update_session_blueprints(list(self.session.inner_blueprints.keys()))
         # Update session storage with the expanded blueprint
         self.session_storage.update_session_blueprint_state(self.session.blueprint)
+        # store the mappings of composite task IDs to inner blueprints as well as the blueprint contexts
+        self.session_storage.update_session_maps(self.session.composite_to_inner_blueprint_map, self.session.blueprint_contexts)
 
         # store session blueprints
         # these are session specific copies of the blueprints, they may have been modified during preprocessing
@@ -809,9 +780,7 @@ class Orchestrator:
         for inner_blueprint in self.session.inner_blueprints.values():
             self.session_storage.store_blueprint(inner_blueprint)
 
-        LOG.debug(f"expanded blueprint map: {self.composite_to_inner_blueprint_map}")
-
-        # json_dump(self.session, f"orchestrator_preprocessed_session_{self.session.bsid}.json")
+        LOG.debug(f"expanded blueprint map: {self.session.composite_to_inner_blueprint_map}")
 
     def _load_inner_blueprint(self, task: Task) -> Blueprint:
         blueprint_param = task.get_param_value("blueprint")
@@ -861,10 +830,10 @@ class Orchestrator:
             for task in blueprint.tasks:
                 fqn_task_id = _create_global_id(blueprint.id, task)
 
-                if fqn_task_id in self.composite_to_inner_blueprint_map:
+                if fqn_task_id in self.session.composite_to_inner_blueprint_map:
                     # 1. Modify `task` to point to inner blueprint's end node as FF
                     # 2. Modify start task of inner_blueprint, to have an SS dependency on THIS `task`
-                    inner_blueprint_id = self.composite_to_inner_blueprint_map[fqn_task_id]
+                    inner_blueprint_id = self.session.composite_to_inner_blueprint_map[fqn_task_id]
                     inner_blueprint = self.session.inner_blueprints[inner_blueprint_id]
 
                     # Find start/end task of inner blueprint

@@ -198,6 +198,9 @@ class SessionStorage:
     def update_session_blueprint_state(self, blueprint: Blueprint) -> None:
         self._update_session_data({"blueprint": blueprint})
 
+    def update_session_maps(self, composite_map: dict[str, str], contexts: dict[str, Any]) -> None:
+        self._update_session_data({"composite_to_inner_blueprint_map": composite_map, "blueprint_contexts": contexts})
+
     def update_session_ended(self) -> None:
         self._update_session_data({"ended_at": datetime.datetime.now(datetime.timezone.utc).isoformat()})
 

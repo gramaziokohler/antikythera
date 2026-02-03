@@ -381,6 +381,8 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
         params = session_info.get("params", {})
         inner_blueprint_ids = session_info.get("inner_blueprint_ids", [])
         blueprint = session_info["blueprint"]
+        composite_to_inner_blueprint_map = session_info.get("composite_to_inner_blueprint_map", {})
+        blueprint_contexts = session_info.get("blueprint_contexts", {})
 
         inner_blueprints = {}
         for inner_id in inner_blueprint_ids:
@@ -392,6 +394,8 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
         state=state,
         params=params,
         inner_blueprints=inner_blueprints,
+        composite_to_inner_blueprint_map=composite_to_inner_blueprint_map,
+        blueprint_contexts=blueprint_contexts,
     )
 
 

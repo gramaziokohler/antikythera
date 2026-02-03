@@ -426,6 +426,8 @@ class BlueprintSession(Data):
             "inner_blueprints": self.inner_blueprints,
             "state": self.state,
             "params": self.params,
+            "composite_to_inner_blueprint_map": self.composite_to_inner_blueprint_map,
+            "blueprint_contexts": self.blueprint_contexts,
         }
 
     def __init__(
@@ -435,6 +437,8 @@ class BlueprintSession(Data):
         inner_blueprints: Dict[str, Blueprint] = None,
         state: BlueprintSessionState = BlueprintSessionState.PENDING,
         params: Dict[str, str] = None,
+        composite_to_inner_blueprint_map: Dict[str, str] = None,
+        blueprint_contexts: Dict[str, Any] = None,
     ) -> None:
         super().__init__()
         self.bsid = bsid
@@ -442,3 +446,5 @@ class BlueprintSession(Data):
         self.inner_blueprints = inner_blueprints or {}
         self.state = state
         self.params = params or {}
+        self.composite_to_inner_blueprint_map = composite_to_inner_blueprint_map or {}
+        self.blueprint_contexts = blueprint_contexts or {}
