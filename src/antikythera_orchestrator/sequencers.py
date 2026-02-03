@@ -147,13 +147,7 @@ class BasicElementSequencer(BasicSequencer):
         if not model_id:
             raise ValueError("model_id not found in session params")
 
-        session_storage = SessionStorage(self.session.bsid)
-        element_context = session_storage.get(blueprint_id, "element")
-
-        if not element_context:
-            raise ValueError(f"No context element found for blueprint {blueprint_id}. BasicElementSequencer must run inside a dynamic task expanded by a stock sequencer.")
-
-        stock_id = element_context["element_id"]
+        stock_id = self.session.blueprint_contexts[blueprint_id]["element_id"]
 
         with ModelStorage() as storage:
             nesting_result = storage.get_nesting(model_id)
