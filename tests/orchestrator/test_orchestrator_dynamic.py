@@ -27,7 +27,8 @@ from antikythera_orchestrator.storage import SessionStorage
 class DynamicExpansionTestAgent(Agent):
     @tool(name="process")
     def process_element(self, task: Task) -> Dict[str, Any]:
-        guid = task.try_get_element_id()
+        guid = task.context.get("element_id")
+        assert guid is not None
         print(f"#### Processing element with GUID: {guid}")
         return {"processed": True}
 
@@ -133,8 +134,10 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
     task_0 = next(t for t in graph_tasks if t.id == "dynamic_process_0")
     task_1 = next(t for t in graph_tasks if t.id == "dynamic_process_1")
 
-    assert str(task_0.try_get_element_id()) == str(element1.guid)
-    assert str(task_1.try_get_element_id()) == str(element2.guid)
+    task_0_element_id = task_0.get_param_value("blueprint")["dynamic"]["element"]["element_id"]
+    task_1_element_id = task_1.get_param_value("blueprint")["dynamic"]["element"]["element_id"]
+    assert task_0_element_id == str(element1.guid)
+    assert task_1_element_id == str(element2.guid)
 
     subtasks = [t for t in graph_tasks if t.id == "mark_processed"]
     for subtask in subtasks:

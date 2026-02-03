@@ -449,7 +449,8 @@ class Orchestrator:
                 # in dynamically expanded tasks, the value is always a mapping {"element_id": "value"}
                 # the aggregation happens in :meth:`_map_outputs_to_outer_session`
                 assert isinstance(inputs_value, dict)
-                element_id = task.try_get_element_id()
+                composite_options = task.get_param_value("blueprint")
+                element_id = composite_options["dynamic"]["element"]["element_id"]
                 inputs[key] = inputs_value[element_id]
             else:
                 inputs[key] = inputs_value
@@ -497,7 +498,9 @@ class Orchestrator:
 
     def _add_composite_blueprint_context(self, blueprint_id: str, task: Task) -> None:
         # make context of composite tasks available to the tasks in the inner blueprint they invoke
-        context = dict(element_id=task.try_get_element_id())
+        composite_options = task.get_param_value("blueprint")
+        element_id = composite_options["dynamic"]["element"]["element_id"]
+        context = dict(element_id=element_id)
         self.session.blueprint_contexts[blueprint_id] = context
 
     def _get_composite_blueprint_context(self, blueprint_id: str) -> Optional[Dict]:
