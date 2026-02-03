@@ -16,6 +16,7 @@ from compas.data import json_loads
 from compas_model.models import Model
 from fastapi import FastAPI
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import Response
 from fastapi import UploadFile
 from pydantic import BaseModel
@@ -163,8 +164,11 @@ def start_blueprint(payload: StartBlueprintRequest) -> StartBlueprintResponse:
 
 
 @app.get("/sessions", response_model=list[SessionInfo])
-def list_sessions() -> list[SessionInfo]:
-    sessions_in_storage = SessionStorage.list_sessions()
+def list_sessions(
+    limit: int = Query(10, ge=1, le=1000, description="Number of sessions to return"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+) -> list[SessionInfo]:
+    sessions_in_storage = SessionStorage.list_sessions(limit=limit, offset=offset)
 
     session_infos = []
     for session_id in sessions_in_storage:
@@ -309,6 +313,27 @@ def get_session_diagram(session_id: str) -> BlueprintDiagramResponse:
     return BlueprintDiagramResponse(session_id=session_id, diagram=diagram, state=session.orchestrator.session.state)
 
 
+def _enrich_data_with_types(data_dict: Dict) -> Dict:
+    """Enrich data values with type information for frontend."""
+    enriched = {}
+    for key, value in data_dict.items():
+        val_type = "json"
+
+        # Determine type
+        if isinstance(value, (int, float)):
+            val_type = "number"
+        elif isinstance(value, str):
+            val_type = "text"
+        elif isinstance(value, dict) and "dtype" in value:
+            # Check for COMPAS geometry
+            dtype = value["dtype"]
+            if dtype.startswith("compas.geometry") or dtype.startswith("compas.datastructures") or dtype.startswith("antikythera.models"):
+                val_type = "geometry"
+
+        enriched[key] = {"value": value, "type": val_type}
+    return enriched
+
+
 @app.get("/sessions/{session_id}/data", response_model=SessionDataResponse)
 def get_session_data(session_id: str) -> SessionDataResponse:
     # Always load from storage to ensure consistency
@@ -322,8 +347,8 @@ def get_session_data(session_id: str) -> SessionDataResponse:
         inner_blueprint_ids = session_info.get("inner_blueprint_ids", [])
 
         data = {
-            "main_blueprint": storage.get_all(blueprint_id),
-            "inner_blueprints": {inner_id: storage.get_all(inner_id) for inner_id in inner_blueprint_ids},
+            "main_blueprint": _enrich_data_with_types(storage.get_all(blueprint_id)),
+            "inner_blueprints": {inner_id: _enrich_data_with_types(storage.get_all(inner_id)) for inner_id in inner_blueprint_ids},
         }
 
         return SessionDataResponse(session_id=session_id, data=json_dumps(data), state=state)

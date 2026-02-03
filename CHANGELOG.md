@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New JSON Schema for strictly validating Blueprint files.
 - `BlueprintJsonParser` now supports full validation and symmetric read/write of Blueprints.
 - Added `proto` file to release artifacts
+- Added paging to sessions list API.
 
 ### Changed
 - Refactored `Task` class to enforce a single data access pattern.

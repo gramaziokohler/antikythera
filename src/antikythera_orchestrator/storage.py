@@ -93,7 +93,7 @@ class SessionStorage:
         self.session_id = session_id
 
     @staticmethod
-    def list_sessions() -> list[str]:
+    def list_sessions(limit: int = 10, offset: int = 0, newest_first: bool = True) -> list[str]:
         client = _create_immudb_client(SessionStorage.SESSIONS_DB_NAME)
 
         try:
@@ -103,7 +103,10 @@ class SessionStorage:
                 return []
 
             index_data = json_loads(match.value.decode())
-            return cast(list[str], index_data)
+            all_sessions = cast(list[str], index_data)
+            if newest_first:
+                all_sessions.reverse()
+            return all_sessions[offset : offset + limit]
         finally:
             client.shutdown()
 
