@@ -10,7 +10,6 @@ from antikythera.models import Blueprint
 from antikythera.models import Dependency
 from antikythera.models import Task
 from antikythera_orchestrator.storage import ModelStorage
-from antikythera_orchestrator.storage import SessionStorage
 
 if TYPE_CHECKING:
     from antikythera.models import BlueprintSession

@@ -4,8 +4,9 @@ from antikythera.models import Task
 from antikythera.models import TaskParam
 from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.orchestrator import _create_global_id
+from antikythera_orchestrator.sequencers import Sequencer
+from antikythera_orchestrator.sequencers import sequencer
 from antikythera_orchestrator.storage import BlueprintStorage
-from antikythera_orchestrator.sequencers import Sequencer, sequencer
 
 
 def test_preprocess_blueprint_static_composite(mock_immudb, mock_transport_orchestrator):

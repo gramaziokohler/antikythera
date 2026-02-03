@@ -23,7 +23,6 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from antikythera.io import BlueprintJsonSerializer
-from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
 from antikythera_orchestrator.orchestrator import Orchestrator
