@@ -147,7 +147,7 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
 
 
 def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
-    # 1. Setup Model (Same as basic test)
+    # Setup
     model = Model()
     element1 = Element()
     element2 = Element()
@@ -159,7 +159,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     with ModelStorage() as storage:
         storage.add_model(model_id, model)
 
-    # 2. Setup Inner Blueprint
+    # Inner blueprint
     inner_start = Task(id="inner_start", type="system.start")
     inner_process = Task(
         id="process",
@@ -173,7 +173,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     with BlueprintStorage() as bp_storage:
         bp_storage.add_blueprint(inner_blueprint)
 
-    # 3. Setup Outer Blueprint (Dynamic)
+    # Outer blueprint
     outer_start = Task(id="start", type="system.start")
     dynamic_task = Task(
         id="dynamic_process",
@@ -186,7 +186,6 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     outer_start >> dynamic_task >> outer_end
     outer_blueprint = Blueprint(id="test_outer_bp_pr", name="Test Outer Dynamic Blueprint PR", tasks=[outer_start, dynamic_task, outer_end])
 
-    # 4. Initialize Session
     session = BlueprintSession(
         bsid="test_session_pause_resume",
         blueprint=outer_blueprint,
@@ -195,7 +194,6 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
 
     orchestrator = cleanup_manager.register(Orchestrator(session))
 
-    # 5. Start Execution with Blocking Agent
     launcher = cleanup_manager.register(AgentLauncher())
 
     blocking_event = threading.Event()
@@ -207,65 +205,34 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
             blocking_event.wait(timeout=5)
             return {"processed": True}
 
-    # Register our test agent
     launcher.agents["test_dynamic"] = BlockingTestAgent()
     launcher.start()
 
+    # Test starts!
     orchestrator.start()
 
-    # Allow some time for the first task to start and block
     time.sleep(1.0)
 
-    # Verify we are running
-    # Note: Orchestrator is RUNNING, but waiting for tasks
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
-    # Pause the session
     orchestrator.pause()
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
-    # Allow the currently blocked task to complete
     blocking_event.set()
 
-    # Wait for completion processing
     time.sleep(1.0)
 
-    # Session should still be STOPPED (paused)
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
-    # Resume the session
-    # Since event is set, the next tasks will run immediately
     orchestrator.start()
 
-    # Verify completion
     assert orchestrator.await_completion(timeout=10)
     assert session.state == BlueprintSessionState.COMPLETED
 
 
 def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
     with SessionStorage(session_id) as session_storage:
-        session_info = session_storage.get_session_info()
-
-        state = session_info["state"]
-        params = session_info.get("params", {})
-        inner_blueprint_ids = session_info.get("inner_blueprint_ids", [])
-        blueprint = session_info["blueprint"]
-        composite_to_inner_blueprint_map = session_info.get("composite_to_inner_blueprint_map", {})
-        blueprint_contexts = session_info.get("blueprint_contexts", {})
-
-        inner_blueprints = {}
-        for inner_id in inner_blueprint_ids:
-            inner_blueprints[inner_id] = session_storage.get_blueprint(inner_id)
-
-    return BlueprintSession(
-        bsid=session_id,
-        blueprint=blueprint,
-        state=state,
-        params=params,
-        inner_blueprints=inner_blueprints,
-        composite_to_inner_blueprint_map=composite_to_inner_blueprint_map,
-        blueprint_contexts=blueprint_contexts,
-    )
+        return session_storage.load_session()
 
 
 def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
@@ -366,4 +333,4 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     orchestrator.start()
 
     assert orchestrator.await_completion(timeout=10)
-    assert session.state == BlueprintSessionState.COMPLETED
+    assert orchestrator.session.state == BlueprintSessionState.COMPLETED

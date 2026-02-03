@@ -58,8 +58,8 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
     # Verify storage has updated state
-    session_info = orchestrator.session_storage.get_session_info()
-    assert session_info["state"] == BlueprintSessionState.STOPPED.value
+    loaded_session = orchestrator.session_storage.load_session()
+    assert loaded_session.state == BlueprintSessionState.STOPPED
 
     # Wait enough time for task_1 to definitely finish
     time.sleep(1.0)
@@ -124,7 +124,7 @@ def test_orchestrator_stop(mock_immudb, mock_transport_orchestrator, mock_transp
     assert orchestrator.session.state == BlueprintSessionState.STOPPED
 
     # Verify storage
-    session_info = orchestrator.session_storage.get_session_info()
-    assert session_info["state"] == BlueprintSessionState.STOPPED.value
+    loaded_session = orchestrator.session_storage.load_session()
+    assert loaded_session.state == BlueprintSessionState.STOPPED
 
     launcher.stop()

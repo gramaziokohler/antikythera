@@ -441,3 +441,8 @@ class BlueprintSession(Data):
         self.params = params or {}
         self.composite_to_inner_blueprint_map = composite_to_inner_blueprint_map or {}
         self.blueprint_contexts = blueprint_contexts or {}
+
+    def get_blueprint(self, blueprint_id: str) -> Optional[Blueprint]:
+        if self.blueprint.id == blueprint_id:
+            return self.blueprint
+        return self.inner_blueprints.get(blueprint_id)

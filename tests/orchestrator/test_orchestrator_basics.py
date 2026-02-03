@@ -36,10 +36,10 @@ def test_start_simple_session(mock_immudb, mock_transport_orchestrator, mock_tra
     assert orchestrator.session.state == BlueprintSessionState.RUNNING
 
     # Verify storage was used
-    session_info = orchestrator.session_storage.get_session_info()
-    assert session_info is not None
-    assert session_info["state"] == BlueprintSessionState.RUNNING.value
-    assert session_info["blueprint_id"] == "simple_bp"
+    loaded_session = orchestrator.session_storage.load_session()
+    assert loaded_session is not None
+    assert loaded_session.state == BlueprintSessionState.RUNNING
+    assert loaded_session.blueprint.id == "simple_bp"
 
     # Wait for tasks to complete
     orchestrator.await_completion(timeout=10)

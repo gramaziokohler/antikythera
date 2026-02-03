@@ -329,13 +329,13 @@ class Orchestrator:
         self.session_storage = SessionStorage(self.session.bsid)
         self.blueprint_storage = BlueprintStorage()
 
-        existing_session = self.session_storage.get_session_info()
+        existing_session = self.session_storage.load_session()
         if existing_session:
-            self.session.state = BlueprintSessionState(existing_session["state"])
+            self.session = existing_session
             LOG.info(f"Resuming session {self.session.bsid} with state {self.session.state}")
         else:
-            self.session_storage.register_session(self.session.blueprint.id, self.session.params, state=self.session.state)
             self._preprocess_blueprint()
+            self.session_storage.save_session(self.session)
 
         LOG.info(f"Initialized session storage for session BSID={self.session.bsid}")
 
@@ -351,9 +351,7 @@ class Orchestrator:
     @state.setter
     def state(self, value: BlueprintSessionState) -> None:
         self.session.state = value
-        self.session_storage.update_session_state(self.session.state)
-        if value in (BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED):
-            self.session_storage.update_session_ended()
+        self.session_storage.save_session(self.session)
 
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
@@ -623,8 +621,8 @@ class Orchestrator:
                 self.state = BlueprintSessionState.FAILED
                 self._completion_event.set()
 
-        # Persist the updated blueprint state (with task states)
-        self.session_storage.update_session_blueprint_state(self.session.blueprint)
+        # Persist the updated session state
+        self.session_storage.save_session(self.session)
 
     def _get_last_task(self) -> Task:
         for node, data in self.graph.nodes(data=True):
@@ -673,8 +671,8 @@ class Orchestrator:
         ack = TaskCompletionAckMessage(id=message.id, state=TaskState(message.state), accepted_agent_id=message.agent_id)
         self.task_ack_publisher.publish(ack)
 
-        # Persist the updated blueprint state (with task states)
-        self.session_storage.update_session_blueprint_state(self.session.blueprint)
+        # Persist the updated session state
+        self.session_storage.save_session(self.session)
 
         if self.state == BlueprintSessionState.RUNNING:
             self._schedule_tasks()
@@ -698,8 +696,8 @@ class Orchestrator:
             self.task_allocation_publisher.publish(allocation)
             LOG.info(f"Allocated task {task_id} to agent {message.agent_id}")
 
-            # Persist the updated blueprint state (with task states)
-            self.session_storage.update_session_blueprint_state(self.session.blueprint)
+            # Persist the updated session state
+            self.session_storage.save_session(self.session)
         else:
             LOG.info(f"Rejected claim for task {task_id} from agent {message.agent_id}. Task state is {task.state}")
 
@@ -724,7 +722,7 @@ class Orchestrator:
                     LOG.debug(f"Resetting task {task.id} to PENDING for persistence.")
                     task.state = TaskState.PENDING
 
-        self.session_storage.update_session_blueprint_state(self.session.blueprint)
+        self.session_storage.save_session(self.session)
 
     def _expand_dynamic_tasks(self, blueprint: Blueprint) -> None:
         expanded_something = True
@@ -768,20 +766,6 @@ class Orchestrator:
 
                     if task.is_dynamic:
                         self._add_composite_blueprint_context(inner_blueprint.id, task)
-
-        # Update session storage with inner blueprint IDs
-        self.session_storage.update_session_blueprints(list(self.session.inner_blueprints.keys()))
-        # Update session storage with the expanded blueprint
-        self.session_storage.update_session_blueprint_state(self.session.blueprint)
-        # store the mappings of composite task IDs to inner blueprints as well as the blueprint contexts
-        self.session_storage.update_session_maps(self.session.composite_to_inner_blueprint_map, self.session.blueprint_contexts)
-
-        # store session blueprints
-        # these are session specific copies of the blueprints, they may have been modified during preprocessing
-        # e.g. dynamic tasks expanded, new blueprints created etc.
-        self.session_storage.store_blueprint(self.session.blueprint)
-        for inner_blueprint in self.session.inner_blueprints.values():
-            self.session_storage.store_blueprint(inner_blueprint)
 
         LOG.debug(f"expanded blueprint map: {self.session.composite_to_inner_blueprint_map}")
 
