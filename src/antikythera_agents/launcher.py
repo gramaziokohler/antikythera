@@ -119,6 +119,7 @@ class AgentLauncher:
             inputs=inputs,
             outputs=outputs,
             params=params,
+            context=message.context,
         )
 
         for agent_type, agent in self.agents.items():

@@ -27,6 +27,8 @@ from antikythera_orchestrator.storage import SessionStorage
 class DynamicExpansionTestAgent(Agent):
     @tool(name="process")
     def process_element(self, task: Task) -> Dict[str, Any]:
+        guid = task.try_get_element_id()
+        print(f"#### Processing element with GUID: {guid}")
         return {"processed": True}
 
 
@@ -71,6 +73,38 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
 
     outer_start >> dynamic_task >> outer_end
 
+    """
+    Before expansion
+
+    test_outer_bp
+    ├── start (system.start)
+    ├── dynamic_process (system.composite)
+           (test_inner_bp)
+    ├───── inner_start (system.start)
+    ├───── mark_processed (test_dynamic.process)
+    ├───── inner_end (system.end)
+    └── end (system.end)
+
+    """
+    """
+    After expansion
+
+    test_outer_bp
+    ├── start (system.start)
+    ├── dynamic_process_0 (system.composite)
+          (test_inner_bp_xxx)
+    ├───── inner_start (system.start)
+    ├───── mark_processed (test_dynamic.process)
+    ├───── inner_end (system.end)
+    ├── dynamic_process_1 (system.composite)
+          (test_inner_bp_xxx)
+    ├───── inner_start (system.start)
+    ├───── mark_processed (test_dynamic.process)
+    ├───── inner_end (system.end)
+    └── end (system.end)
+
+    """
+
     outer_blueprint = Blueprint(id="test_outer_bp", name="Test Outer Dynamic Blueprint", tasks=[outer_start, dynamic_task, outer_end])
 
     session = BlueprintSession(
@@ -98,6 +132,7 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
 
     task_0 = next(t for t in graph_tasks if t.id == "dynamic_process_0")
     task_1 = next(t for t in graph_tasks if t.id == "dynamic_process_1")
+
     assert str(task_0.try_get_element_id()) == str(element1.guid)
     assert str(task_1.try_get_element_id()) == str(element2.guid)
 
@@ -212,6 +247,8 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
         params = session_info.get("params", {})
         inner_blueprint_ids = session_info.get("inner_blueprint_ids", [])
         blueprint = session_info["blueprint"]
+        composite_to_inner_blueprint_map = session_info.get("composite_to_inner_blueprint_map", {})
+        blueprint_contexts = session_info.get("blueprint_contexts", {})
 
         inner_blueprints = {}
         for inner_id in inner_blueprint_ids:
@@ -223,6 +260,8 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
         state=state,
         params=params,
         inner_blueprints=inner_blueprints,
+        composite_to_inner_blueprint_map=composite_to_inner_blueprint_map,
+        blueprint_contexts=blueprint_contexts,
     )
 
 
@@ -274,9 +313,9 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     )
 
     orchestrator = cleanup_manager.register(Orchestrator(session))
-    original_map = dict(orchestrator.composite_to_inner_blueprint_map)
+    original_map = dict(orchestrator.session.composite_to_inner_blueprint_map)
     # The map will contain the expanded tasks, not the original dynamic_process task
-    # assert orchestrator.composite_to_inner_blueprint_map == {"test_outer_bp_pr.dynamic_process": "test_inner_bp_pr"}
+    # assert orchestrator.session.composite_to_inner_blueprint_map == {"test_outer_bp_pr.dynamic_process": "test_inner_bp_pr"}
 
     # 5. Start Execution with Blocking Agent
     launcher = cleanup_manager.register(AgentLauncher())
@@ -288,7 +327,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
         def process_element(self, task: Task) -> Dict[str, Any]:
             # Wait for event
             model = task.get_param_value("model")
-            element_guid = task.get_input_value("element", {}).get("element_id")
+            element_guid = task.context["element_id"]
             element = model._elements[element_guid]
             if element.name == "Element 2":
                 blocking_event.wait(timeout=5)
@@ -319,7 +358,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     session = _get_bp_session_from_storage("test_session_pause_resume_ds")
     orchestrator = cleanup_manager.register(Orchestrator(session))
 
-    assert orchestrator.composite_to_inner_blueprint_map == original_map
+    assert orchestrator.session.composite_to_inner_blueprint_map == original_map
 
     orchestrator.start()
 

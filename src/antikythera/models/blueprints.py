@@ -138,6 +138,7 @@ class Task(Data):
         params: List[TaskParam] = None,
         depends_on: List[Dependency] = None,
         state: TaskState = TaskState.PENDING,
+        context: Dict[str, Any] = None,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -150,6 +151,7 @@ class Task(Data):
         self.params = params or []
         self.depends_on = depends_on or []
         self.state = TaskState(state)
+        self.context = context or {}
 
     def get_input(self, name: str) -> Optional[TaskInput]:
         for task_input in self.inputs:
@@ -307,12 +309,12 @@ class Task(Data):
             depends_on=[],
         )
 
-    def try_get_element_id(self) -> str:
+    def try_get_element_id(self) -> Optional[str]:
         """Returns the element_id of a dynamically expanded task, or None if not applicable."""
-        fab_item_dict = self.get_input_value("element")
-        if not fab_item_dict:
+        blueprint_param = self.get_param_value("blueprint")
+        if not blueprint_param:
             return None
-        return fab_item_dict.get("element_id")
+        return blueprint_param.get("dynamic", {}).get("element", {}).get("element_id")
 
     def get_param(self, name: str) -> Optional[TaskParam]:
         for p in self.params:
@@ -424,6 +426,8 @@ class BlueprintSession(Data):
             "inner_blueprints": self.inner_blueprints,
             "state": self.state,
             "params": self.params,
+            "composite_to_inner_blueprint_map": self.composite_to_inner_blueprint_map,
+            "blueprint_contexts": self.blueprint_contexts,
         }
 
     def __init__(
@@ -433,6 +437,8 @@ class BlueprintSession(Data):
         inner_blueprints: Dict[str, Blueprint] = None,
         state: BlueprintSessionState = BlueprintSessionState.PENDING,
         params: Dict[str, str] = None,
+        composite_to_inner_blueprint_map: Dict[str, str] = None,
+        blueprint_contexts: Dict[str, Any] = None,
     ) -> None:
         super().__init__()
         self.bsid = bsid
@@ -440,3 +446,5 @@ class BlueprintSession(Data):
         self.inner_blueprints = inner_blueprints or {}
         self.state = state
         self.params = params or {}
+        self.composite_to_inner_blueprint_map = composite_to_inner_blueprint_map or {}
+        self.blueprint_contexts = blueprint_contexts or {}
