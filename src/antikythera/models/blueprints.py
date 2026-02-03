@@ -307,12 +307,12 @@ class Task(Data):
             depends_on=[],
         )
 
-    def try_get_element_id(self) -> str:
+    def try_get_element_id(self) -> Optional[str]:
         """Returns the element_id of a dynamically expanded task, or None if not applicable."""
-        fab_item_dict = self.get_input_value("element")
-        if not fab_item_dict:
+        blueprint_param = self.get_param_value("blueprint")
+        if not blueprint_param:
             return None
-        return fab_item_dict.get("element_id")
+        return blueprint_param.get("dynamic", {}).get("element", {}).get("element_id")
 
     def get_param(self, name: str) -> Optional[TaskParam]:
         for p in self.params:
