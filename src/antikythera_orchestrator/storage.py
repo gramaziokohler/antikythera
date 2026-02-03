@@ -35,7 +35,7 @@ class RequestedSessionNotFound(Exception):
 
 
 def _create_immudb_client(db_name: str) -> ImmudbClient:
-    client = ImmudbClient()
+    client = ImmudbClient(max_grpc_message_length=config.IMMUDB_MAX_GRPC_MESSAGE_LENGTH)
     try:
         client.login(config.IMMUDB_USER, config.IMMUDB_PASSWORD)
     except KeyError:
