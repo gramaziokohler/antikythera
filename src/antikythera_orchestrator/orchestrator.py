@@ -9,6 +9,7 @@ from queue import Queue
 from typing import Any
 from typing import Dict
 from typing import Optional
+from typing import Tuple
 from typing import cast
 
 from compas.datastructures import Graph
@@ -509,13 +510,14 @@ class Orchestrator:
             else:
                 self.session_storage.set(outer_blueprint_id, mapped_key, value)
 
-    def _get_model_if_available(self) -> Optional[Model]:
+    def _get_model_if_available(self) -> Tuple[Optional[Model], Any]:
         model_id = self.session.params.get("model_id")
         model: Optional[Model] = None
         if model_id is not None:
             with ModelStorage() as storage:
                 model = storage.get_model(model_id)
-        return model
+                nesting = storage.get_nesting(model_id)
+        return model, nesting
 
     def _evaluate_skip_condition(self, task: Task, inputs: Dict[str, Any], blueprint_id: str) -> bool:
         """Determines if a task should be skipped based on conditions or parent states."""
@@ -569,12 +571,14 @@ class Orchestrator:
 
         # NOTE: doing this here will fetch the model evey cycle.
         # NOTE: we could theoratically do this only once per session, unless we expect the model to change during execution..
-        model = self._get_model_if_available()
+        model, nesting = self._get_model_if_available()
 
         for pending_task in pending_tasks:
             try:
                 blueprint_id = pending_task.blueprint_id
                 task = pending_task.task
+
+                LOG.debug(f"Processing pending task {task}")
 
                 task.state = TaskState.PENDING
 
@@ -598,6 +602,8 @@ class Orchestrator:
 
                 if model:
                     task.set_param_value("model", model)
+                if nesting:
+                    task.set_param_value("nesting", nesting)
 
                 # TODO: what do we do if no agent even claims the task.. should there be some timeout?
                 task.state = TaskState.READY
