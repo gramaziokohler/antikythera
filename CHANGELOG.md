@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added paging to sessions list API.
 - Added `max_grpc_message_length` configuration for immudb client to handle larger messages.
 - Added demo agent to return the Standard 3d bunny as a COMPAS mesh.
+- Added `io.copy` agent/tool to copy files with support for glob patterns.
 
 ### Changed
 - Refactored `Task` class to enforce a single data access pattern.
