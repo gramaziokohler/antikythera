@@ -133,6 +133,26 @@ class BasicStockSequencer(BasicSequencer):
 
         return list(nesting_result.stocks)
 
+    def _create_element_tasks(self, task: Task, elements: List) -> List[Task]:
+        new_tasks = super()._create_element_tasks(task, elements)
+
+        model_id = self.session.params.get("model_id")
+        assert model_id is not None
+
+        slab_name = None
+
+        with ModelStorage() as storage:
+            model = storage.get_model(model_id)
+            slab_name = model.slabs[0].name
+            for stock_index, task in enumerate(new_tasks):
+                composite_options = task.get_param_value("blueprint")
+                element_context = composite_options["dynamic"]["element"]
+                element_context["slab_name"] = slab_name
+                element_context["stock_name"] = f"R{stock_index:02d}"
+                LOG.debug(f"Updated task {task.id} with slab_name: {slab_name}, stock_name: R{stock_index:02d}")
+
+        return new_tasks
+
 
 @sequencer("basic_element_sequencer")
 class BasicElementSequencer(BasicSequencer):

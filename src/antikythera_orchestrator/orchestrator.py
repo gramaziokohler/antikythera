@@ -497,9 +497,10 @@ class Orchestrator:
     def _add_composite_blueprint_context(self, blueprint_id: str, task: Task) -> None:
         # make context of composite tasks available to the tasks in the inner blueprint they invoke
         composite_options = task.get_param_value("blueprint")
-        element_id = composite_options["dynamic"]["element"]["element_id"]
-        context = dict(element_id=element_id)
-        self.session.blueprint_contexts[blueprint_id] = context
+        if not composite_options:
+            raise RuntimeError(f"Tried to add composite context for task with missing blueprint options: {task.id}")
+        fabrication_context = composite_options["dynamic"]["element"]
+        self.session.blueprint_contexts[blueprint_id] = fabrication_context.copy()
 
     def _get_composite_blueprint_context(self, blueprint_id: str) -> Optional[Dict]:
         return self.session.blueprint_contexts.get(blueprint_id)
