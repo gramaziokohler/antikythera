@@ -2,6 +2,9 @@ import time
 from typing import Any
 from typing import Dict
 
+import compas
+from compas.datastructures import Mesh
+
 from antikythera.models import Task
 from antikythera_agents.base_agent import Agent
 from antikythera_agents.cli import Colors
@@ -40,3 +43,7 @@ class SystemAgent(Agent):
         time.sleep(duration)
         print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Finished sleeping.{Colors.ENDC}")
         return {}
+
+    @tool(name="demo_mesh")
+    def demo_mesh(self, task: Task) -> Dict[str, Any]:
+        return {"mesh": Mesh.from_ply(compas.get_bunny())}

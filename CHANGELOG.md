@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `BlueprintJsonParser` now supports full validation and symmetric read/write of Blueprints.
 - Added `proto` file to release artifacts
 - Added paging to sessions list API.
+- Added `max_grpc_message_length` configuration for immudb client to handle larger messages.
+- Added demo agent to return the Standard 3d bunny as a COMPAS mesh.
 
 ### Changed
 - Refactored `Task` class to enforce a single data access pattern.
