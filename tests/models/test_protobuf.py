@@ -19,8 +19,9 @@ def test_taskassignment_to_pb():
     inputs = {"input1": [Frame.worldXY(), Frame.worldYZ()], "input2": "some_data"}
     output_keys = ["output1", "output2"]
     params = {"param1": True, "param2": 3.14}
+    context = {"user": "tester", "priority": "high"}
 
-    message = TaskAssignmentMessage(task_id, task_type, inputs, output_keys, params, TEST_TIMESTAMP)
+    message = TaskAssignmentMessage(task_id, task_type, inputs, output_keys, params, context, timestamp=TEST_TIMESTAMP)
 
     msg_bts = pb_dump_bts(message)
 

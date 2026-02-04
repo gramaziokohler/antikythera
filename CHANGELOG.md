@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Strict validation for Blueprint JSON files, requiring explicit list-of-dictionary formats for inputs, outputs, and parameters.
+- Unit tests for failed task resume scenarios, including session revival from storage.
+
+### Changed
+- Moved `composite_to_inner_blueprint_map` and `blueprint_contexts` from `Orchestrator` to `BlueprintSession` for proper serialization and session restoration.
+- Simplified `SessionStorage` API to use `save_session()` and `load_session()` for complete session persistence instead of piecemeal updates.
+- Added `load_session_with_metadata()` to `SessionStorage` for retrieving session data with storage metadata (used by `list_sessions` API).
+- Added `mock_agent_discovery` fixture to orchestrator tests to prevent loading external agents during testing.
 - New explicit accessor methods for `Task` values (`get_input_value`, `get_output_value`, `get_param_value`, `set_input_value`, `set_output_value`, `set_param_value`).
 - New JSON Schema for strictly validating Blueprint files.
 - `BlueprintJsonParser` now supports full validation and symmetric read/write of Blueprints.

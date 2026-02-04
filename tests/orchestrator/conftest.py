@@ -41,6 +41,13 @@ def mock_transport_launcher(in_memory_transport):
         yield mock
 
 
+@pytest.fixture(autouse=True)
+def mock_agent_discovery():
+    """Prevent plugin discovery from loading external agents (e.g., fall_demo_2025 agents that require ROS)."""
+    with patch("antikythera_agents.launcher._ensure_agents"):
+        yield
+
+
 @pytest.fixture
 def cleanup_manager():
     """Fixture to manage cleanup of orchestrators and launchers."""

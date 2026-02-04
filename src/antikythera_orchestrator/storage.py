@@ -11,7 +11,7 @@ from immudb.datatypes import DeleteKeysRequest
 
 from antikythera import config
 from antikythera.models import Blueprint
-from antikythera.models import BlueprintSessionState
+from antikythera.models import BlueprintSession
 
 LOG = logging.getLogger(__name__)
 
@@ -163,62 +163,73 @@ class SessionStorage:
         assert self.session_id, "Session ID must be set"
         return f"bsid-{self.session_id}"
 
-    def register_session(self, blueprint_id: str, params: Optional[dict] = None, state: BlueprintSessionState = BlueprintSessionState.PENDING) -> None:
+    def save_session(self, session: BlueprintSession) -> None:
+        """Save a complete BlueprintSession object to storage.
+
+        This stores the entire session including:
+        - Session metadata (state, params, timestamps)
+        - The main blueprint and all inner blueprints
+        - Composite task mappings and contexts
+
+        Parameters
+        ----------
+        session : BlueprintSession
+            The session to save.
+        """
         key = self._session_key()
+        index_key = b"session:index"
+
+        # Check if this is a new session or update
+        existing = self.client.get(key.encode())
+        if existing:
+            existing_data = json_loads(existing.value.decode())
+            started_at = existing_data.get("started_at")
+            ended_at = existing_data.get("ended_at")
+        else:
+            started_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            ended_at = None
+
         value = {
-            "blueprint_id": blueprint_id,
-            "state": state.value,
-            "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "ended_at": None,
-            "params": params or {},
+            "session": session,
+            "started_at": started_at,
+            "ended_at": ended_at,
         }
 
-        # maintain an index so that we can list all saved sessions
-        index_key = b"session:index"
+        # Maintain an index so that we can list all saved sessions
         index_value = append_to_index(self.client, index_key, self.session_id)
 
         self.client.setAll({key.encode(): json_dumps(value).encode(), index_key: index_value})
 
-    def _update_session_data(self, updates: dict[str, Any]) -> None:
-        key = self._session_key()
-        match = self.client.get(key.encode())
-        if match is None:
-            return
+    def load_session(self) -> Optional[BlueprintSession]:
+        """Load a complete BlueprintSession object from storage.
 
-        data = json_loads(match.value.decode())
-        data.update(updates)
-        self.client.set(key.encode(), json_dumps(data).encode())
-
-    def update_session_state(self, state: str) -> None:
-        self._update_session_data({"state": state})
-
-    def update_session_blueprints(self, inner_blueprint_ids: list[str]) -> None:
-        self._update_session_data({"inner_blueprint_ids": inner_blueprint_ids})
-
-    def update_session_blueprint_state(self, blueprint: Blueprint) -> None:
-        self._update_session_data({"blueprint": blueprint})
-
-    def update_session_ended(self) -> None:
-        self._update_session_data({"ended_at": datetime.datetime.now(datetime.timezone.utc).isoformat()})
-
-    def get_session_info(self) -> Optional[dict]:
+        Returns
+        -------
+        Optional[BlueprintSession]
+            The loaded session, or None if not found.
+        """
         key = self._session_key()
         match = self.client.get(key.encode())
         if match is None:
             return None
-        return json_loads(match.value.decode())
 
-    def store_blueprint(self, blueprint: Blueprint) -> None:
-        """Store a session-specific blueprint definition.
+        data = json_loads(match.value.decode())
+        return data.get("session")
 
-        This is used to persist modified blueprints (e.g. after task expansion)
-        associated with this session, preserving the original blueprint in BlueprintStorage.
+    def load_session_with_metadata(self) -> Optional[dict]:
+        """Load a complete BlueprintSession object with metadata from storage.
+
+        Returns
+        -------
+        Optional[dict]
+            A dictionary containing 'session', 'started_at', and 'ended_at', or None if not found.
         """
-        self.set(blueprint.id, "definition", blueprint)
+        key = self._session_key()
+        match = self.client.get(key.encode())
+        if match is None:
+            return None
 
-    def get_blueprint(self, blueprint_id: str) -> Optional[Blueprint]:
-        """Retrieve a session-specific blueprint definition."""
-        return self.get(blueprint_id, "definition")
+        return json_loads(match.value.decode())
 
 
 class BlueprintStorage:

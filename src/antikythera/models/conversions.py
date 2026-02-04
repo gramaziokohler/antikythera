@@ -21,7 +21,9 @@ from .tasks import TaskState
 
 
 @pb_serializer(TaskAssignmentMessage)
-def taskassignment_to_pb(message: TaskAssignmentMessage) -> antikythera_pb2.TaskAssignmentMessage:
+def taskassignment_to_pb(
+    message: TaskAssignmentMessage,
+) -> antikythera_pb2.TaskAssignmentMessage:
     pb = antikythera_pb2.TaskAssignmentMessage()
     pb.id = message.id
     pb.type = message.type
@@ -33,6 +35,9 @@ def taskassignment_to_pb(message: TaskAssignmentMessage) -> antikythera_pb2.Task
     if message.params:
         for k, v in message.params.items():
             pb.params[k].CopyFrom(_serializer_any(v))
+    if message.context:
+        for k, v in message.context.items():
+            pb.context[k].CopyFrom(_serializer_any(v))
     if message.timestamp:
         pb.timestamp.FromDatetime(message.timestamp)
     pb.execution_mode = _execution_mode_to_pb(message.execution_mode)
@@ -40,16 +45,21 @@ def taskassignment_to_pb(message: TaskAssignmentMessage) -> antikythera_pb2.Task
 
 
 @pb_deserializer(antikythera_pb2.TaskAssignmentMessage)
-def taskassignment_from_pb(pb: antikythera_pb2.TaskAssignmentMessage) -> TaskAssignmentMessage:
+def taskassignment_from_pb(
+    pb: antikythera_pb2.TaskAssignmentMessage,
+) -> TaskAssignmentMessage:
     inputs = {}
     output_keys = []
     params = {}
+    context = {}
 
     for k, v in pb.inputs.items():
         inputs[k] = _deserialize_any(v)
     output_keys.extend(pb.output_keys)
     for k, v in pb.params.items():
         params[k] = _deserialize_any(v)
+    for k, v in pb.context.items():
+        context[k] = _deserialize_any(v)
 
     return TaskAssignmentMessage(
         id=pb.id,
@@ -59,6 +69,7 @@ def taskassignment_from_pb(pb: antikythera_pb2.TaskAssignmentMessage) -> TaskAss
         params=params if params else None,
         timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,
         execution_mode=_execution_mode_from_pb(pb.execution_mode),
+        context=context if context else None,
     )
 
 
@@ -138,7 +149,9 @@ def _task_state_from_pb(pb_state: antikythera_pb2.TaskState) -> TaskState:
 
 
 @pb_serializer(TaskCompletionMessage)
-def taskcompletion_to_pb(message: TaskCompletionMessage) -> antikythera_pb2.TaskCompletionMessage:
+def taskcompletion_to_pb(
+    message: TaskCompletionMessage,
+) -> antikythera_pb2.TaskCompletionMessage:
     pb = antikythera_pb2.TaskCompletionMessage()
 
     pb.id = message.id
@@ -161,7 +174,9 @@ def taskcompletion_to_pb(message: TaskCompletionMessage) -> antikythera_pb2.Task
 
 
 @pb_deserializer(antikythera_pb2.TaskCompletionMessage)
-def taskcompletion_from_pb(pb: antikythera_pb2.TaskCompletionMessage) -> TaskCompletionMessage:
+def taskcompletion_from_pb(
+    pb: antikythera_pb2.TaskCompletionMessage,
+) -> TaskCompletionMessage:
     outputs = {}
     error = None
 
@@ -184,7 +199,9 @@ def taskcompletion_from_pb(pb: antikythera_pb2.TaskCompletionMessage) -> TaskCom
 
 
 @pb_serializer(TaskClaimRequest)
-def taskclaimrequest_to_pb(message: TaskClaimRequest) -> antikythera_pb2.TaskClaimRequest:
+def taskclaimrequest_to_pb(
+    message: TaskClaimRequest,
+) -> antikythera_pb2.TaskClaimRequest:
     pb = antikythera_pb2.TaskClaimRequest()
     pb.task_id = message.task_id
     pb.agent_id = message.agent_id
@@ -203,7 +220,9 @@ def taskclaimrequest_from_pb(pb: antikythera_pb2.TaskClaimRequest) -> TaskClaimR
 
 
 @pb_serializer(TaskAllocationMessage)
-def taskallocation_to_pb(message: TaskAllocationMessage) -> antikythera_pb2.TaskAllocationMessage:
+def taskallocation_to_pb(
+    message: TaskAllocationMessage,
+) -> antikythera_pb2.TaskAllocationMessage:
     pb = antikythera_pb2.TaskAllocationMessage()
     pb.task_id = message.task_id
     pb.assigned_agent_id = message.assigned_agent_id
@@ -213,7 +232,9 @@ def taskallocation_to_pb(message: TaskAllocationMessage) -> antikythera_pb2.Task
 
 
 @pb_deserializer(antikythera_pb2.TaskAllocationMessage)
-def taskallocation_from_pb(pb: antikythera_pb2.TaskAllocationMessage) -> TaskAllocationMessage:
+def taskallocation_from_pb(
+    pb: antikythera_pb2.TaskAllocationMessage,
+) -> TaskAllocationMessage:
     return TaskAllocationMessage(
         task_id=pb.task_id,
         assigned_agent_id=pb.assigned_agent_id,
@@ -222,7 +243,9 @@ def taskallocation_from_pb(pb: antikythera_pb2.TaskAllocationMessage) -> TaskAll
 
 
 @pb_serializer(TaskCompletionAckMessage)
-def taskcompletionack_to_pb(message: TaskCompletionAckMessage) -> antikythera_pb2.TaskCompletionAckMessage:
+def taskcompletionack_to_pb(
+    message: TaskCompletionAckMessage,
+) -> antikythera_pb2.TaskCompletionAckMessage:
     pb = antikythera_pb2.TaskCompletionAckMessage()
     pb.id = message.id
     pb.state = _task_state_to_pb(message.state)
@@ -233,7 +256,9 @@ def taskcompletionack_to_pb(message: TaskCompletionAckMessage) -> antikythera_pb
 
 
 @pb_deserializer(antikythera_pb2.TaskCompletionAckMessage)
-def taskcompletionack_from_pb(pb: antikythera_pb2.TaskCompletionAckMessage) -> TaskCompletionAckMessage:
+def taskcompletionack_from_pb(
+    pb: antikythera_pb2.TaskCompletionAckMessage,
+) -> TaskCompletionAckMessage:
     return TaskCompletionAckMessage(
         id=pb.id,
         state=_task_state_from_pb(pb.state),

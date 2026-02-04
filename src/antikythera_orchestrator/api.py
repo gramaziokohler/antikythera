@@ -23,7 +23,6 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from antikythera.io import BlueprintJsonSerializer
-from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
 from antikythera_orchestrator.orchestrator import Orchestrator
@@ -173,14 +172,13 @@ def list_sessions(
     session_infos = []
     for session_id in sessions_in_storage:
         with SessionStorage(session_id) as storage:
-            session_info = storage.get_session_info()
-            if not session_info:
+            session_data = storage.load_session_with_metadata()
+            if not session_data:
                 continue
 
-            blueprint_id = session_info["blueprint_id"]
-            state = session_info["state"]
-            started_at = session_info.get("started_at")
-            ended_at = session_info.get("ended_at")
+            session = session_data["session"]
+            started_at = session_data.get("started_at")
+            ended_at = session_data.get("ended_at")
 
             # stored times are ISO format UTC
             if started_at:
@@ -201,12 +199,12 @@ def list_sessions(
             session_infos.append(
                 SessionInfo(
                     session_id=session_id,
-                    blueprint_id=blueprint_id,
+                    blueprint_id=session.blueprint.id,
                     broker_host=broker_host,
                     broker_port=broker_port,
                     started_at=started_at,
                     ended_at=ended_at,
-                    state=state,
+                    state=session.state,
                 )
             )
     return session_infos
@@ -338,13 +336,13 @@ def _enrich_data_with_types(data_dict: Dict) -> Dict:
 def get_session_data(session_id: str) -> SessionDataResponse:
     # Always load from storage to ensure consistency
     with SessionStorage(session_id) as storage:
-        session_info = storage.get_session_info()
-        if not session_info:
+        session = storage.load_session()
+        if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        blueprint_id = session_info["blueprint_id"]
-        state = session_info["state"]
-        inner_blueprint_ids = session_info.get("inner_blueprint_ids", [])
+        blueprint_id = session.blueprint.id
+        state = session.state
+        inner_blueprint_ids = list(session.inner_blueprints.keys())
 
         data = {
             "main_blueprint": _enrich_data_with_types(storage.get_all(blueprint_id)),
@@ -373,26 +371,10 @@ def pause_session(session_id: str) -> SessionActionResponse:
 
 def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
     with SessionStorage(session_id) as session_storage:
-        session_info = session_storage.get_session_info()
-        if not session_info:
+        session = session_storage.load_session()
+        if not session:
             raise RequestedSessionNotFound(f"session id: {session_id}")
-
-        state = session_info["state"]
-        params = session_info.get("params", {})
-        inner_blueprint_ids = session_info.get("inner_blueprint_ids", [])
-        blueprint = session_info["blueprint"]
-
-        inner_blueprints = {}
-        for inner_id in inner_blueprint_ids:
-            inner_blueprints[inner_id] = session_storage.get_blueprint(inner_id)
-
-    return BlueprintSession(
-        bsid=session_id,
-        blueprint=blueprint,
-        state=state,
-        params=params,
-        inner_blueprints=inner_blueprints,
-    )
+        return session
 
 
 def _revive_session(session_id: str, broker_host: str, broker_port: int) -> ActiveSession:
@@ -683,31 +665,34 @@ def get_blueprint(blueprint_id: str):
 
 
 @app.get("/sessions/{session_id}/blueprint")
-def get_session_blueprint(session_id: str):
-    # Always load from storage
+def get_session_root_blueprint(session_id: str):
     with SessionStorage(session_id) as session_storage:
-        session_info = session_storage.get_session_info()
-        if not session_info:
+        session = session_storage.load_session()
+        if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        if "blueprint" in session_info:
-            return Response(
-                content=json_dumps(session_info["blueprint"]),
-                media_type="application/json",
-            )
+        return Response(
+            content=json_dumps(session.blueprint),
+            media_type="application/json",
+        )
 
-        blueprint_id = session_info["blueprint_id"]
+
+@app.get("/sessions/{session_id}/blueprint/{blueprint_id}")
+def get_session_blueprint(session_id: str, blueprint_id: str):
+    with SessionStorage(session_id) as session_storage:
+        session = session_storage.load_session()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
 
         try:
-            with BlueprintStorage() as bp_storage:
-                blueprint = bp_storage.get_blueprint(blueprint_id)
-        except RequestedBlueprintNotFound:
-            raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} for session {session_id} not found")
-        except Exception as exc:
-            LOG.exception(f"Failed to retrieve blueprint {blueprint_id} for session {session_id}")
-            raise HTTPException(status_code=500, detail=f"Failed to retrieve session blueprint: {exc}")
-
-        return Response(content=json_dumps(blueprint), media_type="application/json")
+            blueprint = session.get_blueprint(blueprint_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} not found in session")
+        else:
+            return Response(
+                content=json_dumps(blueprint),
+                media_type="application/json",
+            )
 
 
 @app.get("/sessions/{session_id}")
@@ -731,41 +716,9 @@ def get_session_details(session_id: str):
     """
     # Always load from storage
     with SessionStorage(session_id) as session_storage:
-        session_info = session_storage.get_session_info()
-        if not session_info:
+        session = session_storage.load_session()
+        if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-
-        blueprint_id = session_info["blueprint_id"]
-        state = session_info["state"]
-        params = session_info.get("params", {})
-        inner_blueprint_ids = session_info.get("inner_blueprint_ids", [])
-        blueprint_data = session_info.get("blueprint")
-
-        try:
-            if blueprint_data:
-                if isinstance(blueprint_data, dict):
-                    blueprint = Blueprint.__from_data__(blueprint_data)
-                else:
-                    blueprint = blueprint_data
-            else:
-                blueprint = session_storage.get_blueprint(blueprint_id)
-
-            inner_blueprints = {}
-            for inner_id in inner_blueprint_ids:
-                inner_blueprints[inner_id] = session_storage.get_blueprint(inner_id)
-
-        except Exception as exc:
-            LOG.exception(f"Failed to retrieve blueprint {blueprint_id} for session {session_id}")
-            raise HTTPException(status_code=500, detail=f"Failed to retrieve session blueprint: {exc}")
-
-        # Reconstruct session object
-        session = BlueprintSession(
-            bsid=session_id,
-            blueprint=blueprint,
-            state=state,
-            params=params,
-            inner_blueprints=inner_blueprints,
-        )
 
         return Response(content=json_dumps(session), media_type="application/json")
 
