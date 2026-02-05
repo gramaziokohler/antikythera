@@ -537,16 +537,16 @@ class Orchestrator:
                 LOG.error(f"Error evaluating condition '{condition}' for task {task.id}: {e}")
                 raise
 
-        # 2. Implicit Skip Propagation (if all parents were skipped)
-        fqn_task_id = _create_global_id(blueprint_id, task)
-        parent_ids = list(self.graph.neighbors_in(fqn_task_id))
+        # # 2. Implicit Skip Propagation (if all parents were skipped)
+        # fqn_task_id = _create_global_id(blueprint_id, task)
+        # parent_ids = list(self.graph.neighbors_in(fqn_task_id))
 
-        if parent_ids:
-            all_parents_skipped = all(self.graph.node[pid]["task"].state == TaskState.SKIPPED for pid in parent_ids)
+        # if parent_ids:
+        #     all_parents_skipped = all(self.graph.node[pid]["task"].state == TaskState.SKIPPED for pid in parent_ids)
 
-            if all_parents_skipped:
-                LOG.info(f"Task {task.id} skipped because all parent tasks were skipped.")
-                return True
+        #     if all_parents_skipped:
+        #         LOG.info(f"Task {task.id} skipped because all parent tasks were skipped.")
+        #         return True
 
         return False
 
