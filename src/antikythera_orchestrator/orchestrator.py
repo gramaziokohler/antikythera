@@ -446,7 +446,8 @@ class Orchestrator:
             if task.is_dynamically_expanded:
                 # in dynamically expanded tasks, the value is always a mapping {"element_id": "value"}
                 # the aggregation happens in :meth:`_map_outputs_to_outer_session`
-                assert isinstance(inputs_value, dict)
+                if not isinstance(inputs_value, dict):
+                    raise RuntimeError(f"Expected dict input for dynamically expanded task {task.id}, got {type(inputs_value)}. Data={inputs_value}")
                 composite_options = task.get_param_value("blueprint")
                 element_id = composite_options["dynamic"]["element"]["element_id"]
                 inputs[key] = inputs_value[element_id]
@@ -479,7 +480,8 @@ class Orchestrator:
 
         element = None
         if task.is_dynamically_expanded:
-            element = self.session_storage.get(inner_blueprint_id, "element")
+            composite_options = task.get_param_value("blueprint")
+            element = composite_options["dynamic"]["element"]
 
         for out in task.outputs:
             mapped_key = out.set_to or out.name
