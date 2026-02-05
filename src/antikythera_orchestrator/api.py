@@ -642,12 +642,10 @@ def get_blueprint(blueprint_id: str):
     # First check active sessions
     with _sessions_lock:
         for session in _sessions.values():
-            if session.blueprint_id == blueprint_id:
-                # Found active session with this blueprint
-                # NOTE: this is tricky since if there's several sessions with the same blueprint (from previous runs) which are finished
-                # thie finised one will be returned, potentially ignoring the currently active one.
-                # TODO: made get_session_blueprint instead, maybe remove this section and always get from storage?
-                blueprint = session.orchestrator.session.blueprint
+            # Check if the blueprint is active in this session (either as root or inner blueprint)
+            active_blueprint = session.orchestrator.session.get_blueprint(blueprint_id)
+            if active_blueprint:
+                blueprint = active_blueprint
                 break
 
     if not blueprint:
