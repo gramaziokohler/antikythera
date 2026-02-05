@@ -120,6 +120,10 @@ class SessionStorage:
         # self.client.logout()
         self.client.shutdown()
 
+    def _session_key(self) -> str:
+        assert self.session_id, "Session ID must be set"
+        return f"bsid-{self.session_id}"
+
     def _key(self, blueprint_id: str, key: str) -> bytes:
         assert self.session_id, "Session ID must be set"
         return f"{self._session_key()}:{blueprint_id}:{key}".encode()
@@ -158,10 +162,6 @@ class SessionStorage:
                 clean_key = decoded_key[len(prefix_str) :]
                 data[clean_key] = json_loads(value.decode())
         return data
-
-    def _session_key(self) -> str:
-        assert self.session_id, "Session ID must be set"
-        return f"bsid-{self.session_id}"
 
     def save_session(self, session: BlueprintSession) -> None:
         """Save a complete BlueprintSession object to storage.
@@ -208,13 +208,10 @@ class SessionStorage:
         Optional[BlueprintSession]
             The loaded session, or None if not found.
         """
-        key = self._session_key()
-        match = self.client.get(key.encode())
-        if match is None:
-            return None
-
-        data = json_loads(match.value.decode())
-        return data.get("session")
+        data = self.load_session_with_metadata()
+        if data:
+            return data.get("session")
+        return None
 
     def load_session_with_metadata(self) -> Optional[dict]:
         """Load a complete BlueprintSession object with metadata from storage.
