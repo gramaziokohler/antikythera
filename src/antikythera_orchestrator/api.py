@@ -391,6 +391,25 @@ def pause_session(session_id: str) -> SessionActionResponse:
     return SessionActionResponse(session_id=session_id, message="Session paused.")
 
 
+@app.post("/sessions/{session_id}/stop", response_model=SessionActionResponse)
+def stop_session(session_id: str) -> SessionActionResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        # the difference between pause and stop is that when stopping the orchestrator will unsubscribe
+        # from all topics, message queue will be flushed and serialize final state to storage
+        session.orchestrator.stop()
+    except Exception as exc:
+        LOG.exception(f"Failed to stop session {session_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop session: {exc}")
+
+    return SessionActionResponse(session_id=session_id, message="Session stopped.")
+
+
 def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
     with SessionStorage(session_id) as session_storage:
         session = session_storage.load_session()
