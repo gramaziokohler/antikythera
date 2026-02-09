@@ -122,9 +122,30 @@ class SessionActionResponse(BaseModel):
     message: str
 
 
-app = FastAPI(title="Antikythera Orchestrator API")
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # before running
+    LOG.info("Antikythera Orchestrator API starting up...")
+
+    # app is running
+    yield
+
+    # on shutdown
+    LOG.info("Shutting down all active sessions...")
+    with _sessions_lock:
+        for session in _sessions.values():
+            try:
+                session.orchestrator.stop()
+            except Exception:  # pragma: no cover - best-effort shutdown
+                LOG.exception(f"Failed to stop orchestrator for blueprint {session.blueprint_id}")
+        _sessions.clear()
+
+
+app = FastAPI(title="Antikythera Orchestrator API", lifespan=lifespan)
 
 
 def _start_blueprint_session(request: StartBlueprintRequest) -> str:
@@ -719,14 +740,3 @@ def get_session_details(session_id: str):
             raise HTTPException(status_code=404, detail="Session not found")
 
         return Response(content=json_dumps(session), media_type="application/json")
-
-
-@app.on_event("shutdown")
-def shutdown() -> None:
-    with _sessions_lock:
-        for session in _sessions.values():
-            try:
-                session.orchestrator.stop()
-            except Exception:  # pragma: no cover - best-effort shutdown
-                LOG.exception(f"Failed to stop orchestrator for blueprint {session.blueprint_id}")
-        _sessions.clear()
