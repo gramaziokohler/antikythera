@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Response
 from fastapi import UploadFile
+from fastapi.concurrency import asynccontextmanager
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -658,29 +659,15 @@ def get_blueprint(blueprint_id: str):
     HTTPException
         If the blueprint is not found.
     """
-    blueprint = None
-
-    # First check active sessions
-    with _sessions_lock:
-        for session in _sessions.values():
-            # Check if the blueprint is active in this session (either as root or inner blueprint)
-            active_blueprint = session.orchestrator.session.get_blueprint(blueprint_id)
-            if active_blueprint:
-                blueprint = active_blueprint
-                break
-
-    if not blueprint:
-        # If not found in active sessions, check storage
-        try:
-            with BlueprintStorage() as storage:
-                blueprint = storage.get_blueprint(blueprint_id)
-        except RequestedBlueprintNotFound:
-            raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} not found")
-        except Exception as exc:
-            LOG.exception(f"Failed to retrieve blueprint {blueprint_id}")
-            raise HTTPException(status_code=500, detail=f"Failed to retrieve blueprint: {exc}")
-
-    return Response(content=json_dumps(blueprint), media_type="application/json")
+    try:
+        with BlueprintStorage() as storage:
+            blueprint = storage.get_blueprint(blueprint_id)
+        return Response(content=json_dumps(blueprint), media_type="application/json")
+    except RequestedBlueprintNotFound:
+        raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} not found")
+    except Exception as exc:
+        LOG.exception(f"Failed to retrieve blueprint {blueprint_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve blueprint: {exc}")
 
 
 @app.get("/sessions/{session_id}/blueprint")
