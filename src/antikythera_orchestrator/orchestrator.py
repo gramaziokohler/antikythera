@@ -448,8 +448,11 @@ class Orchestrator:
                 # the aggregation happens in :meth:`_map_outputs_to_outer_session`
                 if not isinstance(inputs_value, dict):
                     raise RuntimeError(f"Expected dict input for dynamically expanded task {task.id}, got {type(inputs_value)}. Data={inputs_value}")
-                composite_options = task.get_param_value("blueprint")
-                element_id = composite_options["dynamic"]["element"]["element_id"]
+
+                context = self._get_composite_blueprint_context(blueprint_id)
+                assert context is not None
+                element_id = context["element_id"]
+
                 inputs[key] = inputs_value[element_id]
             else:
                 inputs[key] = inputs_value
