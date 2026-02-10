@@ -446,3 +446,7 @@ class BlueprintSession(Data):
         if self.blueprint.id == blueprint_id:
             return self.blueprint
         return self.inner_blueprints.get(blueprint_id)
+
+    def get_context_for_blueprint(self, blueprint_id: str) -> Optional[Dict]:
+        """Returns the context for a given blueprint, if it exists."""
+        return self.blueprint_contexts.get(blueprint_id)

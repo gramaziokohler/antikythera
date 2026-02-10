@@ -377,6 +377,21 @@ class Orchestrator:
                 LOG.debug(f"Resetting failed task {task.id} to PENDING")
                 task.state = TaskState.PENDING
 
+    def get_currently_running_composite_blueprints(self) -> set[str]:
+        blueprints = set()
+        for node, data in self.graph.nodes(data=True):
+            task: Task = data["task"]
+            if task.state != TaskState.RUNNING:
+                continue
+
+            if task.is_dynamically_expanded:
+                composite_options = task.get_param_value("blueprint")
+                blueprint_id = composite_options["dynamic"]["blueprint_id"]
+                LOG.debug(f"Found running task {task.id} in blueprint {blueprint_id}")
+                blueprints.add(blueprint_id)
+
+        return blueprints
+
     def start(self) -> None:
         """Starts the orchestrator."""
         if self.state == BlueprintSessionState.RUNNING:
@@ -504,7 +519,7 @@ class Orchestrator:
         fabrication_context = composite_options["dynamic"]["element"]
         self.session.blueprint_contexts[blueprint_id] = fabrication_context.copy()
 
-    def _get_composite_blueprint_context(self, blueprint_id: str) -> Optional[Dict]:
+    def get_composite_blueprint_context(self, blueprint_id: str) -> Optional[Dict]:
         return self.session.blueprint_contexts.get(blueprint_id)
 
     def _get_model_if_available(self) -> Tuple[Optional[Model], Any]:
@@ -603,7 +618,7 @@ class Orchestrator:
                 if nesting:
                     task.set_param_value("nesting", nesting)
 
-                context = self._get_composite_blueprint_context(blueprint_id)
+                context = self.get_composite_blueprint_context(blueprint_id)
 
                 # TODO: what do we do if no agent even claims the task.. should there be some timeout? YES!
                 task.state = TaskState.READY
