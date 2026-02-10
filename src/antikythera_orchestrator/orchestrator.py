@@ -464,9 +464,8 @@ class Orchestrator:
                 if not isinstance(inputs_value, dict):
                     raise RuntimeError(f"Expected dict input for dynamically expanded task {task.id}, got {type(inputs_value)}. Data={inputs_value}")
 
-                context = self._get_composite_blueprint_context(blueprint_id)
-                assert context is not None
-                element_id = context["element_id"]
+                composite_options = task.get_param_value("blueprint")
+                element_id = composite_options["dynamic"]["element"]["element_id"]
 
                 inputs[key] = inputs_value[element_id]
             else:
