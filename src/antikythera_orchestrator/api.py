@@ -746,3 +746,69 @@ def get_session_details(session_id: str):
             raise HTTPException(status_code=404, detail="Session not found")
 
         return Response(content=json_dumps(session), media_type="application/json")
+
+
+@app.get("/sessions/{session_id}/context/{blueprint_id}")
+def get_blueprint_context(session_id: str, blueprint_id: str):
+    """Get the context for a specific blueprint within a session.
+
+    `blueprint_id` must be of a dynamically expanded composite blueprint.
+
+    Parameters
+    ----------
+    session_id : str
+        The ID of the session.
+    blueprint_id : str
+        The ID of the blueprint to get context for.
+
+    Returns
+    -------
+    Response
+        The blueprint context as a JSON response.
+
+    Raises
+    ------
+    HTTPException
+        If the session or blueprint is not found.
+    """
+    with SessionStorage(session_id) as storage:
+        session = storage.load_session()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        item_context = session.get_context_for_blueprint(blueprint_id)
+        if not item_context:
+            raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} not found in session")
+
+        return Response(content=json_dumps(item_context), media_type="application/json")
+
+
+@app.get("/sessions/{session_id}/running-composites")
+def get_running_composites(session_id: str):
+    """Get the IDs of all composite blueprints in a session that currently have running tasks.
+
+    Parameters
+    ----------
+    session_id : str
+        The ID of the session.
+
+    Returns
+    -------
+    Response
+        A JSON response containing a list of composite blueprint IDs with running tasks.
+
+    Raises
+    ------
+    HTTPException
+        If the session is not found.
+    """
+
+    # Check if session is active in memory first to get real-time info, otherwise load from storage
+    with _sessions_lock:
+        if session_id not in _sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        active_session = _sessions[session_id]
+        running_blueprints = active_session.orchestrator.get_currently_running_composite_blueprints()
+
+        return Response(content=json_dumps(list(running_blueprints)), media_type="application/json")
