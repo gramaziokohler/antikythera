@@ -745,4 +745,29 @@ def get_session_details(session_id: str):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
+        # Inject synthetic model geometries if model_id is present
+        if "model_id" in session.params:
+            model_id = session.params["model_id"]
+            try:
+                with ModelStorage() as model_storage:
+                    model = model_storage.get_model(model_id)
+
+                    model.process_joinery()
+
+                    if model:
+                        view_meshes = []
+                        for element in model.beams:
+                            geometry = element.geometry
+                            mesh = None
+
+                            if hasattr(geometry, "to_viewmesh") and callable(geometry.to_viewmesh):
+                                mesh = geometry.to_viewmesh()
+                                view_meshes.append(mesh)
+
+                        if view_meshes:
+                            session.params["model"] = view_meshes
+            except Exception as e:
+                LOG.warning(f"Failed to load synthetic model {model_id} for session {session_id}: {e}")
+                raise
+
         return Response(content=json_dumps(session), media_type="application/json")
