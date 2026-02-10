@@ -1,6 +1,9 @@
 import os
+
 import pytest
-from antikythera.models import Task, TaskParam, TaskInput
+
+from antikythera.models import Task
+from antikythera.models import TaskParam
 from antikythera_agents.io_agent import IOAgent
 
 

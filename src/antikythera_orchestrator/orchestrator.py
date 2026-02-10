@@ -377,6 +377,21 @@ class Orchestrator:
                 LOG.debug(f"Resetting failed task {task.id} to PENDING")
                 task.state = TaskState.PENDING
 
+    def get_currently_running_composite_blueprints(self) -> set[str]:
+        blueprints = set()
+        for node, data in self.graph.nodes(data=True):
+            task: Task = data["task"]
+            if task.state != TaskState.RUNNING:
+                continue
+
+            if task.is_dynamically_expanded:
+                composite_options = task.get_param_value("blueprint")
+                blueprint_id = composite_options["dynamic"]["blueprint_id"]
+                LOG.debug(f"Found running task {task.id} in blueprint {blueprint_id}")
+                blueprints.add(blueprint_id)
+
+        return blueprints
+
     def start(self) -> None:
         """Starts the orchestrator."""
         if self.state == BlueprintSessionState.RUNNING:
@@ -446,9 +461,13 @@ class Orchestrator:
             if task.is_dynamically_expanded:
                 # in dynamically expanded tasks, the value is always a mapping {"element_id": "value"}
                 # the aggregation happens in :meth:`_map_outputs_to_outer_session`
-                assert isinstance(inputs_value, dict)
-                composite_options = task.get_param_value("blueprint")
-                element_id = composite_options["dynamic"]["element"]["element_id"]
+                if not isinstance(inputs_value, dict):
+                    raise RuntimeError(f"Expected dict input for dynamically expanded task {task.id}, got {type(inputs_value)}. Data={inputs_value}")
+
+                context = self._get_composite_blueprint_context(blueprint_id)
+                assert context is not None
+                element_id = context["element_id"]
+
                 inputs[key] = inputs_value[element_id]
             else:
                 inputs[key] = inputs_value
@@ -479,7 +498,8 @@ class Orchestrator:
 
         element = None
         if task.is_dynamically_expanded:
-            element = self.session_storage.get(inner_blueprint_id, "element")
+            composite_options = task.get_param_value("blueprint")
+            element = composite_options["dynamic"]["element"]
 
         for out in task.outputs:
             mapped_key = out.set_to or out.name
@@ -502,7 +522,7 @@ class Orchestrator:
         fabrication_context = composite_options["dynamic"]["element"]
         self.session.blueprint_contexts[blueprint_id] = fabrication_context.copy()
 
-    def _get_composite_blueprint_context(self, blueprint_id: str) -> Optional[Dict]:
+    def get_composite_blueprint_context(self, blueprint_id: str) -> Optional[Dict]:
         return self.session.blueprint_contexts.get(blueprint_id)
 
     def _get_model_if_available(self) -> Tuple[Optional[Model], Any]:
@@ -537,16 +557,16 @@ class Orchestrator:
                 LOG.error(f"Error evaluating condition '{condition}' for task {task.id}: {e}")
                 raise
 
-        # 2. Implicit Skip Propagation (if all parents were skipped)
-        fqn_task_id = _create_global_id(blueprint_id, task)
-        parent_ids = list(self.graph.neighbors_in(fqn_task_id))
+        # # 2. Implicit Skip Propagation (if all parents were skipped)
+        # fqn_task_id = _create_global_id(blueprint_id, task)
+        # parent_ids = list(self.graph.neighbors_in(fqn_task_id))
 
-        if parent_ids:
-            all_parents_skipped = all(self.graph.node[pid]["task"].state == TaskState.SKIPPED for pid in parent_ids)
+        # if parent_ids:
+        #     all_parents_skipped = all(self.graph.node[pid]["task"].state == TaskState.SKIPPED for pid in parent_ids)
 
-            if all_parents_skipped:
-                LOG.info(f"Task {task.id} skipped because all parent tasks were skipped.")
-                return True
+        #     if all_parents_skipped:
+        #         LOG.info(f"Task {task.id} skipped because all parent tasks were skipped.")
+        #         return True
 
         return False
 
@@ -593,7 +613,6 @@ class Orchestrator:
                     for key, value in inputs.items():
                         self.session_storage.set(inner_blueprint_id, key, value)
 
-                # TODO: Implement other execution modes (execution mode should probably be defined in the blueprint?)
                 execution_mode = task.get_param_value("execution_mode", ExecutionMode.EXCLUSIVE)
 
                 if model:
@@ -601,7 +620,7 @@ class Orchestrator:
                 if nesting:
                     task.set_param_value("nesting", nesting)
 
-                context = self._get_composite_blueprint_context(blueprint_id)
+                context = self.get_composite_blueprint_context(blueprint_id)
 
                 # TODO: what do we do if no agent even claims the task.. should there be some timeout? YES!
                 task.state = TaskState.READY
@@ -690,12 +709,19 @@ class Orchestrator:
             LOG.warning(f"Received claim for unknown task: {task_id}")
             return
 
+        execution_mode = task.get_param_value("execution_mode", ExecutionMode.EXCLUSIVE)
+        can_allocate = False
         if task.state == TaskState.READY:
+            can_allocate = True
+        elif task.state == TaskState.RUNNING and execution_mode == ExecutionMode.COMPETITIVE:
+            can_allocate = True
+
+        if can_allocate:
             task.state = TaskState.RUNNING
 
             allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
             self.task_allocation_publisher.publish(allocation)
-            LOG.info(f"Allocated task {task_id} to agent {message.agent_id}")
+            LOG.info(f"Allocated task {task_id} to agent {message.agent_id} (Mode: {execution_mode})")
 
             # Persist the updated session state
             self.session_storage.save_session(self.session)

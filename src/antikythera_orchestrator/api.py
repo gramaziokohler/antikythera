@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Response
 from fastapi import UploadFile
+from fastapi.concurrency import asynccontextmanager
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -122,9 +123,30 @@ class SessionActionResponse(BaseModel):
     message: str
 
 
-app = FastAPI(title="Antikythera Orchestrator API")
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # before running
+    LOG.info("Antikythera Orchestrator API starting up...")
+
+    # app is running
+    yield
+
+    # on shutdown
+    LOG.info("Shutting down all active sessions...")
+    with _sessions_lock:
+        for session in _sessions.values():
+            try:
+                session.orchestrator.stop()
+            except Exception:  # pragma: no cover - best-effort shutdown
+                LOG.exception(f"Failed to stop orchestrator for blueprint {session.blueprint_id}")
+        _sessions.clear()
+
+
+app = FastAPI(title="Antikythera Orchestrator API", lifespan=lifespan)
 
 
 def _start_blueprint_session(request: StartBlueprintRequest) -> str:
@@ -367,6 +389,25 @@ def pause_session(session_id: str) -> SessionActionResponse:
         raise HTTPException(status_code=500, detail=f"Failed to pause session: {exc}")
 
     return SessionActionResponse(session_id=session_id, message="Session paused.")
+
+
+@app.post("/sessions/{session_id}/stop", response_model=SessionActionResponse)
+def stop_session(session_id: str) -> SessionActionResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        # the difference between pause and stop is that when stopping the orchestrator will unsubscribe
+        # from all topics, message queue will be flushed and serialize final state to storage
+        session.orchestrator.stop()
+    except Exception as exc:
+        LOG.exception(f"Failed to stop session {session_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop session: {exc}")
+
+    return SessionActionResponse(session_id=session_id, message="Session stopped.")
 
 
 def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
@@ -637,31 +678,15 @@ def get_blueprint(blueprint_id: str):
     HTTPException
         If the blueprint is not found.
     """
-    blueprint = None
-
-    # First check active sessions
-    with _sessions_lock:
-        for session in _sessions.values():
-            if session.blueprint_id == blueprint_id:
-                # Found active session with this blueprint
-                # NOTE: this is tricky since if there's several sessions with the same blueprint (from previous runs) which are finished
-                # thie finised one will be returned, potentially ignoring the currently active one.
-                # TODO: made get_session_blueprint instead, maybe remove this section and always get from storage?
-                blueprint = session.orchestrator.session.blueprint
-                break
-
-    if not blueprint:
-        # If not found in active sessions, check storage
-        try:
-            with BlueprintStorage() as storage:
-                blueprint = storage.get_blueprint(blueprint_id)
-        except RequestedBlueprintNotFound:
-            raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} not found")
-        except Exception as exc:
-            LOG.exception(f"Failed to retrieve blueprint {blueprint_id}")
-            raise HTTPException(status_code=500, detail=f"Failed to retrieve blueprint: {exc}")
-
-    return Response(content=json_dumps(blueprint), media_type="application/json")
+    try:
+        with BlueprintStorage() as storage:
+            blueprint = storage.get_blueprint(blueprint_id)
+        return Response(content=json_dumps(blueprint), media_type="application/json")
+    except RequestedBlueprintNotFound:
+        raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} not found")
+    except Exception as exc:
+        LOG.exception(f"Failed to retrieve blueprint {blueprint_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve blueprint: {exc}")
 
 
 @app.get("/sessions/{session_id}/blueprint")
@@ -723,12 +748,67 @@ def get_session_details(session_id: str):
         return Response(content=json_dumps(session), media_type="application/json")
 
 
-@app.on_event("shutdown")
-def shutdown() -> None:
+@app.get("/sessions/{session_id}/context/{blueprint_id}")
+def get_blueprint_context(session_id: str, blueprint_id: str):
+    """Get the context for a specific blueprint within a session.
+
+    `blueprint_id` must be of a dynamically expanded composite blueprint.
+
+    Parameters
+    ----------
+    session_id : str
+        The ID of the session.
+    blueprint_id : str
+        The ID of the blueprint to get context for.
+
+    Returns
+    -------
+    Response
+        The blueprint context as a JSON response.
+
+    Raises
+    ------
+    HTTPException
+        If the session or blueprint is not found.
+    """
+    with SessionStorage(session_id) as storage:
+        session = storage.load_session()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        item_context = session.get_context_for_blueprint(blueprint_id)
+        if not item_context:
+            raise HTTPException(status_code=404, detail=f"Blueprint {blueprint_id} not found in session")
+
+        return Response(content=json_dumps(item_context), media_type="application/json")
+
+
+@app.get("/sessions/{session_id}/running-composites")
+def get_running_composites(session_id: str):
+    """Get the IDs of all composite blueprints in a session that currently have running tasks.
+
+    Parameters
+    ----------
+    session_id : str
+        The ID of the session.
+
+    Returns
+    -------
+    Response
+        A JSON response containing a list of composite blueprint IDs with running tasks.
+
+    Raises
+    ------
+    HTTPException
+        If the session is not found.
+    """
+
+    # Check if session is active in memory first to get real-time info, otherwise load from storage
     with _sessions_lock:
-        for session in _sessions.values():
-            try:
-                session.orchestrator.stop()
-            except Exception:  # pragma: no cover - best-effort shutdown
-                LOG.exception(f"Failed to stop orchestrator for blueprint {session.blueprint_id}")
-        _sessions.clear()
+        if session_id not in _sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        active_session = _sessions[session_id]
+        running_blueprints = active_session.orchestrator.get_currently_running_composite_blueprints()
+
+        return Response(content=json_dumps(list(running_blueprints)), media_type="application/json")

@@ -1,0 +1,19 @@
+name: antikythera-basic-infrastructure
+
+services:
+  mqtt-broker:
+    image: emqx/nanomq:latest
+    container_name: mqtt-broker
+    ports:
+      - "1883:1883"
+      - "8083:8083"
+      - "8084:8084"
+      - "8080:8080"
+
+  immudb:
+    image: codenotary/immudb:latest
+    container_name: immudb
+    ports:
+      - "3322:3322"
+      - "9497:9497"
+      - "8999:8080"

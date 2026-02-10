@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Strict validation for Blueprint JSON files, requiring explicit list-of-dictionary formats for inputs, outputs, and parameters.
 - Unit tests for failed task resume scenarios, including session revival from storage.
+- Add support for competitive execution of tasks.
+- New API endpoint `get_blueprint_context` to get the fabrication context of a composite blueprint.
+- New API endpoint `get_running_composites` to get the currently running composite blueprints.
 
 ### Changed
 - Moved `composite_to_inner_blueprint_map` and `blueprint_contexts` from `Orchestrator` to `BlueprintSession` for proper serialization and session restoration.
@@ -24,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `max_grpc_message_length` configuration for immudb client to handle larger messages.
 - Added demo agent to return the Standard 3d bunny as a COMPAS mesh.
 - Added `io.copy` agent/tool to copy files with support for glob patterns.
+- Do not implicitly propagate skip status to child tasks, as it generates an non-intuitive workflow where skipping a parent task causes all child tasks to be skipped without the ability to override.
 
 ### Changed
 - Refactored `Task` class to enforce a single data access pattern.

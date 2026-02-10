@@ -21,6 +21,7 @@ from antikythera.models.conversions import dict_to_inputs
 from antikythera.models.conversions import dict_to_params
 from antikythera.models.conversions import keys_to_outputs
 from antikythera_agents.cli import Colors
+from antikythera_agents.context import ExecutionContext
 
 THREAD_JOIN_TIMEOUT = 10
 
@@ -43,6 +44,7 @@ class AgentLauncher:
     def __init__(self, broker_host="127.0.0.1", broker_port=1883):
         self.launcher_id = coolname.generate_slug(4)
         self.pending_claims = {}  # task_id -> Task
+        self.active_contexts = {}  # task_id -> ExecutionContext
 
         self.threads = []
         self.thread_lock = threading.Lock()
@@ -145,13 +147,19 @@ class AgentLauncher:
                 print(f"Received allocation for unknown or already processed task {task_id}")
 
     def _execute_task_wrapper(self, task: Task, agent_type: str) -> None:
+        # Create execution context
+        context = ExecutionContext()
+        with self.thread_lock:
+            self.active_contexts[task.id] = context
+
         try:
-            self._execute_task(task, agent_type)
+            self._execute_task(task, agent_type, context)
         finally:
             with self.thread_lock:
+                self.active_contexts.pop(task.id, None)
                 self.threads.remove(threading.current_thread())
 
-    def _execute_task(self, task: Task, agent_type: str) -> None:
+    def _execute_task(self, task: Task, agent_type: str, context: ExecutionContext) -> None:
         agent = self.agents.get(agent_type)
 
         if not agent:
@@ -159,11 +167,17 @@ class AgentLauncher:
             return
 
         try:
-            outputs = agent.execute_task(task)
+            outputs = agent.execute_task(task, context=context)
             if not isinstance(outputs, dict):
                 raise ValueError(f"Agent tools must return a dict of outputs. Got {type(outputs)} instead.")
             state = TaskState.SUCCEEDED
         except Exception as e:
+            if context.is_cancelled:
+                # If cancelled, we log and return, without trying to set state, or outputs
+                # or sending completion messages
+                print(f"{Colors.WARNING}🛑 [{task.id}][{task.type}] Task cancelled.{Colors.ENDC}")
+                return
+
             print(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Agent Error: {e}{Colors.ENDC}")
             state = TaskState.FAILED
             outputs = {"exception": str(e)}
@@ -172,7 +186,14 @@ class AgentLauncher:
         self.task_completion_publisher.publish(msg)
 
     def on_task_ack(self, message: TaskCompletionAckMessage) -> None:
-        pass
+        if message.accepted_agent_id != self.launcher_id:
+            with self.thread_lock:
+                context = self.active_contexts.get(message.id)
+
+            if context:
+                # It's a running task, and we are not the winner.
+                print(f"{Colors.WARNING}📉 [{message.id}] received ACK for {message.accepted_agent_id}, cancelling local execution.{Colors.ENDC}")
+                context.cancel()
 
     def reload_agents(self):
         print(f"{Colors.OKBLUE}Reloading agents...{Colors.ENDC}")
