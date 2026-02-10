@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Strict validation for Blueprint JSON files, requiring explicit list-of-dictionary formats for inputs, outputs, and parameters.
 - Unit tests for failed task resume scenarios, including session revival from storage.
+- Add support for competitive execution of tasks.
 - New API endpoint `get_blueprint_context` to get the fabrication context of a composite blueprint.
 - New API endpoint `get_running_composites` to get the currently running composite blueprints.
 

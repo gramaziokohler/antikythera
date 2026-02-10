@@ -463,8 +463,11 @@ class Orchestrator:
                 # the aggregation happens in :meth:`_map_outputs_to_outer_session`
                 if not isinstance(inputs_value, dict):
                     raise RuntimeError(f"Expected dict input for dynamically expanded task {task.id}, got {type(inputs_value)}. Data={inputs_value}")
-                composite_options = task.get_param_value("blueprint")
-                element_id = composite_options["dynamic"]["element"]["element_id"]
+
+                context = self._get_composite_blueprint_context(blueprint_id)
+                assert context is not None
+                element_id = context["element_id"]
+
                 inputs[key] = inputs_value[element_id]
             else:
                 inputs[key] = inputs_value
@@ -610,7 +613,6 @@ class Orchestrator:
                     for key, value in inputs.items():
                         self.session_storage.set(inner_blueprint_id, key, value)
 
-                # TODO: Implement other execution modes (execution mode should probably be defined in the blueprint?)
                 execution_mode = task.get_param_value("execution_mode", ExecutionMode.EXCLUSIVE)
 
                 if model:
@@ -707,12 +709,19 @@ class Orchestrator:
             LOG.warning(f"Received claim for unknown task: {task_id}")
             return
 
+        execution_mode = task.get_param_value("execution_mode", ExecutionMode.EXCLUSIVE)
+        can_allocate = False
         if task.state == TaskState.READY:
+            can_allocate = True
+        elif task.state == TaskState.RUNNING and execution_mode == ExecutionMode.COMPETITIVE:
+            can_allocate = True
+
+        if can_allocate:
             task.state = TaskState.RUNNING
 
             allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
             self.task_allocation_publisher.publish(allocation)
-            LOG.info(f"Allocated task {task_id} to agent {message.agent_id}")
+            LOG.info(f"Allocated task {task_id} to agent {message.agent_id} (Mode: {execution_mode})")
 
             # Persist the updated session state
             self.session_storage.save_session(self.session)
