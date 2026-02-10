@@ -1,0 +1,58 @@
+{
+    "version": "1.0",
+    "id": "toy-problem-competitive",
+    "name": "Toy Problem Competitive",
+    "description": "Showcase competitive execution mode",
+    "tasks": [
+        {
+            "id": "start",
+            "type": "system.start",
+            "outputs": [
+                {
+                    "name": "start_time"
+                }
+            ]
+        },
+        {
+            "id": "race_confirmation",
+            "type": "user_prompt.confirm",
+            "params": [
+                {
+                    "name": "message",
+                    "value": "Who clicks first?"
+                },
+                {
+                    "name": "options",
+                    "value": [
+                        "Me!",
+                        "No, me!"
+                    ]
+                },
+                {
+                    "name": "execution_mode",
+                    "value": "COMPETITIVE"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "result",
+                    "type": "str"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ]
+        },
+        {
+            "id": "end",
+            "type": "system.end",
+            "depends_on": [
+                {
+                    "id": "race_confirmation"
+                }
+            ]
+        }
+    ]
+}

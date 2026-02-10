@@ -1,10 +1,13 @@
+import inspect
 import logging
 from abc import ABC
 from contextlib import contextmanager
 from typing import Any
 from typing import Dict
+from typing import Optional
 
 from antikythera.models import Task
+from antikythera_agents.context import ExecutionContext
 from antikythera_agents.decorators import get_agent_tools
 
 
@@ -68,13 +71,15 @@ class Agent(ABC):
         except Exception:
             return False
 
-    def execute_task(self, task: Task) -> Dict[str, Any]:
+    def execute_task(self, task: Task, context: Optional[ExecutionContext] = None) -> Dict[str, Any]:
         """Execute a task using the appropriate tool.
 
         Parameters
         ----------
         task : Task
             The task to execute
+        context : ExecutionContext, optional
+            The runtime context for the execution
 
         Returns
         -------
@@ -100,9 +105,23 @@ class Agent(ABC):
 
             tool_method = self._tools[tool_name]
 
+            # Inspect tool signature to determine if it accepts context
+            # We support both (self, task) and (self, task, context)
+            # NOTE: This is kind of cute as it keeps simple agents, simple
+            # but if we should verify it's not an expensive check
+            args = [self, task]
+            sig = inspect.signature(tool_method)
+            params = list(sig.parameters.values())
+
+            # If the tool signature expects more than 2 arguments (self, task),
+            # and we have a context, we pass it.
+            # We check for >= 3 because params[0] is self, params[1] is task.
+            if len(params) >= 3 and context is not None:
+                args.append(context)
+
             # Execute the tool
             try:
-                result = tool_method(self, task)
+                result = tool_method(*args)
                 return result or {}
             except Exception as e:
                 self.logger.exception(f"Tool '{tool_name}' execution failed")

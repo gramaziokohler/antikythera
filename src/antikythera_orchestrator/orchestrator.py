@@ -595,7 +595,6 @@ class Orchestrator:
                     for key, value in inputs.items():
                         self.session_storage.set(inner_blueprint_id, key, value)
 
-                # TODO: Implement other execution modes (execution mode should probably be defined in the blueprint?)
                 execution_mode = task.get_param_value("execution_mode", ExecutionMode.EXCLUSIVE)
 
                 if model:
@@ -692,12 +691,19 @@ class Orchestrator:
             LOG.warning(f"Received claim for unknown task: {task_id}")
             return
 
+        execution_mode = task.get_param_value("execution_mode", ExecutionMode.EXCLUSIVE)
+        can_allocate = False
         if task.state == TaskState.READY:
+            can_allocate = True
+        elif task.state == TaskState.RUNNING and execution_mode == ExecutionMode.COMPETITIVE:
+            can_allocate = True
+
+        if can_allocate:
             task.state = TaskState.RUNNING
 
             allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
             self.task_allocation_publisher.publish(allocation)
-            LOG.info(f"Allocated task {task_id} to agent {message.agent_id}")
+            LOG.info(f"Allocated task {task_id} to agent {message.agent_id} (Mode: {execution_mode})")
 
             # Persist the updated session state
             self.session_storage.save_session(self.session)
