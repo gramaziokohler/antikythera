@@ -562,6 +562,10 @@ class Orchestrator:
                 allowed_names.update(fabrication_context)
                 allowed_names.update(context)
 
+                # NOTE: by injecting the entire session data into the eval context we allow conditions
+                # to reference anything from the blueprint's namespace. while handy, this might be too implicit
+                # and cause confusion with regards to the data flow across tasks.
+                # TODO: revisite this decision.
                 session_data = self.session_storage.get_all(blueprint_id)
                 allowed_names.update(session_data)
 
