@@ -90,9 +90,7 @@ An **agent** is an entity that can run a specific type of **task**.
 
 Python agents are implemented as subclasses of the `Agent` base class and use decorators to define their capabilities, however, it is possible to implement agents in other languages, provided they adhere to the **Agent Communication Protocol**.
 
-Agents can run locally or remotely. Agents don't explicitely send or receive MQTT messages. Their lifetime is controlled by an agent manager process that takes care of instantiating and disposing agents as needed, as well as triggering task execution. The agent manager is also in charge of handling the termination of the orchestrator and disposing of all agents.
-
-For simplicity, a simple launcher can be used to start one agent manager for each agent type defined in a blueprint.
+Agents can run locally or remotely. Agents don't explicitely send or receive MQTT messages. Their lifetime is controlled by an agent launcher process that takes care of instantiating and disposing agents as needed, as well as triggering task execution. The agent launcher is also in charge of handling the termination of the orchestrator and disposing of all agents.
 
 #### Python Agents
 
@@ -532,7 +530,7 @@ The Antikythera project is organized as follows:
   - **`__main__.py`**: Application entry point
 
 - **`antikythera_agents/`**: Built-in agent implementations
-  - **`launcher.py`**: Agent launcher and manager
+  - **`launcher.py`**: Agent launcher
 
 ### Extension Points
 
