@@ -260,3 +260,69 @@ def test_reset_failed_tasks_resets_running_and_ready_tasks(mock_immudb, mock_tra
     assert task_b.state == TaskState.PENDING  # RUNNING -> PENDING
     assert task_c.state == TaskState.PENDING  # READY -> PENDING
     assert task_end.state == TaskState.PENDING  # was already PENDING
+
+
+# ===========================================================================
+# Tests for skip_task_state
+# ===========================================================================
+
+
+def test_skip_task_state_skips_single_task(mock_immudb, mock_transport_orchestrator):
+    """skip_task_state should only skip the target task, not downstream dependents."""
+    task_start = Task(id="start", type="system.start")
+    task_a = Task(id="a", type="some.task")
+    task_b = Task(id="b", type="some.task")
+    task_end = Task(id="end", type="system.end")
+    task_start >> task_a >> task_b >> task_end
+
+    blueprint = Blueprint(id="bp_skip", name="Test", tasks=[task_start, task_a, task_b, task_end])
+    session = BlueprintSession(bsid="test_skip_single", blueprint=blueprint)
+    orchestrator = Orchestrator(session)
+
+    result = orchestrator.skip_task_state("bp_skip", "a")
+
+    assert "bp_skip.a" in result
+    assert task_a.state == TaskState.SKIPPED
+    assert task_b.state == TaskState.PENDING  # downstream NOT affected
+    assert task_end.state == TaskState.PENDING  # downstream NOT affected
+
+
+def test_skip_task_state_skips_composite_inner_blueprints(mock_immudb, mock_transport_orchestrator):
+    """Skipping a composite task should also recursively skip its inner blueprint tasks."""
+    orchestrator = _make_trivial_orchestrator("test_skip_composite_api", mock_immudb, mock_transport_orchestrator)
+
+    outer_bp_id = "outer"
+    inner_bp_id = "inner_bp"
+
+    # Add a composite task to the graph
+    composite_task = _make_dynamic_composite_task("comp", inner_bp_id)
+    fqn_composite = _create_global_id(outer_bp_id, composite_task)
+    orchestrator.graph.add_node(fqn_composite, task=composite_task, blueprint_id=outer_bp_id)
+
+    # Add inner blueprint tasks
+    inner_start = Task(id="start", type="system.start")
+    inner_work = Task(id="work", type="some.task")
+    inner_end = Task(id="end", type="system.end")
+    for t in [inner_start, inner_work, inner_end]:
+        orchestrator.graph.add_node(_create_global_id(inner_bp_id, t), task=t, blueprint_id=inner_bp_id)
+
+    # Register the mapping
+    orchestrator.session.composite_to_inner_blueprint_map[fqn_composite] = inner_bp_id
+
+    orchestrator.skip_task_state(outer_bp_id, "comp")
+
+    assert composite_task.state == TaskState.SKIPPED
+    assert inner_start.state == TaskState.SKIPPED
+    assert inner_work.state == TaskState.SKIPPED
+    assert inner_end.state == TaskState.SKIPPED
+
+
+def test_skip_task_state_raises_on_unknown_task(mock_immudb, mock_transport_orchestrator):
+    """skip_task_state should raise KeyError for a non-existent task."""
+    orchestrator = _make_trivial_orchestrator("test_skip_unknown", mock_immudb, mock_transport_orchestrator)
+
+    try:
+        orchestrator.skip_task_state("trivial", "nonexistent")
+        assert False, "Expected KeyError"
+    except KeyError:
+        pass
