@@ -193,7 +193,7 @@ def test_skip_inner_blueprint_recursively_skips_nested_composites(mock_immudb, m
     """If an inner blueprint contains composite tasks, their inner blueprints should also be skipped recursively."""
     orchestrator = _make_trivial_orchestrator("test_skip_recursive", mock_immudb, mock_transport_orchestrator)
 
-    outer_bp_id = "outer_bp"
+    # outer_bp_id = "outer_bp"
     inner_bp_id = "inner_bp"
     nested_bp_id = "nested_bp"
 
