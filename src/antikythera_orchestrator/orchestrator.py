@@ -562,6 +562,9 @@ class Orchestrator:
                 allowed_names.update(fabrication_context)
                 allowed_names.update(context)
 
+                session_data = self.session_storage.get_all(blueprint_id)
+                allowed_names.update(session_data)
+
                 LOG.debug(f"Evaluating condition for task {task.id} with context: {allowed_names}")
 
                 if not safe_eval_condition(condition, allowed_names):
