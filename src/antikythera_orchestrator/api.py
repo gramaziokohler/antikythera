@@ -24,8 +24,11 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from antikythera.io import BlueprintJsonSerializer
+from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
+from antikythera.models import Task
+from antikythera.models import TaskState
 from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.storage import BlueprintStorage
 from antikythera_orchestrator.storage import ModelStorage
@@ -121,6 +124,13 @@ class DeleteModelResponse(BaseModel):
 class SessionActionResponse(BaseModel):
     session_id: str
     message: str
+
+
+class ResetTaskRequest(BaseModel):
+    blueprint_id: str = Field(..., description="Blueprint ID containing the task.")
+    task_id: str = Field(..., description="Task ID to reset.")
+    include_downstream: bool = Field(True, description="Also reset tasks that depend on this task.")
+    clear_outputs: bool = Field(True, description="Clear task outputs from session storage.")
 
 
 _sessions_lock = Lock()
@@ -444,6 +454,42 @@ def _revive_session(session_id: str, broker_host: str, broker_port: int) -> Acti
     return active_session
 
 
+def _reset_tasks_in_blueprint(blueprint: Blueprint, task_id: str, include_downstream: bool = True) -> list[Task]:
+    """Collect tasks to reset from a single blueprint's task list.
+
+    Note: this operates on a flat blueprint and does NOT traverse into
+    inner blueprints of composite tasks.  For active sessions the
+    orchestrator's graph-based ``reset_task_state`` is used instead,
+    which naturally crosses composite boundaries.
+    """
+    tasks_by_id = {t.id: t for t in blueprint.tasks}
+    if task_id not in tasks_by_id:
+        raise KeyError(f"Task not found: {task_id}")
+
+    if not include_downstream:
+        return [tasks_by_id[task_id]]
+
+    dependents_map = {}
+    for task in blueprint.tasks:
+        for dep in task.depends_on:
+            dependents_map.setdefault(dep.id, []).append(task.id)
+
+    to_visit = [task_id]
+    visited = set()
+    ordered_ids = []
+    while to_visit:
+        current = to_visit.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        ordered_ids.append(current)
+        for child_id in dependents_map.get(current, []):
+            if child_id not in visited:
+                to_visit.append(child_id)
+
+    return [tasks_by_id[tid] for tid in ordered_ids]
+
+
 @app.post("/sessions/{session_id}/start", response_model=SessionActionResponse)
 def start_session(session_id: str, request: RestartSessionRequest) -> SessionActionResponse:
     with _sessions_lock:
@@ -462,6 +508,59 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
         raise HTTPException(status_code=500, detail=f"Failed to start session: {exc}")
 
     return SessionActionResponse(session_id=session_id, message="Session started.")
+
+
+@app.post("/sessions/{session_id}/tasks/reset", response_model=SessionActionResponse)
+def reset_task(session_id: str, request: ResetTaskRequest) -> SessionActionResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if session:
+        if session.orchestrator.state == BlueprintSessionState.RUNNING:
+            raise HTTPException(status_code=409, detail="Session is running. Pause it before resetting tasks.")
+
+        try:
+            reset_tasks = session.orchestrator.reset_task_state(
+                request.blueprint_id,
+                request.task_id,
+                include_downstream=request.include_downstream,
+                clear_outputs=request.clear_outputs,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+        return SessionActionResponse(session_id=session_id, message=f"Reset {len(reset_tasks)} task(s) to PENDING.")
+
+    with SessionStorage(session_id) as storage:
+        session_data = storage.load_session()
+        if not session_data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        blueprint = session_data.get_blueprint(request.blueprint_id)
+        if not blueprint:
+            raise HTTPException(status_code=404, detail="Blueprint not found in session")
+
+        try:
+            tasks_to_reset = _reset_tasks_in_blueprint(blueprint, request.task_id, request.include_downstream)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+        for task in tasks_to_reset:
+            task.state = TaskState.PENDING
+            if request.clear_outputs:
+                for output in task.outputs:
+                    output.value = None
+                    mapped_key = output.set_to or output.name
+                    storage.set(request.blueprint_id, mapped_key, None)
+
+        # If the session was in a terminal state, move it back to STOPPED
+        if session_data.state in (BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED):
+            LOG.info(f"Resetting session {session_id} state from {session_data.state} to STOPPED after task reset.")
+            session_data.state = BlueprintSessionState.STOPPED
+
+        storage.save_session(session_data)
+
+    return SessionActionResponse(session_id=session_id, message=f"Reset {len(tasks_to_reset)} task(s) to PENDING.")
 
 
 async def _handle_upload_json_file(file: UploadFile) -> list[str]:
