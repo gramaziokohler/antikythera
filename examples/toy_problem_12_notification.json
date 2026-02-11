@@ -1,0 +1,183 @@
+{
+    "version": "1.0",
+    "id": "toy-problem-competitive",
+    "name": "Toy Problem 12 Notification",
+    "description": "Showcase notification agent",
+    "tasks": [
+        {
+            "id": "start",
+            "type": "system.start",
+            "outputs": [
+                {
+                    "name": "start_time"
+                }
+            ]
+        },
+        {
+            "id": "notification_1",
+            "type": "user_interaction.notify",
+            "params": [
+                {
+                    "name": "title",
+                    "value": "System Initiated"
+                },
+                {
+                    "name": "message",
+                    "value": "Starting process..."
+                },
+                {
+                    "name": "level",
+                    "value": "info"
+                },
+                {
+                    "name": "execution_mode",
+                    "value": "COMPETITIVE"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ]
+        },
+        {
+            "id": "sleep_1",
+            "type": "system.sleep",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 2
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "notification_1"
+                }
+            ]
+        },
+        {
+            "id": "notification_2",
+            "type": "user_interaction.notify",
+            "params": [
+                {
+                    "name": "title",
+                    "value": "Processing"
+                },
+                {
+                    "name": "message",
+                    "value": "Processing data..."
+                },
+                {
+                    "name": "level",
+                    "value": "info"
+                },
+                {
+                    "name": "execution_mode",
+                    "value": "COMPETITIVE"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "sleep_1"
+                }
+            ]
+        },
+        {
+            "id": "sleep_2",
+            "type": "system.sleep",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 2
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "notification_2"
+                }
+            ]
+        },
+        {
+            "id": "notification_3",
+            "type": "user_interaction.notify",
+            "params": [
+                {
+                    "name": "title",
+                    "value": "Task Complete"
+                },
+                {
+                    "name": "message",
+                    "value": "Almost done..."
+                },
+                {
+                    "name": "level",
+                    "value": "success"
+                },
+                {
+                    "name": "execution_mode",
+                    "value": "COMPETITIVE"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "sleep_2"
+                }
+            ]
+        },
+        {
+            "id": "sleep_3",
+            "type": "system.sleep",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 2
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "notification_3"
+                }
+            ]
+        },
+        {
+            "id": "final_confirmation",
+            "type": "user_prompt.confirm",
+            "params": [
+                {
+                    "name": "message",
+                    "value": "Process completed successfully. Click OK to finish."
+                },
+                {
+                    "name": "options",
+                    "value": [
+                        "OK"
+                    ]
+                },
+                {
+                    "name": "execution_mode",
+                    "value": "COMPETITIVE"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "result",
+                    "type": "str"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "sleep_3"
+                }
+            ]
+        },
+        {
+            "id": "end",
+            "type": "system.end",
+            "depends_on": [
+                {
+                    "id": "final_confirmation"
+                }
+            ]
+        }
+    ]
+}
