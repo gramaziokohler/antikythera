@@ -546,8 +546,17 @@ class Orchestrator:
 
         if condition:
             try:
+                # context = self.get_composite_blueprint_context(blueprint_id) or {}
+                composite_options = task.get_param_value("blueprint") or {}
+                fabrication_context = composite_options.get("dynamic", {}).get("element", {})
+                context = self.get_composite_blueprint_context(blueprint_id) or {}
+
                 allowed_names = params_to_dict(task.params)
                 allowed_names.update(inputs.copy())
+                allowed_names.update(fabrication_context)
+                allowed_names.update(context)
+
+                LOG.debug(f"Evaluating condition for task {task.id} with context: {allowed_names}")
 
                 if not safe_eval_condition(condition, allowed_names):
                     LOG.info(f"Task {task.id} skipped due to condition: {condition}")
@@ -574,9 +583,44 @@ class Orchestrator:
         task.state = TaskState.SKIPPED
         fqn_task_id = _create_global_id(blueprint_id, task)
 
+        # If this is a composite task, also skip all tasks in the inner blueprint
+        # to prevent the scheduler from picking them up
+        if task.is_composite:
+            inner_blueprint_id = self.session.composite_to_inner_blueprint_map.get(fqn_task_id)
+            if inner_blueprint_id:
+                self._skip_inner_blueprint_tasks(inner_blueprint_id)
+
         completion_msg = TaskCompletionMessage(id=fqn_task_id, state=TaskState.SKIPPED, outputs={}, agent_id="system")
 
         self.on_task_completed(completion_msg)
+
+    def _skip_inner_blueprint_tasks(self, blueprint_id: str) -> None:
+        """Marks all tasks belonging to an inner blueprint as SKIPPED.
+
+        This prevents the scheduler from picking up tasks from an inner blueprint
+        whose parent composite task has been skipped. If any of the inner tasks
+        are themselves composite, their inner blueprints are also skipped recursively.
+
+        Parameters
+        ----------
+        blueprint_id : str
+            The ID of the inner blueprint whose tasks should be skipped.
+        """
+        for node, data in self.graph.nodes(data=True):
+            if data["blueprint_id"] != blueprint_id:
+                continue
+            inner_task: Task = data["task"]
+            if inner_task.state in (TaskState.SKIPPED, TaskState.SUCCEEDED, TaskState.FAILED):
+                continue
+            LOG.debug(f"Skipping inner blueprint task {inner_task.id} (blueprint: {blueprint_id})")
+            inner_task.state = TaskState.SKIPPED
+
+            # Recursively skip nested inner blueprints
+            if inner_task.is_composite:
+                fqn_inner_task_id = _create_global_id(blueprint_id, inner_task)
+                nested_blueprint_id = self.session.composite_to_inner_blueprint_map.get(fqn_inner_task_id)
+                if nested_blueprint_id:
+                    self._skip_inner_blueprint_tasks(nested_blueprint_id)
 
     def _schedule_tasks(self) -> None:
         """Schedules tasks for execution."""
