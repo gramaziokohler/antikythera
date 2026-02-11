@@ -4,6 +4,7 @@ from antikythera.models import Task
 from antikythera.models import TaskParam
 from antikythera.models import TaskState
 from antikythera_orchestrator.orchestrator import Orchestrator
+from antikythera_orchestrator.orchestrator import _create_global_id
 
 
 def _make_dynamic_composite_task(task_id, inner_blueprint_id, element_id="elem1"):
@@ -109,3 +110,153 @@ def test_get_currently_running_composite_blueprints_ignores_non_running_dynamic(
     result = orchestrator.get_currently_running_composite_blueprints()
 
     assert result == set()
+
+
+# ===========================================================================
+# Tests for _handle_skipped_task / _skip_inner_blueprint_tasks
+# ===========================================================================
+
+
+def test_handle_skipped_composite_task_skips_inner_blueprint_tasks(mock_immudb, mock_transport_orchestrator):
+    """When a composite task is skipped, all tasks in its inner blueprint should also be marked SKIPPED."""
+    orchestrator = _make_trivial_orchestrator("test_skip_inner", mock_immudb, mock_transport_orchestrator)
+
+    outer_bp_id = "outer_bp"
+    inner_bp_id = "inner_bp_skip"
+
+    # Create the composite task on the outer blueprint
+    composite_task = _make_dynamic_composite_task("comp_skip", inner_bp_id)
+    fqn_composite_id = f"{outer_bp_id}.{composite_task.id}"
+    orchestrator.graph.add_node(fqn_composite_id, task=composite_task, blueprint_id=outer_bp_id)
+
+    # Create inner blueprint tasks
+    inner_start = Task(id="start", type="system.start")
+    inner_work = Task(id="work", type="some.task")
+    inner_end = Task(id="end", type="system.end")
+    for inner_task in [inner_start, inner_work, inner_end]:
+        fqn_id = _create_global_id(inner_bp_id, inner_task)
+        orchestrator.graph.add_node(fqn_id, task=inner_task, blueprint_id=inner_bp_id)
+
+    # Register the composite-to-inner mapping
+    orchestrator.session.composite_to_inner_blueprint_map[fqn_composite_id] = inner_bp_id
+
+    # Skip the composite task
+    orchestrator._handle_skipped_task(composite_task, outer_bp_id)
+
+    # All inner blueprint tasks should now be SKIPPED
+    assert inner_start.state == TaskState.SKIPPED
+    assert inner_work.state == TaskState.SKIPPED
+    assert inner_end.state == TaskState.SKIPPED
+    assert composite_task.state == TaskState.SKIPPED
+
+
+def test_skip_inner_blueprint_preserves_already_terminal_tasks(mock_immudb, mock_transport_orchestrator):
+    """Tasks already in a terminal state (SUCCEEDED, FAILED) should not be changed when skipping."""
+    orchestrator = _make_trivial_orchestrator("test_skip_preserve", mock_immudb, mock_transport_orchestrator)
+
+    inner_bp_id = "inner_bp_preserve"
+
+    task_succeeded = Task(id="done", type="some.task", state=TaskState.SUCCEEDED)
+    task_failed = Task(id="broken", type="some.task", state=TaskState.FAILED)
+    task_pending = Task(id="waiting", type="some.task", state=TaskState.PENDING)
+
+    for t in [task_succeeded, task_failed, task_pending]:
+        orchestrator.graph.add_node(_create_global_id(inner_bp_id, t), task=t, blueprint_id=inner_bp_id)
+
+    orchestrator._skip_inner_blueprint_tasks(inner_bp_id)
+
+    assert task_succeeded.state == TaskState.SUCCEEDED
+    assert task_failed.state == TaskState.FAILED
+    assert task_pending.state == TaskState.SKIPPED
+
+
+def test_skip_inner_blueprint_does_not_affect_other_blueprints(mock_immudb, mock_transport_orchestrator):
+    """Skipping inner blueprint tasks should not affect tasks from other blueprints."""
+    orchestrator = _make_trivial_orchestrator("test_skip_isolation", mock_immudb, mock_transport_orchestrator)
+
+    target_bp_id = "target_bp"
+    other_bp_id = "other_bp"
+
+    target_task = Task(id="t1", type="some.task")
+    other_task = Task(id="t2", type="some.task")
+
+    orchestrator.graph.add_node(_create_global_id(target_bp_id, target_task), task=target_task, blueprint_id=target_bp_id)
+    orchestrator.graph.add_node(_create_global_id(other_bp_id, other_task), task=other_task, blueprint_id=other_bp_id)
+
+    orchestrator._skip_inner_blueprint_tasks(target_bp_id)
+
+    assert target_task.state == TaskState.SKIPPED
+    assert other_task.state == TaskState.PENDING
+
+
+def test_skip_inner_blueprint_recursively_skips_nested_composites(mock_immudb, mock_transport_orchestrator):
+    """If an inner blueprint contains composite tasks, their inner blueprints should also be skipped recursively."""
+    orchestrator = _make_trivial_orchestrator("test_skip_recursive", mock_immudb, mock_transport_orchestrator)
+
+    # outer_bp_id = "outer_bp"
+    inner_bp_id = "inner_bp"
+    nested_bp_id = "nested_bp"
+
+    # Inner blueprint has a composite task that expands to a nested blueprint
+    inner_start = Task(id="start", type="system.start")
+    inner_composite = _make_dynamic_composite_task("nested_comp", nested_bp_id)
+    inner_end = Task(id="end", type="system.end")
+    for t in [inner_start, inner_composite, inner_end]:
+        orchestrator.graph.add_node(_create_global_id(inner_bp_id, t), task=t, blueprint_id=inner_bp_id)
+
+    # Register the inner composite -> nested blueprint mapping
+    fqn_inner_composite = _create_global_id(inner_bp_id, inner_composite)
+    orchestrator.session.composite_to_inner_blueprint_map[fqn_inner_composite] = nested_bp_id
+
+    # Nested blueprint has its own tasks
+    nested_start = Task(id="start", type="system.start")
+    nested_work = Task(id="work", type="some.task")
+    nested_end = Task(id="end", type="system.end")
+    for t in [nested_start, nested_work, nested_end]:
+        orchestrator.graph.add_node(_create_global_id(nested_bp_id, t), task=t, blueprint_id=nested_bp_id)
+
+    # Skip the inner blueprint
+    orchestrator._skip_inner_blueprint_tasks(inner_bp_id)
+
+    # Inner blueprint tasks should be skipped
+    assert inner_start.state == TaskState.SKIPPED
+    assert inner_composite.state == TaskState.SKIPPED
+    assert inner_end.state == TaskState.SKIPPED
+
+    # Nested blueprint tasks should also be skipped
+    assert nested_start.state == TaskState.SKIPPED
+    assert nested_work.state == TaskState.SKIPPED
+    assert nested_end.state == TaskState.SKIPPED
+
+
+# ===========================================================================
+# Tests for _reset_failed_tasks (session resume)
+# ===========================================================================
+
+
+def test_reset_failed_tasks_resets_running_and_ready_tasks(mock_immudb, mock_transport_orchestrator):
+    """On resume, RUNNING and READY tasks should be reset to PENDING alongside FAILED tasks."""
+    task_start = Task(id="start", type="system.start")
+    task_a = Task(id="a", type="some.task")
+    task_b = Task(id="b", type="some.task")
+    task_c = Task(id="c", type="some.task")
+    task_end = Task(id="end", type="system.end")
+    task_start >> task_a >> task_b >> task_c >> task_end
+
+    blueprint = Blueprint(id="bp_reset", name="Test", tasks=[task_start, task_a, task_b, task_c, task_end])
+    session = BlueprintSession(bsid="test_reset_states", blueprint=blueprint)
+    orchestrator = Orchestrator(session)
+
+    # Simulate a stopped session with tasks in various states
+    orchestrator.graph.node[f"{blueprint.id}.{task_start.id}"]["task"].state = TaskState.SUCCEEDED
+    orchestrator.graph.node[f"{blueprint.id}.{task_a.id}"]["task"].state = TaskState.FAILED
+    orchestrator.graph.node[f"{blueprint.id}.{task_b.id}"]["task"].state = TaskState.RUNNING
+    orchestrator.graph.node[f"{blueprint.id}.{task_c.id}"]["task"].state = TaskState.READY
+
+    orchestrator._reset_failed_tasks()
+
+    assert task_start.state == TaskState.SUCCEEDED  # should stay
+    assert task_a.state == TaskState.PENDING  # FAILED -> PENDING
+    assert task_b.state == TaskState.PENDING  # RUNNING -> PENDING
+    assert task_c.state == TaskState.PENDING  # READY -> PENDING
+    assert task_end.state == TaskState.PENDING  # was already PENDING

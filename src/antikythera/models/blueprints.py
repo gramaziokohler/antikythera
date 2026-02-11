@@ -303,6 +303,7 @@ class Task(Data):
             id=new_task_id,
             type=SystemTaskType.COMPOSITE,
             description=f"{dynamic_task.description} - {element_id}",
+            condition=dynamic_task.condition,
             params=new_params,
             inputs=deepcopy(dynamic_task.inputs),
             outputs=deepcopy(dynamic_task.outputs),

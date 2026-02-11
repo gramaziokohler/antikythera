@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added demo agent to return the Standard 3d bunny as a COMPAS mesh.
 - Added `io.copy` agent/tool to copy files with support for glob patterns.
 - Do not implicitly propagate skip status to child tasks, as it generates an non-intuitive workflow where skipping a parent task causes all child tasks to be skipped without the ability to override.
+- Extended the context of condition eval, so that it includes fab context and session data.
+- Fixed resuming not doing anything due to tasks being in RUNNING or READY state when session was stopped.
+- Fixed condition doesn't get carried over to dynamically expanded tasks.
 
 ### Changed
 - Refactored `Task` class to enforce a single data access pattern.
