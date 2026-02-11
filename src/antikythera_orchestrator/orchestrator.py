@@ -370,11 +370,17 @@ class Orchestrator:
                     # inst.stop()
 
     def _reset_failed_tasks(self) -> None:
-        """Resets tasks that are in FAILED state to PENDING."""
+        """Resets tasks that are in a non-resumable state to PENDING.
+
+        Tasks in FAILED, RUNNING, or READY state are reset to PENDING so that
+        they can be re-scheduled when the session resumes. Tasks that were RUNNING
+        or READY at the time of a stop are no longer being worked on by any agent,
+        so they need to be re-dispatched.
+        """
         for node, data in self.graph.nodes(data=True):
             task: Task = data["task"]
-            if task.state == TaskState.FAILED:
-                LOG.debug(f"Resetting failed task {task.id} to PENDING")
+            if task.state in (TaskState.FAILED, TaskState.RUNNING, TaskState.READY):
+                LOG.debug(f"Resetting task {task.id} (state={task.state}) to PENDING")
                 task.state = TaskState.PENDING
 
     def get_currently_running_composite_blueprints(self) -> set[str]:
