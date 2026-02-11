@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New API endpoint `get_blueprint_context` to get the fabrication context of a composite blueprint.
 - New API endpoint `get_running_composites` to get the currently running composite blueprints.
 - Add new `user_interaction.notify` agent for sending user notifications with including support for string interpolation of session data.
+- Add API endpoint and backend support for reseting tasks (and downstream dependencies) to a pending state to allow re-execution after a failure or user intervention.
 
 ### Changed
 - Moved `composite_to_inner_blueprint_map` and `blueprint_contexts` from `Orchestrator` to `BlueprintSession` for proper serialization and session restoration.

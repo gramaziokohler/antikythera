@@ -377,6 +377,63 @@ class Orchestrator:
                 LOG.debug(f"Resetting failed task {task.id} to PENDING")
                 task.state = TaskState.PENDING
 
+    def reset_task_state(self, blueprint_id: str, task_id: str, include_downstream: bool = True, clear_outputs: bool = True) -> list[str]:
+        """Reset a task (and optionally its downstream dependents) to PENDING.
+
+        Parameters
+        ----------
+        blueprint_id : str
+            Blueprint ID of the task to reset.
+        task_id : str
+            Task ID to reset (within the blueprint).
+        include_downstream : bool, optional
+            If True, also reset tasks that depend on this task.
+        clear_outputs : bool, optional
+            If True, clear task outputs in session storage.
+
+        Returns
+        -------
+        list[str]
+            A list of fully-qualified task IDs that were reset.
+        """
+        if not self.graph:
+            raise KeyError("Task graph is not initialized")
+
+        fqn_task_id = f"{blueprint_id}.{task_id}"
+        if fqn_task_id not in self.graph.node:
+            raise KeyError(f"Task not found: {fqn_task_id}")
+
+        to_reset = {fqn_task_id}
+        if include_downstream:
+            queue = [fqn_task_id]
+            while queue:
+                current = queue.pop()
+                for neighbor in self.graph.neighbors_out(current):
+                    if neighbor not in to_reset:
+                        to_reset.add(neighbor)
+                        queue.append(neighbor)
+
+        LOG.info(f"Resetting {len(to_reset)} task(s) to PENDING: {sorted(to_reset)}")
+
+        for fqn_id in to_reset:
+            task: Task = self.graph.node[fqn_id]["task"]
+            task_blueprint_id = self.graph.node[fqn_id]["blueprint_id"]
+            task.state = TaskState.PENDING
+            if clear_outputs:
+                for output in task.outputs:
+                    output.value = None
+                    mapped_key = output.set_to or output.name
+                    self.session_storage.set(task_blueprint_id, mapped_key, None)
+
+        # If the session was in a terminal state (FAILED/COMPLETED), move it
+        # back to STOPPED so that it can be resumed.
+        if self.session.state in (BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED):
+            LOG.info(f"Resetting session state from {self.session.state} to STOPPED after task reset.")
+            self.session.state = BlueprintSessionState.STOPPED
+
+        self.session_storage.save_session(self.session)
+        return sorted(to_reset)
+
     def get_currently_running_composite_blueprints(self) -> set[str]:
         blueprints = set()
         for node, data in self.graph.nodes(data=True):
