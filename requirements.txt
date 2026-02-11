@@ -9,6 +9,7 @@ immudb-py
 mqtthandler
 python-dotenv
 python-multipart
+sse-starlette >= 2,<3
 uvicorn >= 0.25,<1
 watchdog
 jsonschema

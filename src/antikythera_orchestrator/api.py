@@ -22,6 +22,7 @@ from fastapi import UploadFile
 from fastapi.concurrency import asynccontextmanager
 from pydantic import BaseModel
 from pydantic import Field
+from sse_starlette.sse import EventSourceResponse
 
 from antikythera.io import BlueprintJsonSerializer
 from antikythera.models import Blueprint
@@ -30,6 +31,9 @@ from antikythera.models import BlueprintSessionState
 from antikythera.models import Task
 from antikythera.models import TaskState
 from antikythera_orchestrator.orchestrator import Orchestrator
+from antikythera_orchestrator.session_events import SessionEvent
+from antikythera_orchestrator.session_events import SessionEventBus
+from antikythera_orchestrator.session_events import SessionEventType
 from antikythera_orchestrator.storage import BlueprintStorage
 from antikythera_orchestrator.storage import ModelStorage
 from antikythera_orchestrator.storage import RequestedBlueprintNotFound
@@ -398,6 +402,9 @@ def pause_session(session_id: str) -> SessionActionResponse:
         LOG.exception(f"Failed to pause session {session_id}")
         raise HTTPException(status_code=500, detail=f"Failed to pause session: {exc}")
 
+    SessionEventBus.get_instance().publish(
+        SessionEvent(type=SessionEventType.SESSION_STATE_CHANGED, session_id=session_id, data={"state": "stopped"})
+    )
     return SessionActionResponse(session_id=session_id, message="Session paused.")
 
 
@@ -417,6 +424,9 @@ def stop_session(session_id: str) -> SessionActionResponse:
         LOG.exception(f"Failed to stop session {session_id}")
         raise HTTPException(status_code=500, detail=f"Failed to stop session: {exc}")
 
+    SessionEventBus.get_instance().publish(
+        SessionEvent(type=SessionEventType.SESSION_STATE_CHANGED, session_id=session_id, data={"state": "stopped"})
+    )
     return SessionActionResponse(session_id=session_id, message="Session stopped.")
 
 
@@ -507,6 +517,9 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
         LOG.exception(f"Failed to start session {session_id}")
         raise HTTPException(status_code=500, detail=f"Failed to start session: {exc}")
 
+    SessionEventBus.get_instance().publish(
+        SessionEvent(type=SessionEventType.SESSION_STATE_CHANGED, session_id=session_id, data={"state": "running"})
+    )
     return SessionActionResponse(session_id=session_id, message="Session started.")
 
 
@@ -529,6 +542,13 @@ def reset_task(session_id: str, request: ResetTaskRequest) -> SessionActionRespo
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
 
+        event_bus = SessionEventBus.get_instance()
+        event_bus.publish(
+            SessionEvent(type=SessionEventType.TASK_STATE_CHANGED, session_id=session_id, data={"reset_tasks": reset_tasks})
+        )
+        event_bus.publish(
+            SessionEvent(type=SessionEventType.DATA_STORE_UPDATED, session_id=session_id)
+        )
         return SessionActionResponse(session_id=session_id, message=f"Reset {len(reset_tasks)} task(s) to PENDING.")
 
     with SessionStorage(session_id) as storage:
@@ -560,6 +580,13 @@ def reset_task(session_id: str, request: ResetTaskRequest) -> SessionActionRespo
 
         storage.save_session(session_data)
 
+    event_bus = SessionEventBus.get_instance()
+    event_bus.publish(
+        SessionEvent(type=SessionEventType.TASK_STATE_CHANGED, session_id=session_id, data={"reset_tasks": [t.id for t in tasks_to_reset]})
+    )
+    event_bus.publish(
+        SessionEvent(type=SessionEventType.DATA_STORE_UPDATED, session_id=session_id)
+    )
     return SessionActionResponse(session_id=session_id, message=f"Reset {len(tasks_to_reset)} task(s) to PENDING.")
 
 
@@ -911,3 +938,50 @@ def get_running_composites(session_id: str):
         running_blueprints = active_session.orchestrator.get_currently_running_composite_blueprints()
 
         return Response(content=json_dumps(list(running_blueprints)), media_type="application/json")
+
+
+@app.get("/sessions/{session_id}/events")
+async def session_events(session_id: str):
+    """Stream real-time session events via Server-Sent Events (SSE).
+
+    The frontend connects to this endpoint to receive push notifications
+    whenever the session state changes, eliminating the need for polling.
+    Each SSE message has an ``event`` field indicating the type of change
+    (e.g. ``task_state_changed``, ``session_state_changed``, ``data_store_updated``),
+    and a JSON ``data`` payload with additional details.
+
+    The stream stays open until the client disconnects.
+
+    Parameters
+    ----------
+    session_id : str
+        The ID of the session to monitor.
+
+    Returns
+    -------
+    EventSourceResponse
+        An SSE stream of session events.
+    """
+    # Verify that the session exists (either active or in storage)
+    with _sessions_lock:
+        active = session_id in _sessions
+
+    if not active:
+        with SessionStorage(session_id) as storage:
+            session = storage.load_session()
+            if not session:
+                raise HTTPException(status_code=404, detail="Session not found")
+
+    event_bus = SessionEventBus.get_instance()
+
+    async def event_generator():
+        # Send an initial heartbeat so the client knows the connection is live
+        yield {"event": "connected", "data": json_dumps({"session_id": session_id})}
+
+        async for event in event_bus.subscribe(session_id):
+            yield {
+                "event": event.type.value,
+                "data": json_dumps(event.data),
+            }
+
+    return EventSourceResponse(event_generator(), ping=15)

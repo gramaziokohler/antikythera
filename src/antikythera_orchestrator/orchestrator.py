@@ -38,6 +38,9 @@ from antikythera.models.conversions import params_to_dict
 
 from .conditionals import safe_eval_condition
 from .sequencers import SequencerRegistry
+from .session_events import SessionEvent
+from .session_events import SessionEventBus
+from .session_events import SessionEventType
 from .storage import BlueprintStorage
 from .storage import ModelStorage
 from .storage import SessionStorage
@@ -352,6 +355,13 @@ class Orchestrator:
     def state(self, value: BlueprintSessionState) -> None:
         self.session.state = value
         self.session_storage.save_session(self.session)
+        self._notify(SessionEventType.SESSION_STATE_CHANGED, {"state": str(value)})
+
+    def _notify(self, event_type: SessionEventType, data: dict | None = None) -> None:
+        """Publish a notification to the SSE event bus."""
+        SessionEventBus.get_instance().publish(
+            SessionEvent(type=event_type, session_id=self.session.bsid, data=data or {})
+        )
 
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
@@ -700,6 +710,9 @@ class Orchestrator:
         # Persist the updated session state
         self.session_storage.save_session(self.session)
 
+        if pending_tasks:
+            self._notify(SessionEventType.TASK_STATE_CHANGED)
+
     def _get_last_task(self) -> Task:
         for node, data in self.graph.nodes(data=True):
             if self.graph.degree_out(node) == 0:
@@ -747,6 +760,10 @@ class Orchestrator:
         ack = TaskCompletionAckMessage(id=message.id, state=TaskState(message.state), accepted_agent_id=message.agent_id)
         self.task_ack_publisher.publish(ack)
 
+        # Notify SSE subscribers — task state changed and data store updated
+        self._notify(SessionEventType.TASK_STATE_CHANGED, {"task_id": message.id, "state": str(message.state)})
+        self._notify(SessionEventType.DATA_STORE_UPDATED)
+
         # Persist the updated session state
         self.session_storage.save_session(self.session)
 
@@ -778,6 +795,8 @@ class Orchestrator:
             allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
             self.task_allocation_publisher.publish(allocation)
             LOG.info(f"Allocated task {task_id} to agent {message.agent_id} (Mode: {execution_mode})")
+
+            self._notify(SessionEventType.TASK_STATE_CHANGED, {"task_id": task_id, "state": str(TaskState.RUNNING)})
 
             # Persist the updated session state
             self.session_storage.save_session(self.session)
