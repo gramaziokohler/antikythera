@@ -402,9 +402,7 @@ def pause_session(session_id: str) -> SessionActionResponse:
         LOG.exception(f"Failed to pause session {session_id}")
         raise HTTPException(status_code=500, detail=f"Failed to pause session: {exc}")
 
-    SessionEventBus.get_instance().publish(
-        SessionEvent(type=SessionEventType.SESSION_STATE_CHANGED, session_id=session_id, data={"state": "stopped"})
-    )
+    SessionEventBus.get_instance().publish(SessionEvent(type=SessionEventType.SESSION_STATE_CHANGED, session_id=session_id, data={"state": "stopped"}))
     return SessionActionResponse(session_id=session_id, message="Session paused.")
 
 
@@ -424,9 +422,7 @@ def stop_session(session_id: str) -> SessionActionResponse:
         LOG.exception(f"Failed to stop session {session_id}")
         raise HTTPException(status_code=500, detail=f"Failed to stop session: {exc}")
 
-    SessionEventBus.get_instance().publish(
-        SessionEvent(type=SessionEventType.SESSION_STATE_CHANGED, session_id=session_id, data={"state": "stopped"})
-    )
+    SessionEventBus.get_instance().publish(SessionEvent(type=SessionEventType.SESSION_STATE_CHANGED, session_id=session_id, data={"state": "stopped"}))
     return SessionActionResponse(session_id=session_id, message="Session stopped.")
 
 
@@ -517,9 +513,7 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
         LOG.exception(f"Failed to start session {session_id}")
         raise HTTPException(status_code=500, detail=f"Failed to start session: {exc}")
 
-    SessionEventBus.get_instance().publish(
-        SessionEvent(type=SessionEventType.SESSION_STATE_CHANGED, session_id=session_id, data={"state": "running"})
-    )
+    SessionEventBus.get_instance().publish(SessionEvent(type=SessionEventType.SESSION_STATE_CHANGED, session_id=session_id, data={"state": "running"}))
     return SessionActionResponse(session_id=session_id, message="Session started.")
 
 
@@ -543,12 +537,8 @@ def reset_task(session_id: str, request: ResetTaskRequest) -> SessionActionRespo
             raise HTTPException(status_code=404, detail=str(exc))
 
         event_bus = SessionEventBus.get_instance()
-        event_bus.publish(
-            SessionEvent(type=SessionEventType.TASK_STATE_CHANGED, session_id=session_id, data={"reset_tasks": reset_tasks})
-        )
-        event_bus.publish(
-            SessionEvent(type=SessionEventType.DATA_STORE_UPDATED, session_id=session_id)
-        )
+        event_bus.publish(SessionEvent(type=SessionEventType.TASK_STATE_CHANGED, session_id=session_id, data={"reset_tasks": reset_tasks}))
+        event_bus.publish(SessionEvent(type=SessionEventType.DATA_STORE_UPDATED, session_id=session_id))
         return SessionActionResponse(session_id=session_id, message=f"Reset {len(reset_tasks)} task(s) to PENDING.")
 
     with SessionStorage(session_id) as storage:
@@ -581,12 +571,8 @@ def reset_task(session_id: str, request: ResetTaskRequest) -> SessionActionRespo
         storage.save_session(session_data)
 
     event_bus = SessionEventBus.get_instance()
-    event_bus.publish(
-        SessionEvent(type=SessionEventType.TASK_STATE_CHANGED, session_id=session_id, data={"reset_tasks": [t.id for t in tasks_to_reset]})
-    )
-    event_bus.publish(
-        SessionEvent(type=SessionEventType.DATA_STORE_UPDATED, session_id=session_id)
-    )
+    event_bus.publish(SessionEvent(type=SessionEventType.TASK_STATE_CHANGED, session_id=session_id, data={"reset_tasks": [t.id for t in tasks_to_reset]}))
+    event_bus.publish(SessionEvent(type=SessionEventType.DATA_STORE_UPDATED, session_id=session_id))
     return SessionActionResponse(session_id=session_id, message=f"Reset {len(tasks_to_reset)} task(s) to PENDING.")
 
 

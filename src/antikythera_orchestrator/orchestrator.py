@@ -359,9 +359,7 @@ class Orchestrator:
 
     def _notify(self, event_type: SessionEventType, data: dict | None = None) -> None:
         """Publish a notification to the SSE event bus."""
-        SessionEventBus.get_instance().publish(
-            SessionEvent(type=event_type, session_id=self.session.bsid, data=data or {})
-        )
+        SessionEventBus.get_instance().publish(SessionEvent(type=event_type, session_id=self.session.bsid, data=data or {}))
 
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
