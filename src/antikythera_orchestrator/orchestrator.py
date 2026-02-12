@@ -571,6 +571,11 @@ class Orchestrator:
                 composite_options = task.get_param_value("blueprint")
                 element_id = composite_options["dynamic"]["element"]["element_id"]
 
+                if element_id not in inputs_value:
+                    raise KeyError(
+                        f"Expected aggregated input for element_id {element_id} in task {task.id}, "
+                        f"but it was not found. Did you skip the task which should have produced this input?"
+                    )
                 inputs[key] = inputs_value[element_id]
             else:
                 inputs[key] = inputs_value

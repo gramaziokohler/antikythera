@@ -1,13 +1,17 @@
 import logging
 import tempfile
+import time
 import uuid
 import zipfile
+from collections import deque
 from dataclasses import dataclass
+from dataclasses import field
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
 from threading import Lock
 from typing import Dict
+from typing import List
 from typing import Optional
 from typing import cast
 
@@ -17,6 +21,7 @@ from compas_model.models import Model
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Query
+from fastapi import Request
 from fastapi import Response
 from fastapi import UploadFile
 from fastapi.concurrency import asynccontextmanager
@@ -38,6 +43,61 @@ from antikythera_orchestrator.storage import RequestedSessionNotFound
 from antikythera_orchestrator.storage import SessionStorage
 
 LOG = logging.getLogger(__name__)
+
+
+# ===========================================================================
+# Request timing middleware and metrics
+# ===========================================================================
+
+MAX_TIMING_HISTORY = 1000  # Keep last N timing records per endpoint
+
+
+@dataclass
+class TimingRecord:
+    """A single request timing measurement."""
+
+    timestamp: datetime
+    method: str
+    path: str
+    duration_ms: float
+    status_code: int
+
+
+@dataclass
+class EndpointStats:
+    """Aggregated statistics for an endpoint."""
+
+    count: int = 0
+    total_ms: float = 0.0
+    min_ms: float = float("inf")
+    max_ms: float = 0.0
+    recent: deque = field(default_factory=lambda: deque(maxlen=MAX_TIMING_HISTORY))
+
+    def record(self, timing: TimingRecord) -> None:
+        self.count += 1
+        self.total_ms += timing.duration_ms
+        self.min_ms = min(self.min_ms, timing.duration_ms)
+        self.max_ms = max(self.max_ms, timing.duration_ms)
+        self.recent.append(timing)
+
+    @property
+    def avg_ms(self) -> float:
+        return self.total_ms / self.count if self.count > 0 else 0.0
+
+
+_timing_lock = Lock()
+_endpoint_stats: Dict[str, EndpointStats] = {}
+
+
+def _get_endpoint_key(method: str, path: str) -> str:
+    """Normalize path by replacing dynamic segments (UUIDs, IDs) with placeholders."""
+    import re
+
+    # Replace UUIDs
+    normalized = re.sub(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", "{id}", path)
+    # Replace hex session IDs (32 chars)
+    normalized = re.sub(r"/[0-9a-fA-F]{32}(?=/|$)", "/{session_id}", normalized)
+    return f"{method} {normalized}"
 
 
 @dataclass
@@ -162,6 +222,67 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Antikythera Orchestrator API", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    """Middleware to record and log request timing."""
+    start_time = time.perf_counter()
+
+    response = await call_next(request)
+
+    duration_ms = (time.perf_counter() - start_time) * 1000
+    method = request.method
+    path = request.url.path
+
+    # Skip timing endpoint itself to avoid recursion in logs
+    if path != "/metrics/timing":
+        timing = TimingRecord(
+            timestamp=datetime.now(timezone.utc),
+            method=method,
+            path=path,
+            duration_ms=duration_ms,
+            status_code=response.status_code,
+        )
+
+        endpoint_key = _get_endpoint_key(method, path)
+        with _timing_lock:
+            if endpoint_key not in _endpoint_stats:
+                _endpoint_stats[endpoint_key] = EndpointStats()
+            _endpoint_stats[endpoint_key].record(timing)
+
+        LOG.info(f"[TIMING] {method} {path} -> {response.status_code} in {duration_ms:.2f}ms")
+
+    return response
+
+
+class TimingStatsResponse(BaseModel):
+    endpoint: str
+    count: int
+    avg_ms: float
+    min_ms: float
+    max_ms: float
+    last_10: List[float] = Field(default_factory=list, description="Last 10 request durations in ms")
+
+
+@app.get("/metrics/timing", response_model=List[TimingStatsResponse])
+def get_timing_metrics():
+    """Returns timing statistics for all API endpoints."""
+    with _timing_lock:
+        results = []
+        for endpoint, stats in sorted(_endpoint_stats.items()):
+            last_10 = [r.duration_ms for r in list(stats.recent)[-10:]]
+            results.append(
+                TimingStatsResponse(
+                    endpoint=endpoint,
+                    count=stats.count,
+                    avg_ms=round(stats.avg_ms, 2),
+                    min_ms=round(stats.min_ms, 2) if stats.min_ms != float("inf") else 0.0,
+                    max_ms=round(stats.max_ms, 2),
+                    last_10=[round(d, 2) for d in last_10],
+                )
+            )
+        return results
 
 
 def _start_blueprint_session(request: StartBlueprintRequest) -> str:
