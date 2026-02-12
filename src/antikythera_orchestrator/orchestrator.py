@@ -440,6 +440,47 @@ class Orchestrator:
         self.session_storage.save_session(self.session)
         return sorted(to_reset)
 
+    def skip_task_state(self, blueprint_id: str, task_id: str) -> list[str]:
+        """Skip a task and its inner blueprint tasks (if composite).
+
+        For composite tasks, all tasks in the inner blueprint are also
+        recursively skipped. Downstream dependent tasks are NOT skipped.
+
+        Parameters
+        ----------
+        blueprint_id : str
+            Blueprint ID of the task to skip.
+        task_id : str
+            Task ID to skip (within the blueprint).
+
+        Returns
+        -------
+        list[str]
+            A list of fully-qualified task IDs that were skipped.
+        """
+        if not self.graph:
+            raise KeyError("Task graph is not initialized")
+
+        fqn_task_id = f"{blueprint_id}.{task_id}"
+        if fqn_task_id not in self.graph.node:
+            raise KeyError(f"Task not found: {fqn_task_id}")
+
+        skipped = [fqn_task_id]
+
+        task: Task = self.graph.node[fqn_task_id]["task"]
+        if task.state not in (TaskState.SKIPPED, TaskState.SUCCEEDED, TaskState.FAILED):
+            task.state = TaskState.SKIPPED
+            LOG.info(f"Skipped task {fqn_task_id}")
+
+            # Recursively skip inner blueprint tasks for composite tasks
+            if task.is_composite:
+                inner_blueprint_id = self.session.composite_to_inner_blueprint_map.get(fqn_task_id)
+                if inner_blueprint_id:
+                    self._skip_inner_blueprint_tasks(inner_blueprint_id)
+
+        self.session_storage.save_session(self.session)
+        return skipped
+
     def get_currently_running_composite_blueprints(self) -> set[str]:
         blueprints = set()
         for node, data in self.graph.nodes(data=True):

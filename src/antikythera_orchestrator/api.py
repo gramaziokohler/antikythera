@@ -133,6 +133,11 @@ class ResetTaskRequest(BaseModel):
     clear_outputs: bool = Field(True, description="Clear task outputs from session storage.")
 
 
+class SkipTaskRequest(BaseModel):
+    blueprint_id: str = Field(..., description="Blueprint ID containing the task.")
+    task_id: str = Field(..., description="Task ID to skip.")
+
+
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
 
@@ -561,6 +566,47 @@ def reset_task(session_id: str, request: ResetTaskRequest) -> SessionActionRespo
         storage.save_session(session_data)
 
     return SessionActionResponse(session_id=session_id, message=f"Reset {len(tasks_to_reset)} task(s) to PENDING.")
+
+
+@app.post("/sessions/{session_id}/tasks/skip", response_model=SessionActionResponse)
+def skip_task(session_id: str, request: SkipTaskRequest) -> SessionActionResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if session:
+        if session.orchestrator.state == BlueprintSessionState.RUNNING:
+            raise HTTPException(status_code=409, detail="Session is running. Pause it before skipping tasks.")
+
+        try:
+            skipped_tasks = session.orchestrator.skip_task_state(
+                request.blueprint_id,
+                request.task_id,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+        return SessionActionResponse(session_id=session_id, message=f"Skipped {len(skipped_tasks)} task(s).")
+
+    with SessionStorage(session_id) as storage:
+        session_data = storage.load_session()
+        if not session_data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        blueprint = session_data.get_blueprint(request.blueprint_id)
+        if not blueprint:
+            raise HTTPException(status_code=404, detail="Blueprint not found in session")
+
+        # For stored sessions, we can only skip the single task (no graph to traverse inner blueprints)
+        tasks_by_id = {t.id: t for t in blueprint.tasks}
+        if request.task_id not in tasks_by_id:
+            raise HTTPException(status_code=404, detail=f"Task not found: {request.task_id}")
+
+        task = tasks_by_id[request.task_id]
+        task.state = TaskState.SKIPPED
+
+        storage.save_session(session_data)
+
+    return SessionActionResponse(session_id=session_id, message="Skipped 1 task(s).")
 
 
 async def _handle_upload_json_file(file: UploadFile) -> list[str]:
