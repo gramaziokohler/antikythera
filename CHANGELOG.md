@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add new `user_interaction.notify` agent for sending user notifications with including support for string interpolation of session data.
 - Add API endpoint and backend support for reseting tasks (and downstream dependencies) to a pending state to allow re-execution after a failure or user intervention.
 - Added API endpoint for skipping tasks.
+- Added `TaskState.SKIP_REQUESTED` to represent tasks that have been requested to skip but are waiting for their dependencies to be met before transitioning to `SKIPPED`.
 
 ### Changed
 - Moved `composite_to_inner_blueprint_map` and `blueprint_contexts` from `Orchestrator` to `BlueprintSession` for proper serialization and session restoration.

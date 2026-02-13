@@ -282,7 +282,7 @@ def test_skip_task_state_skips_single_task(mock_immudb, mock_transport_orchestra
     result = orchestrator.skip_task_state("bp_skip", "a")
 
     assert "bp_skip.a" in result
-    assert task_a.state == TaskState.SKIPPED
+    assert task_a.state == TaskState.SKIP_REQUESTED
     assert task_b.state == TaskState.PENDING  # downstream NOT affected
     assert task_end.state == TaskState.PENDING  # downstream NOT affected
 
@@ -311,10 +311,10 @@ def test_skip_task_state_skips_composite_inner_blueprints(mock_immudb, mock_tran
 
     orchestrator.skip_task_state(outer_bp_id, "comp")
 
-    assert composite_task.state == TaskState.SKIPPED
-    assert inner_start.state == TaskState.SKIPPED
-    assert inner_work.state == TaskState.SKIPPED
-    assert inner_end.state == TaskState.SKIPPED
+    assert composite_task.state == TaskState.SKIP_REQUESTED
+    assert inner_start.state == TaskState.SKIP_REQUESTED
+    assert inner_work.state == TaskState.SKIP_REQUESTED
+    assert inner_end.state == TaskState.SKIP_REQUESTED
 
 
 def test_skip_task_state_raises_on_unknown_task(mock_immudb, mock_transport_orchestrator):
@@ -326,3 +326,37 @@ def test_skip_task_state_raises_on_unknown_task(mock_immudb, mock_transport_orch
         assert False, "Expected KeyError"
     except KeyError:
         pass
+
+
+def test_task_scheduler_skipped(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
+    # 1. Define a simple blueprint with multiple tasks and dependencies
+    task_start = Task(id="start", type="system.start")
+    task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=1.0)])
+    task_2 = Task(id="task_2", type="system.sleep", params=[TaskParam(name="duration", value=1.0)])
+    task_3 = Task(id="task_3", type="system.sleep", params=[TaskParam(name="duration", value=1.0)])
+    task_4 = Task(id="task_4", type="system.sleep", params=[TaskParam(name="duration", value=1.0)])
+
+    task_end = Task(id="end", type="system.end")
+
+    task_start >> task_1 >> task_2 >> task_3 >> task_4 >> task_end
+
+    blueprint = Blueprint(id="test_bp_id", name="Test Blueprint", tasks=[task_start, task_1, task_2, task_3, task_4, task_end])
+    session = BlueprintSession(bsid="test_session_id", blueprint=blueprint)
+    orchestrator = Orchestrator(session)
+
+    task_start.state = TaskState.SUCCEEDED
+    task_2.state = TaskState.SKIP_REQUESTED
+    pending_tasks = orchestrator.scheduler.get_pending_tasks()
+
+    assert len(pending_tasks) == 1
+    assert pending_tasks[0].task.id == "task_1"
+
+    task_1.state = TaskState.SUCCEEDED
+    pending_tasks = orchestrator.scheduler.get_pending_tasks()
+    assert len(pending_tasks) == 1
+    assert pending_tasks[0].task.id == "task_2"
+
+    task_2.state = TaskState.SKIPPED
+    pending_tasks = orchestrator.scheduler.get_pending_tasks()
+    assert len(pending_tasks) == 1
+    assert pending_tasks[0].task.id == "task_3"
