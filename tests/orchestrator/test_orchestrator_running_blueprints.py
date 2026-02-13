@@ -113,7 +113,7 @@ def test_get_currently_running_composite_blueprints_ignores_non_running_dynamic(
 
 
 # ===========================================================================
-# Tests for _handle_skipped_task / _skip_inner_blueprint_tasks
+# Tests for _handle_skipped_task / _set_inner_blueprint_tasks_state
 # ===========================================================================
 
 
@@ -163,7 +163,7 @@ def test_skip_inner_blueprint_preserves_already_terminal_tasks(mock_immudb, mock
     for t in [task_succeeded, task_failed, task_pending]:
         orchestrator.graph.add_node(_create_global_id(inner_bp_id, t), task=t, blueprint_id=inner_bp_id)
 
-    orchestrator._skip_inner_blueprint_tasks(inner_bp_id)
+    orchestrator._set_inner_blueprint_tasks_state(inner_bp_id, TaskState.SKIPPED)
 
     assert task_succeeded.state == TaskState.SUCCEEDED
     assert task_failed.state == TaskState.FAILED
@@ -183,7 +183,7 @@ def test_skip_inner_blueprint_does_not_affect_other_blueprints(mock_immudb, mock
     orchestrator.graph.add_node(_create_global_id(target_bp_id, target_task), task=target_task, blueprint_id=target_bp_id)
     orchestrator.graph.add_node(_create_global_id(other_bp_id, other_task), task=other_task, blueprint_id=other_bp_id)
 
-    orchestrator._skip_inner_blueprint_tasks(target_bp_id)
+    orchestrator._set_inner_blueprint_tasks_state(target_bp_id, TaskState.SKIPPED)
 
     assert target_task.state == TaskState.SKIPPED
     assert other_task.state == TaskState.PENDING
@@ -216,7 +216,7 @@ def test_skip_inner_blueprint_recursively_skips_nested_composites(mock_immudb, m
         orchestrator.graph.add_node(_create_global_id(nested_bp_id, t), task=t, blueprint_id=nested_bp_id)
 
     # Skip the inner blueprint
-    orchestrator._skip_inner_blueprint_tasks(inner_bp_id)
+    orchestrator._set_inner_blueprint_tasks_state(inner_bp_id, TaskState.SKIPPED)
 
     # Inner blueprint tasks should be skipped
     assert inner_start.state == TaskState.SKIPPED
