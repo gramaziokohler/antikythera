@@ -1,0 +1,119 @@
+{
+    "version": "1.0",
+    "id": "toy-problem-skip-test",
+    "name": "Toy Problem 13 Skip test",
+    "description": "Test skip task behavior",
+    "tasks": [
+        {
+            "id": "start",
+            "type": "system.start",
+            "outputs": [
+                {
+                    "name": "start_time"
+                }
+            ]
+        },
+        {
+            "id": "race_confirmation_1",
+            "type": "user_prompt.confirm",
+            "params": [
+                {
+                    "name": "message",
+                    "value": "Who clicks first (A)?"
+                },
+                {
+                    "name": "options",
+                    "value": [
+                        "Me!"
+                    ]
+                },
+                {
+                    "name": "execution_mode",
+                    "value": "COMPETITIVE"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "result",
+                    "type": "str"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ]
+        },
+        {
+            "id": "race_confirmation_2",
+            "type": "user_prompt.confirm",
+            "params": [
+                {
+                    "name": "message",
+                    "value": "Who clicks first (B)?"
+                },
+                {
+                    "name": "options",
+                    "value": [
+                        "Me!"
+                    ]
+                },
+                {
+                    "name": "execution_mode",
+                    "value": "COMPETITIVE"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "result",
+                    "type": "str"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "race_confirmation_1"
+                }
+            ]
+        },
+        {
+            "id": "race_confirmation_3",
+            "type": "user_prompt.confirm",
+            "params": [
+                {
+                    "name": "message",
+                    "value": "Who clicks first (C)?"
+                },
+                {
+                    "name": "options",
+                    "value": [
+                        "Me!"
+                    ]
+                },
+                {
+                    "name": "execution_mode",
+                    "value": "COMPETITIVE"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "result",
+                    "type": "str"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "race_confirmation_2"
+                }
+            ]
+        },
+        {
+            "id": "end",
+            "type": "system.end",
+            "depends_on": [
+                {
+                    "id": "race_confirmation_3"
+                }
+            ]
+        }
+    ]
+}

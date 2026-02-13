@@ -177,7 +177,7 @@ class TaskScheduler:
         pending_tasks = []
 
         for task, blueprint_id in self.graph.nodes_attributes(("task", "blueprint_id")):
-            if task.state != TaskState.PENDING:
+            if task.state not in (TaskState.PENDING, TaskState.SKIP_REQUESTED):
                 continue
 
             dependencies = self._get_dependencies_from_graph(blueprint_id, task)
@@ -468,15 +468,19 @@ class Orchestrator:
         skipped = [fqn_task_id]
 
         task: Task = self.graph.node[fqn_task_id]["task"]
-        if task.state not in (TaskState.SKIPPED, TaskState.SUCCEEDED, TaskState.FAILED):
-            task.state = TaskState.SKIPPED
-            LOG.info(f"Skipped task {fqn_task_id}")
 
-            # Recursively skip inner blueprint tasks for composite tasks
+        # If the task is pending, we don't set it to SKIPPED immediately, as that would
+        # satisfy dependencies for downstream tasks prematurely. Instead, we mark it
+        # to be skipped when it is scheduled.
+        if task.state == TaskState.PENDING:
+            task.state = TaskState.SKIP_REQUESTED
+            LOG.info(f"Marked task {fqn_task_id} for skipping (state SKIP_REQUESTED)")
+
+            # Recursively mark inner blueprint tasks for composite tasks
             if task.is_composite:
                 inner_blueprint_id = self.session.composite_to_inner_blueprint_map.get(fqn_task_id)
                 if inner_blueprint_id:
-                    self._skip_inner_blueprint_tasks(inner_blueprint_id)
+                    self._set_inner_blueprint_tasks_state(inner_blueprint_id, TaskState.SKIP_REQUESTED)
 
         self.session_storage.save_session(self.session)
         return skipped
@@ -681,17 +685,6 @@ class Orchestrator:
                 LOG.error(f"Error evaluating condition '{condition}' for task {task.id}: {e}")
                 raise
 
-        # # 2. Implicit Skip Propagation (if all parents were skipped)
-        # fqn_task_id = _create_global_id(blueprint_id, task)
-        # parent_ids = list(self.graph.neighbors_in(fqn_task_id))
-
-        # if parent_ids:
-        #     all_parents_skipped = all(self.graph.node[pid]["task"].state == TaskState.SKIPPED for pid in parent_ids)
-
-        #     if all_parents_skipped:
-        #         LOG.info(f"Task {task.id} skipped because all parent tasks were skipped.")
-        #         return True
-
         return False
 
     def _handle_skipped_task(self, task: Task, blueprint_id: str) -> None:
@@ -704,39 +697,43 @@ class Orchestrator:
         if task.is_composite:
             inner_blueprint_id = self.session.composite_to_inner_blueprint_map.get(fqn_task_id)
             if inner_blueprint_id:
-                self._skip_inner_blueprint_tasks(inner_blueprint_id)
+                self._set_inner_blueprint_tasks_state(inner_blueprint_id, TaskState.SKIPPED)
 
         completion_msg = TaskCompletionMessage(id=fqn_task_id, state=TaskState.SKIPPED, outputs={}, agent_id="system")
 
         self.on_task_completed(completion_msg)
 
-    def _skip_inner_blueprint_tasks(self, blueprint_id: str) -> None:
-        """Marks all tasks belonging to an inner blueprint as SKIPPED.
-
-        This prevents the scheduler from picking up tasks from an inner blueprint
-        whose parent composite task has been skipped. If any of the inner tasks
-        are themselves composite, their inner blueprints are also skipped recursively.
+    def _set_inner_blueprint_tasks_state(self, blueprint_id: str, target_state: TaskState) -> None:
+        """Recursively sets the state of inner blueprint tasks.
 
         Parameters
         ----------
         blueprint_id : str
-            The ID of the inner blueprint whose tasks should be skipped.
+            The ID of the inner blueprint.
+        target_state : TaskState
+            The state to set (e.g., TaskState.SKIPPED or TaskState.SKIP_REQUESTED).
         """
         for node, data in self.graph.nodes(data=True):
             if data["blueprint_id"] != blueprint_id:
                 continue
             inner_task: Task = data["task"]
-            if inner_task.state in (TaskState.SKIPPED, TaskState.SUCCEEDED, TaskState.FAILED):
-                continue
-            LOG.debug(f"Skipping inner blueprint task {inner_task.id} (blueprint: {blueprint_id})")
-            inner_task.state = TaskState.SKIPPED
 
-            # Recursively skip nested inner blueprints
+            # Filter valid transitions to avoid overwriting finished tasks
+            if inner_task.state in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.SKIPPED):
+                continue
+
+            if target_state == TaskState.SKIP_REQUESTED and inner_task.state != TaskState.PENDING:
+                continue
+
+            inner_task.state = target_state
+            LOG.debug(f"Set task {inner_task.id} state to {target_state} (blueprint: {blueprint_id})")
+
+            # Recursively handle nested inner blueprints
             if inner_task.is_composite:
                 fqn_inner_task_id = _create_global_id(blueprint_id, inner_task)
                 nested_blueprint_id = self.session.composite_to_inner_blueprint_map.get(fqn_inner_task_id)
                 if nested_blueprint_id:
-                    self._skip_inner_blueprint_tasks(nested_blueprint_id)
+                    self._set_inner_blueprint_tasks_state(nested_blueprint_id, target_state)
 
     def _schedule_tasks(self) -> None:
         """Schedules tasks for execution."""
@@ -755,12 +752,10 @@ class Orchestrator:
 
                 LOG.debug(f"Processing pending task {task}")
 
-                task.state = TaskState.PENDING
-
                 # Prepare inputs to pass to the task
                 inputs = self._map_inputs_from_session(blueprint_id, task)
 
-                if self._evaluate_skip_condition(task, inputs, blueprint_id):
+                if task.state == TaskState.SKIP_REQUESTED or self._evaluate_skip_condition(task, inputs, blueprint_id):
                     self._handle_skipped_task(task, blueprint_id)
                     continue
 

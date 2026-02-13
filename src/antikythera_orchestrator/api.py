@@ -723,7 +723,11 @@ def skip_task(session_id: str, request: SkipTaskRequest) -> SessionActionRespons
             raise HTTPException(status_code=404, detail=f"Task not found: {request.task_id}")
 
         task = tasks_by_id[request.task_id]
-        task.state = TaskState.SKIPPED
+
+        if task.state == TaskState.PENDING:
+            task.state = TaskState.SKIP_REQUESTED
+        else:
+            task.state = TaskState.SKIPPED
 
         storage.save_session(session_data)
 

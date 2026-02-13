@@ -48,7 +48,9 @@ The technologies above were selected to provide a balance between reliability, p
 
 ### Orchestrator
 
-The **orchestrator** is in charge of coordinating the execution of a **blueprint** described as a **DAG** (Directed Acyclic Graph). The DAG is composed by **tasks** in the nodes, and their dependencies in the edges. A task has a state (`PENDING`, `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `SKIPPED`), it declaratively defines input and output data so that data dependencies can be defined between nodes.
+The **orchestrator** is in charge of coordinating the execution of a **blueprint** described as a **DAG** (Directed Acyclic Graph). The DAG is composed by **tasks** in the nodes, and their dependencies in the edges. A task has a state (`PENDING`, `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`, `SKIPPED`, `SKIP_REQUESTED`), it declaratively defines input and output data so that data dependencies can be defined between nodes.
+
+`SKIP_REQUESTED` is a special intermediate state used when a user manually skips a task that has not yet run. Instead of immediately marking it as `SKIPPED` (which would satisfy downstream dependencies prematurely), the task waits in `SKIP_REQUESTED` until its own dependencies are met. Once the scheduler determines it is ready to run, it is then transitioned to `SKIPPED`, ensuring correct execution order.
 
 Each task is executed by an **agent**, either remote or local. The overall system has location transparency, so agents can be running in one or more machines in the same or different networks.
 
