@@ -599,10 +599,46 @@ def run_long_process(self, task: Task, context: ExecutionContext) -> dict:
 ## TODOs
 
 - [ ] Prepare Hello World of Antikythera: simple, yet impressive for demo'ing
-  - [ ] Demonstrates the distributed nature of the system
+  - [ ] Demonstrates the distributed nature of the system:
+    - [ ] Showcase dynamic task re-assignment by having two robots running a cell, and making one fail, so that all subsequent tasks are automatically re-assigned to the other robot (depends on retry policies).
+    - [ ] Human-in-the-loop: human selects the next element to fabricate (using a phone agent)
+    - [ ] Make each host visibly acting whenever a task is executed in it (e.g. light up a LED)
   - [ ] No-Code fabrication process
+    - [ ] Host 0: Orchestrator: Raspberry Pi
+    - [ ] Host 1: Raspberry Pi
+      - [ ] Scene Agent (robot agnostic, RobotCell + RobotCellState support via compas_fab)
+      - [ ] Planning Agent: FK+IK+LM (Cartesian Motion)+FM (Free space motion) -> Consider how to make these MATERIAL or ELEMENT-CENTRIC or WORKOBJECT-CENTRIC
+    - [ ] Host 2: Raspberry Pi
+      - [ ] RRC Agent: execution for ABB (Move To Frame + Move to Config + Move to Trajectory + Set IO + Get IO)
+    - [ ] Host 3: Grasshopper
+      - [ ] GH Agent receives trajectories over task input, waits for user approval then sends task completion
+    - [ ] Host 4: Phone -> Human-in-the-loop agent to fabricate some elements manually
+- [ ] Add retry policies and idempotency definition for tasks and blueprints, e.g. in a composite blueprint, the execute robotic motion task can fail and that could trigger a retry of the whole inner blueprint (or just the failed task, depending on the case)
+  - [ ] Consider how or if this includes or provides backtracking capabilities
 - [ ] Create an AGENT CATALOG
-  - [ ] Registry of agents? NPM-style / Using github as registry, a-la golang modules
+  - [ ] We don't create our own Registry of agents, instead, we create a meta search aggregator to search over Pypi+Docker Hub+GHCR for python package and/or containers. This way we don't need to maintain a registry of agents, but we can still have a discoverability layer for users to find existing agents.
+  - [ ] Agent catalog is the result of the aggregation of registry results
+- [ ] Benchmark latency of ImmuDB and/or network communication
+- [ ] AKT Yaml host file (`akt.yaml`) for defining what agents to launch on a specific machine and how to connect to broker
+  - [ ] Support launching agents in containers
+  - [ ] Support launching Python agents (via `uv run python` command in the same venv as `akt`)
+  - Sample `akt.yaml`:
+  ```yaml
+  broker: 192.168.0.100
+
+  agents:
+    fab:
+      image: antikythera/compas_fab/agents
+      env:
+        - CNC_IP_ADDRESS=192.168.0.101
+    rrc:
+      image: antikythera/compas_rrc/agents
+    demo:
+      python: git+https://github.com/gramaziokohler/some_pip_package.git
+        --> uv pip install git+https://github.com/gramaziokohler/some_pip_package.git
+            uv run python -m antikythera_agents
+  ```
+
 - [ ] BT: Explore if we can/should use BTs for control logic (BT inside a blueprint | Blueprint inside a BT)
 - [ ] Authoring tools:
   - [ ] Graphical interface
