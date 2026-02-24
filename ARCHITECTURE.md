@@ -598,41 +598,38 @@ def run_long_process(self, task: Task, context: ExecutionContext) -> dict:
 
 ## TODOs
 
-- [x] Implement compas.data support for parameters
-- [x] Swap Message usages with the relevant Protobuf messages + Implement TaskAckMessage
-- [x] Poll mermaid diagram API call  
-- [x] Add/Update blueprint to Antikythera
-- [x] MQTT Log handler (Log Message)
-- [x] Move orchestrator to antikythera_orchestrator package as well as system agents
-- [x] Implement sequencer for dynamic Blueprint expansion 
-- [x] Fix `StrEnum` problem on python 3.9
-- [x] Add model to tool-context
-- [x] Implement and use Task status and ack messages
-- [x] Add Sequencer factory/registry
-- [x] Implement pause/resume of Blueprint Session
-- [x] Implement a Blueprint validator which validates uploaded blueprints
-- [x] Add unittests with mocking for immudb
-
-- [ ] Implement Agent starts with a configuration file
-- [ ] Make state of sibling tasks available to dynamically expanded tasks
-- [ ] Add MQTT log listener on the orchestrator and log agent entries (consider logging to DB?)
-- [ ] Download blueprints: back to the JSON representation
+- [ ] Prepare Hello World of Antikythera: simple, yet impressive for demo'ing
+  - [ ] Demonstrates the distributed nature of the system
+  - [ ] No-Code fabrication process
+- [ ] Create an AGENT CATALOG
+  - [ ] Registry of agents? NPM-style / Using github as registry, a-la golang modules
+- [ ] BT: Explore if we can/should use BTs for control logic (BT inside a blueprint | Blueprint inside a BT)
+- [ ] Authoring tools:
+  - [ ] Graphical interface
+  - [ ] LLM-assisted authoring
+  - [ ] Text-editor to make changes to the JSON directly
+  - [ ] Download blueprints: back to the JSON representation
+  - [ ] Reorder tasks in paused blueprint (re-order only in same blueprint level, only non-finished tasks)
+- [ ] Naming sessions
+- [ ] Fully expanded blueprint in the Session Monitor (instead of jumping between inner blueprints)
+  - [ ] Collapse-all/Expand-all buttons
+  - [ ] Inner blueprints should be visually distinguishable (maybe a dotted border?)
+- [ ] Test static inner blueprints (especially twice expanded in the same blueprint, as seen in the CNC control blueprints)
+- [ ] Model and current element visualization in the Session Monitor
+- [ ] Unify representations of Task across the system. We have 16 according to the LLM, but some are more relevant than others:
+  - [ ] class Task: This should be the one true representation of Task.
+  - [ ] Task in the TaskAssignmentMessage (protobuf message) [Currently half-assed]
+  - [ ] GraphNode (is it used?) in the frontend / ReactFlow Node?
+- [ ] Some kind of distributed file system
+- [ ] Observability
+  - [ ] Add MQTT log listener on the orchestrator and log agent entries (consider logging to DB?)
 - [ ] Conceptualize map/reducer strategy for output data management in dynamic tasks. 
-
-- [ ] check that unittests are actually  verifying dynamic composite behavior
-- [ ] improve the specification of the argument mapping which is currently confusing and unintuitive
-- [ ] implement a WebXR agent
-  - [x] extend the protocol to allow "competitive" execution where all agents get assigned 
-- [ ] PoC Grasshopper components
- - [ ] Grasshopper should become a full fledged interface for antikythera
-
-- [ ] agent catalog 
-  - [ ] 
+- [ ] Implement a XR interface and XR agents
+- [ ] Grasshopper components to control execution
+- [ ] Grasshopper Agents (GHaaS): two components at least, one to receive a task assignment, and one to output task completion, in between, any GH component can be used.
+- [ ] Grasshopper could become a full fledged interface for antikythera -> Define how.
 
 - Protocol robustness
   - [ ] explore Jespen for testing and verification
   - [ ] explore erlang principles 
 
-- Implement in-place editing of Blueprints/Sessions
-  - [ ] Resume session from database ("dead" session) (need a list of sessions in DB?)
-  - [ ] Reorder tasks in paused blueprint (re-order only in same blueprint level, only non-finished tasks)
