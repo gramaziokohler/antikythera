@@ -18,11 +18,12 @@ def main():
     parser.add_argument("--broker-host", default="127.0.0.1", help="MQTT broker host.")
     parser.add_argument("--broker-port", type=int, default=1883, help="MQTT broker port.")
     parser.add_argument("--dev", action="store_true", help="Enable hot reloading of agents.")
+    parser.add_argument("--sys-only", action="store_true", help="Only start system agents (agent type 'system').")
     args = parser.parse_args()
 
     print("Antikythera Agents starting up...")
     print(f"Connecting to MQTT broker at {args.broker_host}:{args.broker_port}")
-    launcher = AgentLauncher(broker_host=args.broker_host, broker_port=args.broker_port)
+    launcher = AgentLauncher(broker_host=args.broker_host, broker_port=args.broker_port, sys_only=args.sys_only)
     launcher.start()
 
     if args.dev:

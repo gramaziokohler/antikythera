@@ -41,8 +41,9 @@ def _get_plugin_manager():
 
 
 class AgentLauncher:
-    def __init__(self, broker_host="127.0.0.1", broker_port=1883):
+    def __init__(self, broker_host="127.0.0.1", broker_port=1883, sys_only=False):
         self.launcher_id = coolname.generate_slug(4)
+        self.sys_only = sys_only
         self.pending_claims = {}  # task_id -> Task
         self.active_contexts = {}  # task_id -> ExecutionContext
 
@@ -102,6 +103,9 @@ class AgentLauncher:
         _ensure_agents()
 
         registered_agents = list_registered_agents()
+        if self.sys_only:
+            registered_agents = {k: v for k, v in registered_agents.items() if k == "system"}
+            print(f"{Colors.WARNING}--sys-only: restricting to system agents only.{Colors.ENDC}")
         for agent_type, agent_class in registered_agents.items():
             self.agents[agent_type] = agent_class()
             print(f"Initialized {agent_class.__name__} for type '{agent_type}' with {len(self.agents[agent_type].list_tools())} tools.")
