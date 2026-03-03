@@ -956,7 +956,12 @@ class Orchestrator:
 
         if "static" in blueprint_param:
             blueprint_id = blueprint_param["static"]
-            return self.blueprint_storage.get_blueprint(blueprint_id)
+            blueprint = self.blueprint_storage.get_blueprint(blueprint_id)
+            # Create a unique instance per composite task to avoid ID collisions when
+            # multiple tasks reference the same inner blueprint archetype.
+            expanded_blueprint_id = f"{blueprint_id}_{task.id}"
+            blueprint.id = expanded_blueprint_id
+            return blueprint
         if "dynamic" in blueprint_param:
             # Get data from the expanded dynamic blueprint task data
             blueprint_id = blueprint_param["dynamic"]["blueprint_id"]
