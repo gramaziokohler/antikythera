@@ -13,25 +13,13 @@ from antikythera import config
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 
+from .exceptions import RequestedBlueprintNotFound
+from .exceptions import RequestedModelNotFound
+from .interfaces import BaseBlueprintStorage
+from .interfaces import BaseModelStorage
+from .interfaces import BaseSessionStorage
+
 LOG = logging.getLogger(__name__)
-
-
-class RequestedBlueprintNotFound(Exception):
-    """Raised when a requested blueprint is not found in storage."""
-
-    pass
-
-
-class RequestedModelNotFound(Exception):
-    """Raised when a requested model is not found in storage."""
-
-    pass
-
-
-class RequestedSessionNotFound(Exception):
-    """Raised when a requested session is not found in storage."""
-
-    pass
 
 
 def _create_immudb_client(db_name: str) -> ImmudbClient:
@@ -88,7 +76,7 @@ def remove_from_index(client: ImmudbClient, index_key: bytes, item_to_remove: st
     return _update_index(client, index_key, items_to_remove=[item_to_remove])
 
 
-class SessionStorage:
+class SessionStorage(BaseSessionStorage):
     SESSIONS_DB_NAME = "orchestrator_session"
 
     def __init__(self, session_id: str):
@@ -232,7 +220,7 @@ class SessionStorage:
         return json_loads(match.value.decode())
 
 
-class BlueprintStorage:
+class BlueprintStorage(BaseBlueprintStorage):
     BLUEPRINTS_DB_NAME = "orchestrator_blueprints"
 
     def __init__(self):
@@ -375,7 +363,7 @@ class BlueprintStorage:
         LOG.info(f"Blueprint {blueprint_id} deleted")
 
 
-class ModelStorage:
+class ModelStorage(BaseModelStorage):
     MODELS_DB_NAME = "orchestrator_models"
 
     def __init__(self):

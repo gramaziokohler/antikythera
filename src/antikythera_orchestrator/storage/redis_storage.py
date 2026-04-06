@@ -4,65 +4,53 @@ from typing import Any
 from typing import Optional
 from typing import cast
 
+import redis
 from compas.data import json_dumps
 from compas.data import json_loads
-from immudb import ImmudbClient
-from immudb.datatypes import DeleteKeysRequest
 
 from antikythera import config
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
+from antikythera_orchestrator.storage.exceptions import RequestedBlueprintNotFound
+from antikythera_orchestrator.storage.exceptions import RequestedModelNotFound
+from antikythera_orchestrator.storage.interfaces import BaseBlueprintStorage
+from antikythera_orchestrator.storage.interfaces import BaseModelStorage
+from antikythera_orchestrator.storage.interfaces import BaseSessionStorage
 
 LOG = logging.getLogger(__name__)
 
-
-class RequestedBlueprintNotFound(Exception):
-    """Raised when a requested blueprint is not found in storage."""
-
-    pass
-
-
-class RequestedModelNotFound(Exception):
-    """Raised when a requested model is not found in storage."""
-
-    pass
+# Each storage class uses a separate Redis logical database to mirror the immudb
+# per-database namespace separation.
+_SESSION_DB = 0
+_BLUEPRINT_DB = 1
+_MODEL_DB = 2
 
 
-class RequestedSessionNotFound(Exception):
-    """Raised when a requested session is not found in storage."""
-
-    pass
-
-
-def _create_immudb_client(db_name: str) -> ImmudbClient:
-    client = ImmudbClient(
-        immudUrl=f"{config.IMMUDB_HOST}:{config.IMMUDB_PORT}",
-        max_grpc_message_length=config.IMMUDB_MAX_GRPC_MESSAGE_LENGTH,
-    )
+def _create_redis_client(db: int) -> redis.Redis:
     try:
-        client.login(config.IMMUDB_USER, config.IMMUDB_PASSWORD)
-    except KeyError:
-        LOG.exception("Environment variable for immudb credentials ('IMMUDB_USER' and 'IMMUDB_PASSWORD') not set")
-        raise
+        client = redis.Redis(
+            host=config.REDIS_HOST,
+            port=config.REDIS_PORT,
+            db=db,
+            decode_responses=False,
+        )
+        client.ping()
+        return client
     except Exception as e:
-        LOG.exception(f"Failed to connect to immudb: {e}")
+        LOG.exception(f"Failed to connect to Redis: {e}")
         raise
-    existing_dbs = client.databaseList()
-
-    if db_name not in existing_dbs:
-        client.createDatabase(db_name.encode())
-    client.useDatabase(db_name.encode())
-
-    return client
 
 
-def _update_index(client: ImmudbClient, index_key: bytes, items_to_add: list[str] = None, items_to_remove: list[str] = None) -> bytes:
+def _update_index(client: redis.Redis, index_key: str, items_to_add: list[str] = None, items_to_remove: list[str] = None) -> str:
+    """Read the JSON-encoded index list from *index_key*, apply mutations, and
+    return the new serialised value without writing it back (allows batching via
+    a pipeline)."""
     items_to_add = items_to_add or []
     items_to_remove = items_to_remove or []
 
-    match = client.get(index_key)
-    if match:
-        index_data = json_loads(match.value.decode())
+    raw = client.get(index_key)
+    if raw:
+        index_data = json_loads(raw.decode())
         index_data = cast(list[str], index_data)
     else:
         index_data = []
@@ -76,42 +64,29 @@ def _update_index(client: ImmudbClient, index_key: bytes, items_to_add: list[str
         except ValueError:
             pass  # Item not in list, ignore
 
-    # we return the updated data instead of setting it here to allow batching multiple operations
-    return json_dumps(index_data).encode()
+    return json_dumps(index_data)
 
 
-def append_to_index(client: ImmudbClient, index_key: bytes, new_item: str) -> bytes:
-    return _update_index(client, index_key, items_to_add=[new_item])
-
-
-def remove_from_index(client: ImmudbClient, index_key: bytes, item_to_remove: str) -> bytes:
-    return _update_index(client, index_key, items_to_remove=[item_to_remove])
-
-
-class SessionStorage:
-    SESSIONS_DB_NAME = "orchestrator_session"
+class SessionStorage(BaseSessionStorage):
+    _DB = _SESSION_DB
 
     def __init__(self, session_id: str):
-        self.client = _create_immudb_client(self.SESSIONS_DB_NAME)
+        self.client = _create_redis_client(self._DB)
         self.session_id = session_id
 
     @staticmethod
     def list_sessions(limit: int = 10, offset: int = 0, newest_first: bool = True) -> list[str]:
-        client = _create_immudb_client(SessionStorage.SESSIONS_DB_NAME)
-
+        client = _create_redis_client(SessionStorage._DB)
         try:
-            index_key = b"session:index"
-            match = client.get(index_key)
-            if not match:
+            raw = client.get("session:index")
+            if not raw:
                 return []
-
-            index_data = json_loads(match.value.decode())
-            all_sessions = cast(list[str], index_data)
+            all_sessions = cast(list[str], json_loads(raw.decode()))
             if newest_first:
                 all_sessions.reverse()
             return all_sessions[offset : offset + limit]
         finally:
-            client.shutdown()
+            client.close()
 
     def __enter__(self):
         return self
@@ -120,50 +95,49 @@ class SessionStorage:
         self.close()
 
     def close(self):
-        # self.client.logout()
-        self.client.shutdown()
+        self.client.close()
 
     def _session_key(self) -> str:
         assert self.session_id, "Session ID must be set"
         return f"bsid-{self.session_id}"
 
-    def _key(self, blueprint_id: str, key: str) -> bytes:
+    def _key(self, blueprint_id: str, key: str) -> str:
         assert self.session_id, "Session ID must be set"
-        return f"{self._session_key()}:{blueprint_id}:{key}".encode()
+        return f"{self._session_key()}:{blueprint_id}:{key}"
 
     def get(self, blueprint_id: str, key: str) -> Optional[Any]:
         full_key = self._key(blueprint_id, key)
-        match = self.client.get(full_key)
-        if match is None:
+        raw = self.client.get(full_key)
+        if raw is None:
             return None
-
-        bytes_value = match.value
-        return json_loads(bytes_value.decode())
+        return json_loads(raw.decode())
 
     def set(self, blueprint_id: str, key: str, value: Any) -> None:
         full_key = self._key(blueprint_id, key)
-        json_value = json_dumps(value)
-        self.client.set(full_key, json_value.encode())
+        self.client.set(full_key, json_dumps(value))
 
     def set_all(self, blueprint_id: str, data: dict[str, Any]) -> None:
-        all_data = {}
+        pipe = self.client.pipeline()
         for key, value in data.items():
-            all_data[bytes(self._key(blueprint_id, key))] = json_dumps(value).encode()
-        self.client.setAll(all_data)
+            pipe.set(self._key(blueprint_id, key), json_dumps(value))
+        pipe.execute()
 
     def get_all(self, blueprint_id: str) -> dict[str, Any]:
         assert self.session_id, "Session ID must be set"
         prefix_str = f"{self._session_key()}:{blueprint_id}:"
-        prefix = prefix_str.encode()
-        # TODO: Handle pagination if more than 1000 keys
-        results = self.client.scan(b"", prefix, False, 1000)
 
         data = {}
-        for key, value in results.items():
-            decoded_key = key.decode()
-            if decoded_key.startswith(prefix_str):
+        cursor = 0
+        while True:
+            cursor, keys = self.client.scan(cursor, match=f"{prefix_str}*", count=1000)
+            for key in keys:
+                decoded_key = key.decode()
                 clean_key = decoded_key[len(prefix_str) :]
-                data[clean_key] = json_loads(value.decode())
+                raw = self.client.get(key)
+                if raw is not None:
+                    data[clean_key] = json_loads(raw.decode())
+            if cursor == 0:
+                break
         return data
 
     def save_session(self, session: BlueprintSession) -> None:
@@ -180,12 +154,12 @@ class SessionStorage:
             The session to save.
         """
         key = self._session_key()
-        index_key = b"session:index"
+        index_key = "session:index"
 
         # Check if this is a new session or update
-        existing = self.client.get(key.encode())
-        if existing:
-            existing_data = json_loads(existing.value.decode())
+        existing_raw = self.client.get(key)
+        if existing_raw:
+            existing_data = json_loads(existing_raw.decode())
             started_at = existing_data.get("started_at")
             ended_at = existing_data.get("ended_at")
         else:
@@ -198,10 +172,12 @@ class SessionStorage:
             "ended_at": ended_at,
         }
 
-        # Maintain an index so that we can list all saved sessions
-        index_value = append_to_index(self.client, index_key, self.session_id)
+        index_value = _update_index(self.client, index_key, items_to_add=[self.session_id])
 
-        self.client.setAll({key.encode(): json_dumps(value).encode(), index_key: index_value})
+        pipe = self.client.pipeline()
+        pipe.set(key, json_dumps(value))
+        pipe.set(index_key, index_value)
+        pipe.execute()
 
     def load_session(self) -> Optional[BlueprintSession]:
         """Load a complete BlueprintSession object from storage.
@@ -225,18 +201,17 @@ class SessionStorage:
             A dictionary containing 'session', 'started_at', and 'ended_at', or None if not found.
         """
         key = self._session_key()
-        match = self.client.get(key.encode())
-        if match is None:
+        raw = self.client.get(key)
+        if raw is None:
             return None
+        return json_loads(raw.decode())
 
-        return json_loads(match.value.decode())
 
-
-class BlueprintStorage:
-    BLUEPRINTS_DB_NAME = "orchestrator_blueprints"
+class BlueprintStorage(BaseBlueprintStorage):
+    _DB = _BLUEPRINT_DB
 
     def __init__(self):
-        self.client = _create_immudb_client(self.BLUEPRINTS_DB_NAME)
+        self.client = _create_redis_client(self._DB)
 
     def __enter__(self):
         return self
@@ -245,8 +220,7 @@ class BlueprintStorage:
         self.close()
 
     def close(self):
-        # self.client.logout()
-        self.client.shutdown()
+        self.client.close()
 
     def add_blueprint(self, blueprint: Blueprint) -> None:
         """Store a blueprint with searchable metadata.
@@ -256,13 +230,11 @@ class BlueprintStorage:
         blueprint : Blueprint
             The blueprint to store.
         """
-        LOG.debug(f"Storing blueprint {blueprint.id} in immudb")
+        LOG.debug(f"Storing blueprint {blueprint.id} in Redis")
 
-        # and index storage is maintained separately from the bluprints and their metadata
-        # this is done for lookup purposes as `scan` seems to have mysterious ways
-        index_key = b"blueprint:index"
-        metadata_key = f"metadata:{blueprint.id}".encode()
-        blueprint_key = f"blueprint:{blueprint.id}".encode()
+        index_key = "blueprint:index"
+        metadata_key = f"metadata:{blueprint.id}"
+        blueprint_key = f"blueprint:{blueprint.id}"
 
         # Store metadata and serialized blueprint separately as blueprints may be large
         # and we might just want to query metadata
@@ -275,18 +247,13 @@ class BlueprintStorage:
             "uploaded_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
 
-        metadata_value = json_dumps(metadata).encode()
-        blueprint_value = json_dumps(blueprint).encode()
-        blueprint_index_value = append_to_index(self.client, index_key, blueprint.id)
+        index_value = _update_index(self.client, index_key, items_to_add=[blueprint.id])
 
-        # do it all in a single transaction
-        self.client.setAll(
-            {
-                index_key: blueprint_index_value,
-                metadata_key: metadata_value,
-                blueprint_key: blueprint_value,
-            }
-        )
+        pipe = self.client.pipeline()
+        pipe.set(index_key, index_value)
+        pipe.set(metadata_key, json_dumps(metadata))
+        pipe.set(blueprint_key, json_dumps(blueprint))
+        pipe.execute()
 
     def get_blueprint(self, blueprint_id: str) -> Blueprint:
         """Retrieve a blueprint by its ID.
@@ -301,14 +268,14 @@ class BlueprintStorage:
         Optional[Blueprint]
             The blueprint if found, None otherwise.
         """
-        blueprint_key = f"blueprint:{blueprint_id}".encode()
+        blueprint_key = f"blueprint:{blueprint_id}"
         try:
-            match = self.client.get(blueprint_key)
-            if not match:
+            raw = self.client.get(blueprint_key)
+            if not raw:
                 LOG.exception(f"Blueprint {blueprint_id} not found in database")
                 raise RequestedBlueprintNotFound(f"Blueprint {blueprint_id} not found")
 
-            return json_loads(match.value.decode())  # type: ignore
+            return json_loads(raw.decode())  # type: ignore
         except Exception as ex:
             LOG.exception(f"Failed to retrieve blueprint {blueprint_id} - {ex}")
             raise
@@ -324,19 +291,17 @@ class BlueprintStorage:
         """
         found_blueprints = []
 
-        index_key = b"blueprint:index"
-        match = self.client.get(index_key)
-        if match:
-            index_data = json_loads(match.value.decode())
-            index_data = cast(list[str], index_data)
+        index_key = "blueprint:index"
+        raw = self.client.get(index_key)
+        if raw:
+            index_data = cast(list[str], json_loads(raw.decode()))
         else:
             index_data = []
 
         for blueprint_id in index_data:
-            result = self.client.get(f"metadata:{blueprint_id}".encode())
+            result = self.client.get(f"metadata:{blueprint_id}")
             if result:
-                metadata = json_loads(result.value.decode())
-                found_blueprints.append(metadata)
+                found_blueprints.append(json_loads(result.decode()))
 
         return found_blueprints
 
@@ -353,33 +318,31 @@ class BlueprintStorage:
         RequestedBlueprintNotFound
             If the blueprint with the given ID is not found.
         """
-        LOG.debug(f"Removing blueprint {blueprint_id} from immudb")
+        LOG.debug(f"Removing blueprint {blueprint_id} from Redis")
 
-        # First verify the blueprint exists
-        blueprint_key = f"blueprint:{blueprint_id}".encode()
-        match = self.client.get(blueprint_key)
-        if not match:
+        blueprint_key = f"blueprint:{blueprint_id}"
+        if not self.client.exists(blueprint_key):
             LOG.error(f"Blueprint {blueprint_id} not found in database")
             raise RequestedBlueprintNotFound(f"Blueprint {blueprint_id} not found")
 
-        # Remove from index
-        index_key = b"blueprint:index"
-        blueprint_index_value = remove_from_index(self.client, index_key, blueprint_id)
-        self.client.set(index_key, blueprint_index_value)
+        index_key = "blueprint:index"
+        index_value = _update_index(self.client, index_key, items_to_remove=[blueprint_id])
 
-        # Delete the blueprint and metadata keys
-        metadata_key = f"metadata:{blueprint_id}".encode()
-        delete_request = DeleteKeysRequest(keys=[metadata_key, blueprint_key])
-        self.client.delete(delete_request)
+        metadata_key = f"metadata:{blueprint_id}"
+
+        pipe = self.client.pipeline()
+        pipe.set(index_key, index_value)
+        pipe.delete(metadata_key, blueprint_key)
+        pipe.execute()
 
         LOG.info(f"Blueprint {blueprint_id} deleted")
 
 
-class ModelStorage:
-    MODELS_DB_NAME = "orchestrator_models"
+class ModelStorage(BaseModelStorage):
+    _DB = _MODEL_DB
 
     def __init__(self):
-        self.client = _create_immudb_client(self.MODELS_DB_NAME)
+        self.client = _create_redis_client(self._DB)
 
     def __enter__(self):
         return self
@@ -388,8 +351,7 @@ class ModelStorage:
         self.close()
 
     def close(self):
-        # self.client.logout()
-        self.client.shutdown()
+        self.client.close()
 
     def add_model(self, model_id: str, model: Any) -> None:
         """Store a model.
@@ -401,16 +363,16 @@ class ModelStorage:
         model : Any
             The model to store (must be COMPAS serializable).
         """
-        LOG.debug(f"Storing model {model_id} in immudb")
+        LOG.debug(f"Storing model {model_id} in Redis")
 
-        # Update index
-        index_key = b"model:index"
+        index_key = "model:index"
+        key = f"model:{model_id}"
+        index_value = _update_index(self.client, index_key, items_to_add=[model_id])
 
-        key = f"model:{model_id}".encode()
-        value = json_dumps(model).encode()
-        index_value = append_to_index(self.client, index_key, model_id)
-
-        self.client.setAll({key: value, index_key: index_value})
+        pipe = self.client.pipeline()
+        pipe.set(key, json_dumps(model))
+        pipe.set(index_key, index_value)
+        pipe.execute()
 
     def add_nesting(self, model_id: str, nesting: Any) -> None:
         """Store a nesting result for a model.
@@ -427,18 +389,14 @@ class ModelStorage:
         RequestedModelNotFound
             If the model with the given ID is not found.
         """
-        LOG.debug(f"Storing nesting for model {model_id} in immudb")
+        LOG.debug(f"Storing nesting for model {model_id} in Redis")
 
-        # Verify model exists
-        model_key = f"model:{model_id}".encode()
-        match = self.client.get(model_key)
-        if not match:
+        model_key = f"model:{model_id}"
+        if not self.client.exists(model_key):
             LOG.error(f"Model {model_id} not found in database")
             raise RequestedModelNotFound(f"Model {model_id} not found")
 
-        key = f"nesting:{model_id}".encode()
-        value = json_dumps(nesting).encode()
-        self.client.set(key, value)
+        self.client.set(f"nesting:{model_id}", json_dumps(nesting))
 
     def get_nesting(self, model_id: str) -> Optional[Any]:
         """Retrieve a nesting result for a model.
@@ -453,13 +411,12 @@ class ModelStorage:
         Optional[Any]
             The nesting result if found, None otherwise.
         """
-        key = f"nesting:{model_id}".encode()
+        key = f"nesting:{model_id}"
         try:
-            match = self.client.get(key)
-            if not match:
+            raw = self.client.get(key)
+            if not raw:
                 return None
-
-            return json_loads(match.value.decode())
+            return json_loads(raw.decode())
         except Exception as ex:
             LOG.exception(f"Failed to retrieve nesting for model {model_id} - {ex}")
             raise
@@ -477,14 +434,13 @@ class ModelStorage:
         Any
             The model if found.
         """
-        key = f"model:{model_id}".encode()
+        key = f"model:{model_id}"
         try:
-            match = self.client.get(key)
-            if not match:
+            raw = self.client.get(key)
+            if not raw:
                 LOG.error(f"Model {model_id} not found in database")
                 raise RequestedModelNotFound(f"Model {model_id} not found")
-
-            return json_loads(match.value.decode())
+            return json_loads(raw.decode())
         except Exception as ex:
             LOG.exception(f"Failed to retrieve model {model_id} - {ex}")
             raise
@@ -497,11 +453,10 @@ class ModelStorage:
         list[str]
             A list of model IDs.
         """
-        index_key = b"model:index"
-        match = self.client.get(index_key)
-        if match:
-            index_data = json_loads(match.value.decode())
-            return cast(list[str], index_data)
+        index_key = "model:index"
+        raw = self.client.get(index_key)
+        if raw:
+            return cast(list[str], json_loads(raw.decode()))
         return []
 
     def remove_model(self, model_id: str) -> None:
@@ -517,22 +472,19 @@ class ModelStorage:
         RequestedModelNotFound
             If the model with the given ID is not found.
         """
-        LOG.debug(f"Removing model {model_id} from immudb")
+        LOG.debug(f"Removing model {model_id} from Redis")
 
-        # First verify the model exists
-        key = f"model:{model_id}".encode()
-        match = self.client.get(key)
-        if not match:
+        key = f"model:{model_id}"
+        if not self.client.exists(key):
             LOG.error(f"Model {model_id} not found in database")
             raise RequestedModelNotFound(f"Model {model_id} not found")
 
-        # Remove from index
-        index_key = b"model:index"
-        index_value = remove_from_index(self.client, index_key, model_id)
-        self.client.set(index_key, index_value)
+        index_key = "model:index"
+        index_value = _update_index(self.client, index_key, items_to_remove=[model_id])
 
-        # Delete the model key
-        delete_request = DeleteKeysRequest(keys=[key])
-        self.client.delete(delete_request)
+        pipe = self.client.pipeline()
+        pipe.set(index_key, index_value)
+        pipe.delete(key)
+        pipe.execute()
 
         LOG.info(f"Model {model_id} deleted")
