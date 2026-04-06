@@ -1,19 +1,102 @@
-name: antikythera-basic-infrastructure
-
+name: antikythera
 services:
+  # ---------------------------------------------------------------------------
+  # Redis — persistent key-value store used by the orchestrator
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:8-alpine
+    container_name: akt-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+  # ---------------------------------------------------------------------------
+  # MQTT broker — message bus for orchestrator ↔ agents communication
+  # ---------------------------------------------------------------------------
   mqtt-broker:
     image: emqx/nanomq:latest
-    container_name: mqtt-broker
+    container_name: akt-mqtt-broker
     ports:
-      - "1883:1883"
-      - "8083:8083"
-      - "8084:8084"
-      - "8080:8080"
+      - "1883:1883"   # MQTT (TCP) — used by orchestrator and agents
+      - "8083:8083"   # MQTT over WebSocket — used by the browser frontend
+      - "8084:8084"   # MQTT over WebSocket (TLS)
+      - "8080:8080"   # NanoMQ HTTP API / dashboard
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 1883"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
-  immudb:
-    image: codenotary/immudb:latest
-    container_name: immudb
+  # ---------------------------------------------------------------------------
+  # Orchestrator — FastAPI server that manages blueprint sessions
+  # ---------------------------------------------------------------------------
+  orchestrator:
+    build:
+      context: .
+    image: antikythera:latest
+    container_name: akt-orchestrator
     ports:
-      - "3322:3322"
-      - "9497:9497"
-      - "8999:8080"
+      - "8000:8000"   # REST API (proxied by the frontend nginx)
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MQTT_BROKER_HOST: mqtt-broker
+      MQTT_BROKER_PORT: 1883
+    depends_on:
+      mqtt-broker:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["antikythera", "--dev", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # System agents — background workers for built-in task types (system.*)
+  # ---------------------------------------------------------------------------
+  agents:
+    image: antikythera:latest
+    container_name: akt-agents-sys
+    depends_on:
+      mqtt-broker:
+        condition: service_healthy
+      orchestrator:
+        condition: service_started
+    command:
+      - antikythera-agents
+      - --sys-only
+      - --broker-host
+      - mqtt-broker
+      - --broker-port
+      - "1883"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Frontend — React app served by nginx, proxies /api → orchestrator
+  # To build WITHOUT the blueprint editor (author.html), you can override the
+  # build arg: `--build-arg VITE_INCLUDE_AUTHOR=false` (requires vite.config.ts
+  # changes; both entry points are included by default).
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../antikythera-frontend
+      args:
+        VITE_MQTT_BROKER_HOST: mqtt-broker
+    container_name: akt-frontend
+    ports:
+      - "80:80"       # Serves the UI; /api/* is proxied to orchestrator:8000
+    depends_on:
+      - orchestrator
+    restart: unless-stopped
+
+volumes:
+  redis-data:

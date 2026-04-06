@@ -28,6 +28,7 @@ from fastapi.concurrency import asynccontextmanager
 from pydantic import BaseModel
 from pydantic import Field
 
+from antikythera import config
 from antikythera.io import BlueprintJsonSerializer
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
@@ -113,14 +114,14 @@ class ActiveSession:
 
 class StartBlueprintRequest(BaseModel):
     blueprint_id: str = Field(..., description="ID of the blueprint to start.")
-    broker_host: str = Field("127.0.0.1", description="MQTT broker host.")
-    broker_port: int = Field(1883, ge=1, le=65535, description="MQTT broker port.")
+    broker_host: str = Field(default_factory=lambda: config.MQTT_BROKER_HOST, description="MQTT broker host.")
+    broker_port: int = Field(default_factory=lambda: config.MQTT_BROKER_PORT, description="MQTT broker port.")
     params: Dict[str, str] = Field(default_factory=dict, description="Arbitrary parameters for the session.")
 
 
 class RestartSessionRequest(BaseModel):
-    broker_host: str = Field("127.0.0.1", description="MQTT broker host.")
-    broker_port: int = Field(1883, ge=1, le=65535, description="MQTT broker port.")
+    broker_host: str = Field(default_factory=lambda: config.MQTT_BROKER_HOST, description="MQTT broker host.")
+    broker_port: int = Field(default_factory=lambda: config.MQTT_BROKER_PORT, description="MQTT broker port.")
 
 
 class StartBlueprintResponse(BaseModel):
@@ -621,9 +622,13 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
     with _sessions_lock:
         session = _sessions.get(session_id)
 
+    LOG.debug(f"Starting session {session_id} with broker {request.broker_host}:{request.broker_port}")
     if not session:
-        # Check if it exists in storage and revive it
-        session = _revive_session(session_id, request.broker_host, request.broker_port)
+        # Check if it exists in storage and revive it.
+        # Always use the server-side MQTT config — the client-supplied broker_host
+        # reflects the agent-facing address (e.g. localhost for browser agents) and
+        # is not usable for the orchestrator's own connection inside Docker.
+        session = _revive_session(session_id, config.MQTT_BROKER_HOST, config.MQTT_BROKER_PORT)
 
     try:
         session.orchestrator.start()
