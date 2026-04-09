@@ -3,7 +3,7 @@ FROM python:3.13-slim
 # TODO: Remove once new compas_pb@invoc_arch is released
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /appß
+WORKDIR /app
 
 # Install build-system requirements.
 # The hatch build hook (hatch_build.py) runs `invoke generate-proto-classes`
@@ -16,7 +16,8 @@ RUN pip install --no-cache-dir \
     invoke \
     compas_invocations2 \
     "git+https://github.com/gramaziokohler/compas_pb@invoc_arch" \
-    grpcio-tools
+    grpcio-tools \
+    compas_timber==2.1.1-rc1
 
 COPY . .
 
