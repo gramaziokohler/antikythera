@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# requires: compas_timber==2.1.1-rc1, compas_pb, paho-mqtt
 """
 MQTT Traffic Recorder
 
@@ -6,10 +6,11 @@ Records MQTT messages from specified topics to a JSON file.
 Press Ctrl+C to stop recording and save the file.
 
 Usage:
+    uv pip install compas_timber==2.1.1-rc1 compas_pb paho-mqtt
     python mqtt_recorder.py [output_file] [topic1] [topic2] ...
 
 Example:
-    python mqtt_recorder.py mqtt_log.json "sensor/#" "device/status"
+    python dump_mqtt_traffic.py output.log "antikythera/task/claim" "antikythera/task/allocation" "antikythera/task/start" "antikythera/task/completed"
 """
 
 import json
@@ -17,6 +18,7 @@ import sys
 from datetime import datetime
 
 import paho.mqtt.client as mqtt
+from compas_pb import pb_load_bts
 
 
 class MQTTRecorder:
@@ -57,7 +59,8 @@ class MQTTRecorder:
         message_data = {"timestamp": timestamp, "topic": msg.topic, "payload": payload, "qos": msg.qos, "retain": msg.retain}
 
         self.messages.append(message_data)
-        print(f"[{timestamp}] {msg.topic}: {payload}")
+        payload_bts = bytes.fromhex(payload)
+        print(f"[{timestamp}] {msg.topic}: {pb_load_bts(payload_bts)}")
 
     def on_disconnect(self, client, userdata, rc):
         """Callback when disconnected from MQTT broker"""
