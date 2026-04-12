@@ -172,6 +172,11 @@ class DeleteBlueprintResponse(BaseModel):
     message: str
 
 
+class DeleteSessionResponse(BaseModel):
+    session_id: str
+    message: str
+
+
 class UploadModelsResponse(BaseModel):
     model_ids: list[str] = Field(default_factory=list, description="Model IDs of the uploaded models.")
     message: str
@@ -456,6 +461,26 @@ def delete_blueprint(blueprint_id: str) -> DeleteBlueprintResponse:
         raise HTTPException(status_code=500, detail=f"Failed to delete blueprint: {exc}")
 
     return DeleteBlueprintResponse(blueprint_id=blueprint_id, message="Blueprint deleted successfully.")
+
+
+@app.delete("/sessions/{session_id}", response_model=DeleteSessionResponse)
+def delete_session(session_id: str) -> DeleteSessionResponse:
+    # Prevent deleting an active session
+    with _sessions_lock:
+        if session_id in _sessions:
+            raise HTTPException(status_code=409, detail=f"Session {session_id} is currently active. Stop it before deleting.")
+
+    try:
+        with SessionStorage(session_id) as storage:
+            storage.remove_session()
+    except RequestedSessionNotFound as exc:
+        LOG.warning(f"Session {session_id} not found: {exc}")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    except Exception as exc:
+        LOG.exception(f"Failed to delete session {session_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete session: {exc}")
+
+    return DeleteSessionResponse(session_id=session_id, message="Session deleted successfully.")
 
 
 @app.get("/sessions/{session_id}/diagram", response_model=BlueprintDiagramResponse)

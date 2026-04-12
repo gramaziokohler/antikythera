@@ -13,6 +13,7 @@ from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera_orchestrator.storage.exceptions import RequestedBlueprintNotFound
 from antikythera_orchestrator.storage.exceptions import RequestedModelNotFound
+from antikythera_orchestrator.storage.exceptions import RequestedSessionNotFound
 from antikythera_orchestrator.storage.interfaces import BaseBlueprintStorage
 from antikythera_orchestrator.storage.interfaces import BaseModelStorage
 from antikythera_orchestrator.storage.interfaces import BaseSessionStorage
@@ -205,6 +206,40 @@ class SessionStorage(BaseSessionStorage):
         if raw is None:
             return None
         return json_loads(raw.decode())
+
+    def remove_session(self) -> None:
+        """Remove a session and all its associated data from storage.
+
+        Raises
+        ------
+        RequestedSessionNotFound
+            If the session with the given ID is not found.
+        """
+        LOG.debug(f"Removing session {self.session_id} from Redis")
+
+        session_key = self._session_key()
+        if not self.client.exists(session_key):
+            LOG.error(f"Session {self.session_id} not found in database")
+            raise RequestedSessionNotFound(f"Session {self.session_id} not found")
+
+        # Collect all keys associated with this session
+        keys_to_delete = [session_key]
+        cursor = 0
+        while True:
+            cursor, keys = self.client.scan(cursor, match=f"{session_key}:*", count=1000)
+            keys_to_delete.extend(keys)
+            if cursor == 0:
+                break
+
+        index_key = "session:index"
+        index_value = _update_index(self.client, index_key, items_to_remove=[self.session_id])
+
+        pipe = self.client.pipeline()
+        pipe.set(index_key, index_value)
+        pipe.delete(*keys_to_delete)
+        pipe.execute()
+
+        LOG.info(f"Session {self.session_id} deleted")
 
 
 class BlueprintStorage(BaseBlueprintStorage):

@@ -15,6 +15,7 @@ from antikythera.models import BlueprintSession
 
 from .exceptions import RequestedBlueprintNotFound
 from .exceptions import RequestedModelNotFound
+from .exceptions import RequestedSessionNotFound
 from .interfaces import BaseBlueprintStorage
 from .interfaces import BaseModelStorage
 from .interfaces import BaseSessionStorage
@@ -218,6 +219,38 @@ class SessionStorage(BaseSessionStorage):
             return None
 
         return json_loads(match.value.decode())
+
+    def remove_session(self) -> None:
+        """Remove a session and all its associated data from storage.
+
+        Raises
+        ------
+        RequestedSessionNotFound
+            If the session with the given ID is not found.
+        """
+        LOG.debug(f"Removing session {self.session_id} from immudb")
+
+        session_key = self._session_key().encode()
+        match = self.client.get(session_key)
+        if not match:
+            LOG.error(f"Session {self.session_id} not found in database")
+            raise RequestedSessionNotFound(f"Session {self.session_id} not found")
+
+        # Remove from index
+        index_key = b"session:index"
+        session_index_value = remove_from_index(self.client, index_key, self.session_id)
+        self.client.set(index_key, session_index_value)
+
+        # Find and delete all keys associated with this session
+        prefix = self._session_key().encode()
+        results = self.client.scan(b"", prefix, False, 1000)
+        keys_to_delete = list(results.keys()) if results else []
+        keys_to_delete.append(session_key)
+
+        delete_request = DeleteKeysRequest(keys=keys_to_delete)
+        self.client.delete(delete_request)
+
+        LOG.info(f"Session {self.session_id} deleted")
 
 
 class BlueprintStorage(BaseBlueprintStorage):

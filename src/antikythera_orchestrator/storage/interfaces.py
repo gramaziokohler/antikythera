@@ -47,6 +47,9 @@ class BaseSessionStorage(ABC):
     @abstractmethod
     def load_session_with_metadata(self) -> Optional[dict]: ...
 
+    @abstractmethod
+    def remove_session(self) -> None: ...
+
 
 class BaseBlueprintStorage(ABC):
     """Abstract interface for blueprint storage backends."""
