@@ -4,7 +4,8 @@ import pytest
 
 from antikythera_orchestrator.storage.immudb_storage import append_to_index
 from antikythera_orchestrator.storage.immudb_storage import remove_from_index
-from antikythera_orchestrator.storage_mock import MockImmudbClient
+
+from .conftest import MockImmudbClient
 
 
 @pytest.fixture
