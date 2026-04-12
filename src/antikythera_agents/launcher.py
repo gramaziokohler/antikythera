@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import time
 
@@ -16,6 +17,7 @@ from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskClaimRequest
 from antikythera.models import TaskCompletionAckMessage
 from antikythera.models import TaskCompletionMessage
+from antikythera.models import TaskError
 from antikythera.models import TaskState
 from antikythera.models.conversions import dict_to_inputs
 from antikythera.models.conversions import dict_to_params
@@ -24,6 +26,8 @@ from antikythera_agents.cli import Colors
 from antikythera_agents.context import ExecutionContext
 
 THREAD_JOIN_TIMEOUT = 10
+
+LOG = logging.getLogger(__name__)
 
 
 def _get_eve_transport(host, port, codec):
@@ -58,7 +62,7 @@ class AgentLauncher:
 
         self.agents = {}
         self._initialize_agents()
-        print(f"Agent Launcher initialized with ID: {Colors.HEADER}{self.launcher_id}{Colors.ENDC}")
+        LOG.info(f"Agent Launcher initialized with ID: {Colors.HEADER}{self.launcher_id}{Colors.ENDC}")
 
     def start(self):
         self.task_start_subscriber.subscribe()
@@ -75,27 +79,27 @@ class AgentLauncher:
             thread_count = len(active_threads)
 
         if thread_count > 0:
-            print(f"Waiting for {thread_count} running tasks to complete...")
+            LOG.info(f"Waiting for {thread_count} running tasks to complete...")
 
         deadline = time.time() + THREAD_JOIN_TIMEOUT
 
         for thread in active_threads:
             remaining_time = max(0, deadline - time.time())
             if remaining_time == 0 and thread.is_alive():
-                print(f"Timeout reached, skipping join for {thread.name}")
+                LOG.info(f"Timeout reached, skipping join for {thread.name}")
                 continue
 
             try:
                 thread.join(remaining_time)
             except Exception as e:
-                print(f"Error joining thread: {e}, continuing shutdown.")
+                LOG.error(f"Error joining thread: {e}, continuing shutdown.")
 
         # Dispose of all agents
         for agent in self.agents.values():
             try:
                 agent.dispose()
             except Exception as e:
-                print(f"Error disposing agent: {e}")
+                LOG.error(f"Error disposing agent: {e}")
 
     def _initialize_agents(self):
         from antikythera_agents.decorators import list_registered_agents
@@ -105,12 +109,12 @@ class AgentLauncher:
         registered_agents = list_registered_agents()
         if self.sys_only:
             registered_agents = {k: v for k, v in registered_agents.items() if k == "system"}
-            print(f"{Colors.WARNING}--sys-only: restricting to system agents only.{Colors.ENDC}")
+            LOG.info(f"{Colors.WARNING}--sys-only: restricting to system agents only.{Colors.ENDC}")
         for agent_type, agent_class in registered_agents.items():
             self.agents[agent_type] = agent_class()
-            print(f"Initialized {agent_class.__name__} for type '{agent_type}' with {len(self.agents[agent_type].list_tools())} tools.")
+            LOG.info(f"Initialized {agent_class.__name__} for type '{agent_type}' with {len(self.agents[agent_type].list_tools())} tools.")
 
-        print(f"Total agents initialized: {len(self.agents)}")
+        LOG.info(f"Total agents initialized: {len(self.agents)}")
 
     def on_task_start(self, message: TaskAssignmentMessage) -> None:
         # Reconstruct valid Task object from assignment message
@@ -148,7 +152,7 @@ class AgentLauncher:
                     self.threads.append(thread)
                 thread.start()
             else:
-                print(f"Received allocation for unknown or already processed task {task_id}")
+                LOG.debug(f"Received allocation for unknown or already processed task {task_id}")
 
     def _execute_task_wrapper(self, task: Task, agent_type: str) -> None:
         # Create execution context
@@ -158,16 +162,26 @@ class AgentLauncher:
 
         try:
             self._execute_task(task, agent_type, context)
+        except Exception as ex:
+            # agent task executino is protected, so an error here has to do with launcher code which may
+            # lead to Orchestrator waiting indefinitely for completion message that will never arrive.
+            self._handle_launcher_error_during_execution(task.id, ex)
         finally:
             with self.thread_lock:
                 self.active_contexts.pop(task.id, None)
                 self.threads.remove(threading.current_thread())
 
+    def _handle_launcher_error_during_execution(self, task_id: str, exception: Exception):
+        LOG.debug(f"{Colors.FAIL}❌ [{task_id}] Launcher Error: {exception}{Colors.ENDC}")
+        error = TaskError(code="LAUNCHER_FAILURE", message="An error occurred in the agent launcher during task execution.", details=str(exception))
+        failure_msg = TaskCompletionMessage(id=task_id, state=TaskState.FAILED, outputs={}, agent_id=self.launcher_id, error=error)
+        self.task_completion_publisher.publish(failure_msg)
+
     def _execute_task(self, task: Task, agent_type: str, context: ExecutionContext) -> None:
         agent = self.agents.get(agent_type)
 
         if not agent:
-            print(f"{Colors.WARNING}⚠️  [WARNING] No agent found for task type: {task.type}{Colors.ENDC}")
+            LOG.debug(f"{Colors.WARNING}⚠️  [WARNING] No agent found for task type: {task.type}{Colors.ENDC}")
             return
 
         try:
@@ -179,10 +193,10 @@ class AgentLauncher:
             if context.is_cancelled:
                 # If cancelled, we log and return, without trying to set state, or outputs
                 # or sending completion messages
-                print(f"{Colors.WARNING}🛑 [{task.id}][{task.type}] Task cancelled.{Colors.ENDC}")
+                LOG.debug(f"{Colors.WARNING}🛑 [{task.id}][{task.type}] Task cancelled.{Colors.ENDC}")
                 return
 
-            print(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Agent Error: {e}{Colors.ENDC}")
+            LOG.debug(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Agent Error: {e}{Colors.ENDC}")
             state = TaskState.FAILED
             outputs = {"exception": str(e)}
 
@@ -196,18 +210,18 @@ class AgentLauncher:
 
             if context:
                 # It's a running task, and we are not the winner.
-                print(f"{Colors.WARNING}📉 [{message.id}] received ACK for {message.accepted_agent_id}, cancelling local execution.{Colors.ENDC}")
+                LOG.debug(f"{Colors.WARNING}📉 [{message.id}] received ACK for {message.accepted_agent_id}, cancelling local execution.{Colors.ENDC}")
                 context.cancel()
 
     def reload_agents(self):
-        print(f"{Colors.OKBLUE}Reloading agents...{Colors.ENDC}")
+        LOG.debug(f"{Colors.OKBLUE}Reloading agents...{Colors.ENDC}")
 
         # Dispose of existing agents before reloading
         for agent in self.agents.values():
             try:
                 agent.dispose()
             except Exception as e:
-                print(f"Error disposing agent during reload: {e}")
+                LOG.debug(f"Error disposing agent during reload: {e}")
 
         _get_plugin_manager().reload_plugins()
         self._initialize_agents()
