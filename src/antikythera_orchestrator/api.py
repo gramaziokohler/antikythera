@@ -1,4 +1,5 @@
 import logging
+import re
 import tempfile
 import time
 import uuid
@@ -117,6 +118,7 @@ class StartBlueprintRequest(BaseModel):
     broker_host: str = Field(default_factory=lambda: config.MQTT_BROKER_HOST, description="MQTT broker host.")
     broker_port: int = Field(default_factory=lambda: config.MQTT_BROKER_PORT, description="MQTT broker port.")
     params: Dict[str, str] = Field(default_factory=dict, description="Arbitrary parameters for the session.")
+    session_name: Optional[str] = Field(None, description="Optional human-readable name used as session ID (slugified). Auto-generated UUID if omitted.")
 
 
 class RestartSessionRequest(BaseModel):
@@ -291,6 +293,32 @@ def get_timing_metrics():
         return results
 
 
+def _slugify_session_name(name: str) -> str:
+    """Convert a human-readable session name into a URL/ID-safe slug."""
+    slug = re.sub(r"[^\w-]+", "-", name.lower()).strip("-")
+    slug = re.sub(r"-{2,}", "-", slug)
+    if not slug:
+        raise HTTPException(status_code=400, detail="session_name produced an empty slug after sanitisation.")
+    return slug
+
+
+def _resolve_session_id(request: StartBlueprintRequest) -> str:
+    """Return the session ID to use: slugified name or a fresh UUID."""
+    if not request.session_name:
+        return uuid.uuid4().hex
+
+    session_id = _slugify_session_name(request.session_name)
+
+    with _sessions_lock:
+        if session_id in _sessions:
+            raise HTTPException(status_code=409, detail=f"A session with ID '{session_id}' already exists.")
+    with SessionStorage(session_id) as storage:
+        if storage.load_session_with_metadata() is not None:
+            raise HTTPException(status_code=409, detail=f"A session with ID '{session_id}' already exists in storage.")
+
+    return session_id
+
+
 def _start_blueprint_session(request: StartBlueprintRequest) -> str:
     try:
         with BlueprintStorage() as storage:
@@ -300,7 +328,7 @@ def _start_blueprint_session(request: StartBlueprintRequest) -> str:
         LOG.exception(f"Failed to load blueprint with id {request.blueprint_id}")
         raise HTTPException(status_code=400, detail=f"Failed to load blueprint: {exc}")
 
-    session_id = uuid.uuid4().hex
+    session_id = _resolve_session_id(request)
     session = BlueprintSession(bsid=session_id, blueprint=blueprint, params=request.params)
     orchestrator = Orchestrator(session, broker_host=request.broker_host, broker_port=request.broker_port)
 
