@@ -82,6 +82,8 @@ class BaseSerializerV1:
                 "type": task.type,
                 "description": task.description,
                 "condition": task.condition,
+                "scope_start": task.scope_start,
+                "scope_end": task.scope_end,
             }
 
             if task.inputs:
@@ -128,6 +130,8 @@ class BaseSerializerV1:
                 params=params,
                 depends_on=dependencies,
                 state=state,
+                scope_start=data.get("scope_start"),
+                scope_end=data.get("scope_end"),
             )
 
     class BlueprintSerializer:

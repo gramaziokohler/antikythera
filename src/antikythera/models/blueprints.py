@@ -125,6 +125,8 @@ class Task(Data):
             "params": self.params,
             "depends_on": self.depends_on,
             "state": self.state,
+            "scope_start": self.scope_start,
+            "scope_end": self.scope_end,
         }
 
     def __init__(
@@ -139,6 +141,8 @@ class Task(Data):
         depends_on: List[Dependency] = None,
         state: TaskState = TaskState.PENDING,
         context: Dict[str, Any] = None,
+        scope_start: Optional[dict] = None,
+        scope_end: Optional[str] = None,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -152,6 +156,8 @@ class Task(Data):
         self.depends_on = depends_on or []
         self.state = TaskState(state)
         self.context = context or {}
+        self.scope_start = scope_start
+        self.scope_end = scope_end
 
     def get_input(self, name: str) -> Optional[TaskInput]:
         for task_input in self.inputs:
@@ -317,6 +323,58 @@ class Task(Data):
         return None
 
 
+class Scope(Data):
+    """A scope spanning a contiguous region of a blueprint's task DAG.
+
+    A scope is uniquely identified by the task ID of its opening
+    (``scope_start``) task.  An optional human-readable *label* can be
+    provided via ``scope_start["name"]``.
+
+    Attributes
+    ----------
+    id : str
+        Identifier for this scope — the task ID of the ``scope_start`` task.
+    label : str
+        Human-readable label for the scope.
+    task_ids : list[str]
+        All task IDs that belong to this scope (including start and end).
+    end_task_id : str
+        Task ID of the ``scope_end`` task that closes this scope.
+    policy_type : str
+        One of ``"skip"``, ``"retry"``, or ``"while"``.
+    policy : dict
+        Raw policy dict from ``task.scope_start``.
+    """
+
+    @property
+    def __data__(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "label": self.label,
+            "task_ids": self.task_ids,
+            "end_task_id": self.end_task_id,
+            "policy_type": self.policy_type,
+            "policy": self.policy,
+        }
+
+    def __init__(
+        self,
+        id: str,
+        label: str,
+        task_ids: List[str] = None,
+        end_task_id: str = "",
+        policy_type: str = "skip",
+        policy: dict = None,
+    ) -> None:
+        super().__init__()
+        self.id = id
+        self.label = label
+        self.task_ids = task_ids or []
+        self.end_task_id = end_task_id
+        self.policy_type = policy_type
+        self.policy = policy or {}
+
+
 class Blueprint(Data):
     """Represents a complete blueprint.
 
@@ -332,6 +390,8 @@ class Blueprint(Data):
         A human-readable description of the blueprint.
     tasks : List[Task], optional
         A list of tasks that make up the blueprint.
+    scopes : List[Scope]
+        Scope definitions derived from scope_start/scope_end task pairs.
 
     """
 
@@ -343,6 +403,7 @@ class Blueprint(Data):
             "version": self.version,
             "description": self.description,
             "tasks": self.tasks,
+            "scopes": self.scopes,
         }
 
     def __init__(
@@ -352,6 +413,7 @@ class Blueprint(Data):
         version: Optional[str] = "1.0",
         description: Optional[str] = None,
         tasks: List[Task] = None,
+        **kwargs,
     ) -> None:
         super().__init__()
         self.id = id
@@ -361,6 +423,7 @@ class Blueprint(Data):
         self.tasks = tasks or []
         if self.tasks:
             self.validate()
+        self.scopes = self._build_scopes() if self.tasks else []
 
     def validate(self) -> None:
         """Validates the blueprint structure.
@@ -387,6 +450,128 @@ class Blueprint(Data):
             for dep in task.depends_on:
                 if dep.id not in task_ids:
                     raise ValueError(f"Task '{task.id}' depends on non-existent task '{dep.id}'.")
+
+        self._validate_scopes(task_ids)
+
+    def _validate_scopes(self, task_ids: set) -> None:
+        """Validate scope_start / scope_end pairs.
+
+        Checks:
+        1. Every ``scope_end`` references a task that exists and has ``scope_start``.
+        2. Every ``scope_start`` task has exactly one matching ``scope_end`` task.
+        3. No two scopes are interlaced (they must be nested or disjoint).
+        """
+        starts = {t.id for t in self.tasks if t.scope_start is not None}
+        ends = {}  # start_task_id -> end_task_id
+
+        for task in self.tasks:
+            if not task.scope_end:
+                continue
+            if task.scope_end not in task_ids:
+                raise ValueError(f"Task '{task.id}' has scope_end referencing non-existent task '{task.scope_end}'.")
+            if task.scope_end not in starts:
+                raise ValueError(f"Task '{task.id}' has scope_end='{task.scope_end}' but that task has no scope_start.")
+            if task.scope_end in ends:
+                raise ValueError(f"Duplicate scope_end for '{task.scope_end}': tasks '{ends[task.scope_end]}' and '{task.id}' both close the same scope.")
+            ends[task.scope_end] = task.id
+
+        for start_id in starts:
+            if start_id not in ends:
+                raise ValueError(f"Task '{start_id}' has scope_start but no matching scope_end task.")
+
+        if len(starts) > 1:
+            self._check_scopes_not_interlaced(starts, ends)
+
+    def _check_scopes_not_interlaced(self, starts: set, ends: Dict[str, str]) -> None:
+        """Verify that no two scopes overlap without one fully containing the other."""
+        # Build adjacency from depends_on
+        successors: Dict[str, set] = {t.id: set() for t in self.tasks}
+        predecessors: Dict[str, set] = {t.id: set() for t in self.tasks}
+        for task in self.tasks:
+            for dep in task.depends_on:
+                successors[dep.id].add(task.id)
+                predecessors[task.id].add(dep.id)
+
+        def reachable(origin: str, adj: Dict[str, set]) -> set:
+            visited: set = set()
+            queue = [origin]
+            while queue:
+                n = queue.pop()
+                if n in visited:
+                    continue
+                visited.add(n)
+                queue.extend(adj.get(n, set()))
+            return visited
+
+        # Scope tasks = reachable forward from start ∩ reachable backward from end
+        scope_tasks = {sid: reachable(sid, successors) & reachable(ends[sid], predecessors) for sid in starts}
+
+        scope_ids = list(scope_tasks.keys())
+        for i, id_a in enumerate(scope_ids):
+            for id_b in scope_ids[i + 1 :]:
+                a, b = scope_tasks[id_a], scope_tasks[id_b]
+                overlap = a & b
+                if overlap and not (a <= b or b <= a):
+                    raise ValueError(f"Scopes '{id_a}' and '{id_b}' are interlaced. Scopes must be either nested or disjoint.")
+
+    def _build_scopes(self) -> List[Scope]:
+        """Discover and build Scope objects from scope_start/scope_end task pairs."""
+        starts = {}  # task_id -> Task
+        ends = {}  # start_task_id -> end_task_id
+        for task in self.tasks:
+            if task.scope_start is not None:
+                starts[task.id] = task
+            if task.scope_end:
+                ends[task.scope_end] = task.id
+
+        if not starts:
+            return []
+
+        # Build adjacency for BFS
+        successors: Dict[str, set] = {t.id: set() for t in self.tasks}
+        predecessors: Dict[str, set] = {t.id: set() for t in self.tasks}
+        for task in self.tasks:
+            for dep in task.depends_on:
+                successors[dep.id].add(task.id)
+                predecessors[task.id].add(dep.id)
+
+        def reachable(origin: str, adj: Dict[str, set]) -> set:
+            visited: set = set()
+            queue = [origin]
+            while queue:
+                n = queue.pop()
+                if n in visited:
+                    continue
+                visited.add(n)
+                queue.extend(adj.get(n, set()))
+            return visited
+
+        scopes = []
+        for start_id, task in starts.items():
+            end_id = ends.get(start_id)
+            if not end_id:
+                continue
+            task_ids = sorted(reachable(start_id, successors) & reachable(end_id, predecessors))
+            policy = task.scope_start or {}
+
+            policy_type = "skip"
+            if "retry_policy" in policy:
+                policy_type = "retry"
+            elif "while_policy" in policy:
+                policy_type = "while"
+
+            label = policy.get("name") or start_id
+            scopes.append(
+                Scope(
+                    id=start_id,
+                    label=label,
+                    task_ids=task_ids,
+                    end_task_id=end_id,
+                    policy_type=policy_type,
+                    policy=policy,
+                )
+            )
+        return scopes
 
 
 class BlueprintSessionState(StrEnum):
@@ -422,6 +607,7 @@ class BlueprintSession(Data):
             "params": self.params,
             "composite_to_inner_blueprint_map": self.composite_to_inner_blueprint_map,
             "blueprint_contexts": self.blueprint_contexts,
+            "scope_iterations": self.scope_iterations,
         }
 
     def __init__(
@@ -433,6 +619,7 @@ class BlueprintSession(Data):
         params: Dict[str, str] = None,
         composite_to_inner_blueprint_map: Dict[str, str] = None,
         blueprint_contexts: Dict[str, Any] = None,
+        scope_iterations: Dict[str, int] = None,
     ) -> None:
         super().__init__()
         self.bsid = bsid
@@ -442,6 +629,7 @@ class BlueprintSession(Data):
         self.params = params or {}
         self.composite_to_inner_blueprint_map = composite_to_inner_blueprint_map or {}
         self.blueprint_contexts = blueprint_contexts or {}
+        self.scope_iterations = scope_iterations or {}
 
     def get_blueprint(self, blueprint_id: str) -> Optional[Blueprint]:
         if self.blueprint.id == blueprint_id:

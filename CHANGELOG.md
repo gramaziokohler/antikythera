@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--sys-only` flag to agent launcher to restrict to system agents only.
 - MQTT traffic dumper script decodes protobuf messages; now continuously flushes entries to file.
 - `compas_timber` added to Docker image.
+- **Scopes**: new scope mechanism for controlling looping/retry/skip behavior within blueprints.
+  - `scope_start` / `scope_end` task properties define contiguous DAG regions.
+  - Three policies: **skip** (condition-gated), **retry** (fixed N retries), **while** (condition-based loop with optional iteration cap).
+  - Scopes are identified by the opening task's ID; `scope_end` references that ID.
+  - Blueprint validation ensures matched start/end pairs with no interlaced scopes.
+  - New `ScopeRegistry` and `Scope` classes in `antikythera_orchestrator.scopes`.
+- Updated blueprint JSON schema with `scope_start`, `scope_end`, `RetryPolicy`, and `WhilePolicy` definitions.
+- Example blueprints for scope skip, retry, and while policies.
+- Unit tests for all scope policies (skip, retry, while, max_iterations).
 
 ### Changed
 - Swapped NanoMQ for Eclipse Mosquitto as the MQTT broker.

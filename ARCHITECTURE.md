@@ -166,6 +166,7 @@ Available sequencers:
     * Outputs from these inner blueprints are aggregated into a dictionary in the session storage, keyed by the `element_id`.
     * Example: If a dynamic task produces a `trajectory` output for 10 elements, the session storage will contain a single `trajectory` variable which is a dictionary: `{'element_0': Trajectory(...), 'element_1': Trajectory(...), ...}`.
 
+
 ### Data store
 
 The system uses a [`ImmuDB`](https://immudb.io/) as persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
@@ -178,7 +179,7 @@ The data store contains two types of data, internal and external:
 
 The global nature of blueprint session data is mitigated by the data dependencies defined in the **DAG**, i.e. by defining input and output data keys declaratively.
 
-### Observability
+## Observability
 
 TBD
 
@@ -310,6 +311,84 @@ When a task is skipped:
 1. Its state is set to `SKIPPED`.
 2. Any downstream tasks that depend on it are also recursively skipped (unless they have other parents that are valid, logic TBD). *Currently implemented strict propagation: if any parent is skipped, the child is likely skipped or logic handles it as a non-run path.*
 
+#### Scopes
+
+This feature allows a blueprint author to define a task as a start/open scope task and another (downstream) task as its end/close scope task. After the execution of the end/close task, a condition determines if the execution flow should return to the start/open task (loop) or continue forward. This accomodates for re-trying a task until a condition is met, or iterating over a set of tasks until that condition is met.
+
+- Scope definition
+  - Tasks have an attributes which (optionally) mark them as start of scope and end of scope. Every scope has to have a start and an end.
+
+- Scope policy
+  - A scope is assigned a policy which defines how it is executed.
+  - one of the following: 
+    1. "retry" (needs extra information like max retries)
+    2. "while" (executes as long as condition is true, condition can be based on any session data, including outputs from the scope itself)
+    3. "conditional-skip policy" - using the existing skip condition
+    4. "compensating scope" - like in saga transactions, create "negatives" of tasks to roll them back. - future work..
+
+
+**Skip Policy Example**
+
+- skip doesn't require any special policy, it's simply achieved by putting a skip condition on a scope-start task.
+
+```json
+{
+  "id": "scope_start_task",
+  "type": "some.task",
+  "condition": "fabrication_status = 'not_finished'",  // this is the skip condition, whatever the policy is, this condition evaluating to True means the entrire scope is skipped.
+  "scope_start":  {"name": "scope name"},
+  "inputs": [
+    ...
+  ],
+  "depends_on": ...
+}
+
+```
+
+**Retry Policy Example**
+
+```json
+{
+  "id": "scope_start_task",
+  "type": "some.task",
+  "condition": "fabrication_status = 'not_finished'",  // this is the skip condition, whatever the policy is, this condition evaluating to True means the entrire scope is skipped.
+  "scope_start":  {
+    "name": "scope name",
+    "retry_policy": {
+      "retries": 5,
+      "backoff": {"constant_ms": 1000} // optional backoff timeout in ms between retries. in the future: "constant_sec", "exponential", etc.
+    },
+  },
+  "inputs": [
+    ...
+  ],
+  "depends_on": ...
+}
+
+```
+
+**While Policy Example**
+
+```json
+{
+  "id": "scope_start_task",
+  "type": "some.task",
+  "condition": "fabrication_status = 'not_finished'",  // this is the skip condition, whatever the policy is, this condition evaluating to True means the entrire scope is skipped.
+  "scope_start":  {
+    "name": "scope name",
+    "while_policy": {
+      "max_iterations": 5, // optional
+      "condition": "fabrication_status = 'not_finished'"
+    },
+  },
+  "inputs": [
+    ...
+  ],
+  "depends_on": ...
+}
+
+```
+  
 
 ### COG Archive
 
