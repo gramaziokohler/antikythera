@@ -22,15 +22,15 @@ services:
   # MQTT broker — message bus for orchestrator ↔ agents communication
   # ---------------------------------------------------------------------------
   mqtt-broker:
-    image: emqx/nanomq:latest
+    image: eclipse-mosquitto:latest
     container_name: akt-mqtt-broker
     ports:
       - "1883:1883"   # MQTT (TCP) — used by orchestrator and agents
       - "8083:8083"   # MQTT over WebSocket — used by the browser frontend
-      - "8084:8084"   # MQTT over WebSocket (TLS)
-      - "8080:8080"   # NanoMQ HTTP API / dashboard
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 1883"]
+      test: ["CMD-SHELL", "ps -ef | grep -v grep | grep mosquitto"]
       interval: 10s
       timeout: 5s
       retries: 5
