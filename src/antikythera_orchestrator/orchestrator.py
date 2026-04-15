@@ -759,6 +759,7 @@ class Orchestrator:
                 inputs = self._map_inputs_from_session(blueprint_id, task)
 
                 if task.state == TaskState.SKIP_REQUESTED or self._evaluate_skip_condition(task, inputs, blueprint_id):
+                    LOG.debug(f"Pending task [{task.id}] will be skipped.")
                     self._handle_skipped_task(task, blueprint_id)
                     continue
 
@@ -781,19 +782,20 @@ class Orchestrator:
 
                 # TODO: what do we do if no agent even claims the task.. should there be some timeout? YES!
                 task.state = TaskState.READY
-                self.task_start_publisher.publish(
-                    TaskAssignmentMessage(
-                        id=_create_global_id(blueprint_id, task),
-                        type=task.type,
-                        inputs=inputs,
-                        output_keys=outputs_to_keys(task.outputs),
-                        params=params_to_dict(task.params),
-                        execution_mode=execution_mode,
-                        context=context,
-                    )
+                LOG.debug(f"Publishing TaskAssignmentMessage for task [{task.id}]")
+                message = TaskAssignmentMessage(
+                    id=_create_global_id(blueprint_id, task),
+                    type=task.type,
+                    inputs=inputs,
+                    output_keys=outputs_to_keys(task.outputs),
+                    params=params_to_dict(task.params),
+                    execution_mode=execution_mode,
+                    context=context,
                 )
+                self.task_start_publisher.publish(message)
+                LOG.debug("Published TaskAssignmentMessage...")
             except Exception as e:
-                LOG.exception(f"Failed to start task {task.id}: {e}")
+                LOG.exception(f"Failed to start task [{task.id}]: {e}")
                 task.state = TaskState.FAILED
                 self.state = BlueprintSessionState.FAILED
                 self._completion_event.set()
