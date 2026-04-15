@@ -351,7 +351,10 @@ class Orchestrator:
     @state.setter
     def state(self, value: BlueprintSessionState) -> None:
         self.session.state = value
-        self.session_storage.save_session(self.session)
+        try:
+            self.session_storage.save_session(self.session)
+        except Exception as state_err:
+            LOG.exception(f"failed to save session state to persistent storage. Error: {state_err}")
 
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
