@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Named sessions: new session API endpoint accepts an optional session name.
+- API endpoint to remove/delete sessions.
+- `--sys-only` flag to agent launcher to restrict to system agents only.
+- MQTT traffic dumper script decodes protobuf messages; now continuously flushes entries to file.
+- `compas_timber` added to Docker image.
+
+### Changed
+- Swapped NanoMQ for Eclipse Mosquitto as the MQTT broker.
+- Migrated storage backend from immudb to Redis.
+- Agent launcher now uses logging instead of print statements; launcher errors during task execution are caught and reported as task failures.
+- Fixed static composite task execution.
+- `on_task_claim`: check `task is None` instead of `task_id is None` to correctly handle unknown task IDs.
+- Session state writes to storage are now wrapped in try/except to prevent secondary failures from masking the original error.
+- Added debug logging in strategic places across the orchestrator scheduling path.
+- Moved immudb storage mock to shared conftest; removed obsolete storage module.
+- Built Docker image for antikythera orchestrator/agents.
+- Fixed broken tests after static composite fix.
+
+### Added
 - Strict validation for Blueprint JSON files, requiring explicit list-of-dictionary formats for inputs, outputs, and parameters.
 - Unit tests for failed task resume scenarios, including session revival from storage.
 - Add support for competitive execution of tasks.
