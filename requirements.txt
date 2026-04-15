@@ -6,6 +6,7 @@ compas_pb >= 0.4.4,<1
 coolname
 fastapi >= 0.111,<1
 redis
+immudb-py
 mqtthandler
 python-dotenv
 python-multipart
