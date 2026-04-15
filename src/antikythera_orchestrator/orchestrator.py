@@ -862,7 +862,7 @@ class Orchestrator:
 
         task_id = message.task_id
         task = cast(Task, self.graph.node_attribute(task_id, "task"))
-        if task_id is None:
+        if task is None:
             LOG.warning(f"Received claim for unknown task: {task_id}")
             return
 
