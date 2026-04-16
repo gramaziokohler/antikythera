@@ -12,3 +12,4 @@ pyvis
 pytest-randomly
 fakeredis
 asteval
+immudb-py
