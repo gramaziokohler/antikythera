@@ -1,15 +1,11 @@
-asteval
 compas >= 2,<3
 compas_eve >= 2,<3
-compas_model==0.9.1
+compas_model==0.9.2
 compas_pb >= 0.4.4,<1
+compas_timber==2.1.1-rc1
 coolname
-fastapi >= 0.111,<1
-redis
-immudb-py
-mqtthandler
-python-dotenv
-python-multipart
-uvicorn >= 0.25,<1
-watchdog
 jsonschema
+mqtthandler
+packaging
+python-dotenv
+watchdog

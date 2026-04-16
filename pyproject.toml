@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 # ============================================================================
 
 [project]
-name = "antikythera"
+name = "antikythera-sdk"
 description = "An all knowing, all controlling, robotic and otherwise, process manager."
 keywords = ["magic", "orchestrator", "fabrication", "robotics", "automation", "architecture", "distributed systems", "events"]
 authors = [
@@ -67,12 +67,13 @@ files = ["requirements.txt"]
 
 [tool.hatch.metadata.hooks.requirements_txt.optional-dependencies]
 dev = ["requirements-dev.txt"]
+deployment = ["requirements-orchestrator.txt"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/antikythera", "src/antikythera_agents", "src/antikythera_ghpython", "src/antikythera_orchestrator"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tasks.py", "requirements.txt", "requirements-dev.txt"]
+include = ["src", "tasks.py", "requirements.txt", "requirements-dev.txt", "requirements-orchestrator.txt"]
 artifacts = ["src/antikythera/proto/antikythera_pb2.py", "src/antikythera/proto/antikythera_pb2.pyi"]
 
 [tool.hatch.build.hooks.custom]
