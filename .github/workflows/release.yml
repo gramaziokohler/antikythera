@@ -27,7 +27,7 @@ jobs:
     needs: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: compas-dev/compas-actions.publish@pre_build
+      - uses: compas-dev/compas-actions.publish@3.1.0
         with:
           publish_to_pypi: true
           pypi_token: ${{ secrets.PYPI }}
