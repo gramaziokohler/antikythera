@@ -1,7 +1,7 @@
 # Antikythera
 
 <p align="center">
-  <img src="assets/images/antikythera.svg" width="400px" alt="Antikythera Logo">
+  <img src="_images/antikythera.png" alt="Antikythera">
 </p>
 
 <p class="lead" align="center">
