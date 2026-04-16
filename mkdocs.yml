@@ -132,16 +132,18 @@ nav:
       - Introduction: introduction.md
       - Installation: installation.md
   - API Reference:
-      - antikythera: reference/antikythera.md
-      - antikythera.io: reference/antikythera.io.md
-      - antikythera.models: reference/antikythera.models.md
-      - antikythera.models.blueprints: reference/antikythera.models.blueprints.md
-      - antikythera.models.tasks: reference/antikythera.models.tasks.md
-      - antikythera_agents: reference/antikythera_agents.md
-      - antikythera_agents.base_agent: reference/antikythera_agents.base_agent.md
-      - antikythera_orchestrator: reference/antikythera_orchestrator.md
-      - antikythera_orchestrator.orchestrator: reference/antikythera_orchestrator.orchestrator.md
-      - antikythera_orchestrator.api: reference/antikythera_orchestrator.api.md
+      - antikythera:
+          - antikythera.io: reference/antikythera.io.md
+          - antikythera.models: reference/antikythera.models.md
+          - antikythera.models.blueprints: reference/antikythera.models.blueprints.md
+          - antikythera.models.tasks: reference/antikythera.models.tasks.md
+      - antikythera_agents:
+          - antikythera_agents: reference/antikythera_agents.md
+          - antikythera_agents.base_agent: reference/antikythera_agents.base_agent.md
+      - antikythera_orchestrator:
+          - antikythera_orchestrator: reference/antikythera_orchestrator.md
+          - antikythera_orchestrator.orchestrator: reference/antikythera_orchestrator.orchestrator.md
+          - antikythera_orchestrator.api: reference/antikythera_orchestrator.api.md
       - antikythera_ghpython: reference/antikythera_ghpython.md
   - Other:
       - Changelog: changelog.md
