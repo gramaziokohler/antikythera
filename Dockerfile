@@ -1,40 +1,33 @@
 FROM python:3.13-slim AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+ARG VERSION="0.1.0"
 
-# TODO: Remove once new compas_pb@invoc_arch is released
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+LABEL \
+    org.opencontainers.image.authors="Chen Kasirer <kasirer@arch.ethz.ch>" \
+    org.opencontainers.image.title="antikythera" \
+    org.opencontainers.image.description="Back-end for Antikythera, a distributed task manager for digital fabrication processes" \
+    org.opencontainers.image.url="https://github.com/gramaziokohler/antikythera" \
+    org.opencontainers.image.documentation="https://gramaziokohler.github.io/antikythera/latest/" \
+    org.opencontainers.image.source="https://github.com/gramaziokohler/antikythera" \
+    org.opencontainers.image.licenses="MIT" \
+    org.opencontainers.image.version=${VERSION}
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /build
 
-# Install build-system requirements.
-# The hatch build hook (hatch_build.py) runs `invoke generate-proto-classes`
-# which downloads protoc and generates the *_pb2.py files. These generated
-# files are gitignored and must be produced during the build.
-# --no-build-isolation lets the hook use these already-installed tools.
-RUN uv pip install --system \
-    hatchling \
-    hatch-requirements-txt \
-    invoke \
-    compas_invocations2 \
-    compas_pb>=0.4.10 \
-    grpcio-tools
-
 # Copy only the files required to build the package
-COPY pyproject.toml requirements.txt requirements-dev.txt requirements-orchestrator.txt hatch_build.py tasks.py README.md LICENSE ./
+COPY pyproject.toml requirements.txt requirements-dev.txt requirements-orchestrator.txt README.md LICENSE ./
 COPY src/ src/
 
-# Build the wheel; the hatch hook will download protoc and generate antikythera_pb2.py
-RUN uv build --wheel --no-build-isolation --out-dir /dist
+# Proto files are pre-generated and packaged with the source; just build the wheel.
+RUN uv build --wheel --out-dir /dist
 
 # ============================================================================
 
 FROM python:3.13-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-# TODO: Remove once new compas_pb@invoc_arch is released
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
