@@ -11,3 +11,4 @@ build
 pyvis
 pytest-randomly
 fakeredis
+asteval
