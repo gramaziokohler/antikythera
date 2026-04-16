@@ -220,7 +220,7 @@ class TaskScheduler:
         Returns
         -------
         str
-           Gantt chart representation of the blueprint session.
+            Gantt chart representation of the blueprint session.
         """
         import datetime
 
@@ -1048,6 +1048,6 @@ class Orchestrator:
         Returns
         -------
         str
-           Gantt chart representation of the blueprint session.
+            Gantt chart representation of the blueprint session.
         """
         return self.scheduler.to_mermaid_diagram(title)

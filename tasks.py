@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from compas_invocations2 import build
-from compas_invocations2 import docs
+from compas_invocations2 import mkdocs
 from compas_invocations2 import style
 from compas_invocations2 import tests
 from invoke.collection import Collection
@@ -11,12 +11,10 @@ import compas_pb
 from compas_pb.invocations import generate_proto_classes
 
 ns = Collection(
-    docs.help,
     style.check,
     style.lint,
     style.format,
-    docs.docs,
-    docs.linkcheck,
+    mkdocs.docs,
     tests.test,
     tests.testdocs,
     tests.testcodeblocks,
