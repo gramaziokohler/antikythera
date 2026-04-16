@@ -76,9 +76,6 @@ packages = ["src/antikythera", "src/antikythera_agents", "src/antikythera_ghpyth
 include = ["src", "tasks.py", "requirements.txt", "requirements-dev.txt", "requirements-orchestrator.txt"]
 artifacts = ["src/antikythera/proto/antikythera_pb2.py", "src/antikythera/proto/antikythera_pb2.pyi"]
 
-[tool.hatch.build.hooks.custom]
-path = "hatch_build.py"
-
 # ============================================================================
 # replace pytest.ini
 # ============================================================================
@@ -121,6 +118,12 @@ replace = "{new_version}"
 filename = "CHANGELOG.md"
 search = "Unreleased"
 replace = "[{new_version}] {now:%Y-%m-%d}"
+
+[[tool.bumpversion.files]]
+filename = "Dockerfile"
+search = "{current_version}"
+replace = "{new_version}"
+
 
 # ============================================================================
 # replace setup.cfg
