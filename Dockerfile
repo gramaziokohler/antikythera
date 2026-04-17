@@ -26,4 +26,4 @@ COPY --from=builder /dist /dist
 RUN WHL=$(ls /dist/*.whl) && uv pip install --system "${WHL}[deployment]" && rm -rf /dist
 
 # Default: run the orchestrator. Override `command:` in docker-compose for agents.
-CMD ["antikythera", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["antikythera", "--host", "0.1.0.0", "--port", "8000"]
