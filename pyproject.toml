@@ -119,12 +119,6 @@ filename = "CHANGELOG.md"
 search = "Unreleased"
 replace = "[{new_version}] {now:%Y-%m-%d}"
 
-[[tool.bumpversion.files]]
-filename = "Dockerfile"
-search = "{current_version}"
-replace = "{new_version}"
-
-
 # ============================================================================
 # replace setup.cfg
 # ============================================================================
