@@ -1,0 +1,124 @@
+{
+    "version": "1.0",
+    "id": "scope_while_example",
+    "name": "Scope – While Policy",
+    "description": "Demonstrates the while-scope policy. After scope_close completes the orchestrator evaluates the condition expression against the current session data. If it evaluates to True (and max_iterations has not been reached) all scope tasks are reset to PENDING for another iteration. The condition here reads the 'elements_remaining' variable that an upstream task (or a real agent) must write to session storage.",
+    "tasks": [
+        {
+            "id": "start",
+            "type": "system.start"
+        },
+        {
+            "id": "init",
+            "type": "system.sleep",
+            "description": "Initialisation step before the loop – a real agent would write 'elements_remaining' to session storage here.",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 0
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ]
+        },
+        {
+            "id": "scope_open",
+            "type": "system.sleep",
+            "description": "Opens the while scope. Condition expression and optional max_iterations are declared in while_policy.",
+            "scope_start": {
+                "while_policy": {
+                    "condition": "elements_remaining > 0",
+                    "max_iterations": 10
+                }
+            },
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 0
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "init"
+                }
+            ]
+        },
+        {
+            "id": "pick_element",
+            "type": "system.sleep",
+            "description": "Pick the next element to process. A real agent writes the updated 'elements_remaining' count as an output.",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 0.5
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "scope_open"
+                }
+            ]
+        },
+        {
+            "id": "place_element",
+            "type": "system.sleep",
+            "description": "Place / fabricate the element.",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 0.5
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "pick_element"
+                }
+            ]
+        },
+        {
+            "id": "scope_close",
+            "type": "system.sleep",
+            "description": "Closes the scope. The orchestrator evaluates while_policy.condition against session data.",
+            "scope_end": "scope_open",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 0
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "place_element"
+                }
+            ]
+        },
+        {
+            "id": "finalise",
+            "type": "system.sleep",
+            "description": "Runs once, after all elements have been processed.",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 0
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "scope_close"
+                }
+            ]
+        },
+        {
+            "id": "end",
+            "type": "system.end",
+            "depends_on": [
+                {
+                    "id": "finalise"
+                }
+            ]
+        }
+    ]
+}

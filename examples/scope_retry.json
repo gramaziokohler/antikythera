@@ -1,0 +1,110 @@
+{
+    "version": "1.0",
+    "id": "scope_retry_example",
+    "name": "Scope – Retry Policy",
+    "description": "Demonstrates the retry-scope policy. After scope_close completes the orchestrator checks the retry_policy and, if retries remain, resets all tasks in the scope back to PENDING so they are rescheduled. The optional constant_ms backoff between retries is noted in the policy but not yet enforced by the current implementation (experimental).",
+    "tasks": [
+        {
+            "id": "start",
+            "type": "system.start"
+        },
+        {
+            "id": "scope_open",
+            "type": "system.sleep",
+            "description": "Opens the retry scope. The retry_policy declares up to 3 retries (4 total executions of the scope).",
+            "scope_start": {
+                "retry_policy": {
+                    "retries": 3,
+                    "backoff": {
+                        "constant_ms": 500
+                    }
+                }
+            },
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 2
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ]
+        },
+        {
+            "id": "measure",
+            "type": "system.sleep",
+            "description": "First step inside the scope – measure the part.",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 2
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "scope_open"
+                }
+            ]
+        },
+        {
+            "id": "assemble",
+            "type": "system.sleep",
+            "description": "Second step – assemble the part.",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 2
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "measure"
+                }
+            ]
+        },
+        {
+            "id": "scope_close",
+            "type": "system.sleep",
+            "description": "Closes the scope. The orchestrator evaluates the retry policy here.",
+            "scope_end": "scope_open",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 3
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "assemble"
+                }
+            ]
+        },
+        {
+            "id": "post_assembly",
+            "type": "system.sleep",
+            "description": "Runs after all retries are exhausted.",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 2
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "scope_close"
+                }
+            ]
+        },
+        {
+            "id": "end",
+            "type": "system.end",
+            "depends_on": [
+                {
+                    "id": "post_assembly"
+                }
+            ]
+        }
+    ]
+}
