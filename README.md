@@ -1,6 +1,12 @@
-[![Made with COMPAS](https://compas.dev/badge.svg)](https://compas.dev)
+<div align="center">
 
-# Antikythera
+[![Made with COMPAS](https://compas.dev/badge.svg)](https://compas.dev)
+[![PyPI Package latest release](https://img.shields.io/pypi/v/antikythera-sdk.svg)](https://pypi.python.org/pypi/antikythera-sdk)
+[![License](https://img.shields.io/github/license/gramaziokohler/antikythera.svg)](https://pypi.python.org/pypi/antikythera-sdk)
+
+</div>
+
+<h1><img src="docs/_images/antikythera_logo.png" alt="Antikythera" width="48" style="vertical-align: middle; margin-right: 8px;" /> Antikythera</h1>
 
 > *An all knowing, all controlling, robotic and otherwise, process manager.*
 
