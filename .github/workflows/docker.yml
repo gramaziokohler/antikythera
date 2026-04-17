@@ -1,11 +1,12 @@
 name: Build and Push Docker Image
 
-on: workflow_dispatch:
-  inputs:
-    version:
-      description: 'Version to tag the Docker image with (e.g., 1.0.0). If not provided, it will be derived from the Git tag or default to 0.0.0-dev.'
-      required: false
-      default: ''
+on: 
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to tag the Docker image with (e.g., 1.0.0)'
+        required: false
+        default: '0.0.0-dev'
 
 jobs:
   build-and-push:
