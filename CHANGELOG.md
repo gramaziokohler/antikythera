@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - `Task.input_values` and `Task.param_values` convenience properties have been removed to prevent ambiguity.
 
-## [0.1.0] - Initial Capabilities
+## [0.0.0] - Initial Capabilities
 
 ### Added
 - **Orchestration**:
