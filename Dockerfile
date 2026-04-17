@@ -1,17 +1,5 @@
 FROM python:3.13-slim AS builder
 
-ARG VERSION="0.1.0"
-
-LABEL \
-    org.opencontainers.image.authors="Chen Kasirer <kasirer@arch.ethz.ch>" \
-    org.opencontainers.image.title="antikythera" \
-    org.opencontainers.image.description="Back-end for Antikythera, a distributed task manager for digital fabrication processes" \
-    org.opencontainers.image.url="https://github.com/gramaziokohler/antikythera" \
-    org.opencontainers.image.documentation="https://gramaziokohler.github.io/antikythera/latest/" \
-    org.opencontainers.image.source="https://github.com/gramaziokohler/antikythera" \
-    org.opencontainers.image.licenses="MIT" \
-    org.opencontainers.image.version=${VERSION}
-
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /build
@@ -26,6 +14,9 @@ RUN uv build --wheel --out-dir /dist
 # ============================================================================
 
 FROM python:3.13-slim
+
+LABEL \
+    org.opencontainers.image.authors="Chen Kasirer <kasirer@arch.ethz.ch>" 
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
