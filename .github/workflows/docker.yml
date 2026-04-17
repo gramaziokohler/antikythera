@@ -1,9 +1,11 @@
 name: Build and Push Docker Image
 
-on:
-  push:
-    tags:
-      - "v*"
+on: workflow_dispatch:
+  inputs:
+    version:
+      description: 'Version to tag the Docker image with (e.g., 1.0.0). If not provided, it will be derived from the Git tag or default to 0.0.0-dev.'
+      required: false
+      default: ''
 
 jobs:
   build-and-push:
@@ -20,7 +22,7 @@ jobs:
           images: ${{ vars.DOCKERHUB_USERNAME }}/antikythera
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Log in to Docker Hub
