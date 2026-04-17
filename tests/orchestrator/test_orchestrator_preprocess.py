@@ -52,13 +52,15 @@ def test_preprocess_blueprint_static_composite(mock_immudb, mock_transport_orche
     orchestrator = Orchestrator(session)
 
     # 6. Verify inner blueprint loaded into session
-    assert "inner_bp_id" in session.inner_blueprints
-    assert session.inner_blueprints["inner_bp_id"].id == "inner_bp_id"
+    # _load_inner_blueprint renames the ID to "{blueprint_id}_{task_id}"
+    expanded_id = f"inner_bp_id_{composite_task.id}"
+    assert expanded_id in session.inner_blueprints
+    assert session.inner_blueprints[expanded_id].id == expanded_id
 
     # 7. Verify composite mapping
     fqn = _create_global_id(outer_bp.id, composite_task)
     assert fqn in orchestrator.session.composite_to_inner_blueprint_map
-    assert orchestrator.session.composite_to_inner_blueprint_map[fqn] == "inner_bp_id"
+    assert orchestrator.session.composite_to_inner_blueprint_map[fqn] == expanded_id
 
 
 def test_preprocess_blueprint_nested_static_composite(mock_immudb, mock_transport_orchestrator):
@@ -113,17 +115,20 @@ def test_preprocess_blueprint_nested_static_composite(mock_immudb, mock_transpor
     orchestrator = Orchestrator(session)
 
     # 5. Verify all loaded
-    assert "middle_bp_id" in session.inner_blueprints
-    assert "deep_bp_id" in session.inner_blueprints
+    # _load_inner_blueprint renames IDs to "{blueprint_id}_{task_id}"
+    expanded_middle_id = f"middle_bp_id_{outer_composite.id}"
+    expanded_deep_id = f"deep_bp_id_{middle_composite.id}"
+    assert expanded_middle_id in session.inner_blueprints
+    assert expanded_deep_id in session.inner_blueprints
 
     # 6. Verify mappings
     outer_fqn = _create_global_id("outer_bp_id", outer_composite)
     assert outer_fqn in orchestrator.session.composite_to_inner_blueprint_map
-    assert orchestrator.session.composite_to_inner_blueprint_map[outer_fqn] == "middle_bp_id"
+    assert orchestrator.session.composite_to_inner_blueprint_map[outer_fqn] == expanded_middle_id
 
-    middle_fqn = _create_global_id("middle_bp_id", middle_composite)
+    middle_fqn = _create_global_id(expanded_middle_id, middle_composite)
     assert middle_fqn in orchestrator.session.composite_to_inner_blueprint_map
-    assert orchestrator.session.composite_to_inner_blueprint_map[middle_fqn] == "deep_bp_id"
+    assert orchestrator.session.composite_to_inner_blueprint_map[middle_fqn] == expanded_deep_id
 
 
 def test_preprocess_dynamic_expansion(mock_immudb, mock_transport_orchestrator):
@@ -215,7 +220,8 @@ def test_preprocess_dynamic_expansion(mock_immudb, mock_transport_orchestrator):
     assert "expanded_composite" in current_tasks
 
     # Verify inner blueprint loaded from the expanded task
-    assert "inner_bp_id" in session.inner_blueprints
+    expanded_id = "inner_bp_id_expanded_composite"
+    assert expanded_id in session.inner_blueprints
 
     # Verify mapping for the NEW composite task
     fqn = None
@@ -226,4 +232,4 @@ def test_preprocess_dynamic_expansion(mock_immudb, mock_transport_orchestrator):
 
     assert fqn is not None
     assert fqn in orchestrator.session.composite_to_inner_blueprint_map
-    assert orchestrator.session.composite_to_inner_blueprint_map[fqn] == "inner_bp_id"
+    assert orchestrator.session.composite_to_inner_blueprint_map[fqn] == expanded_id

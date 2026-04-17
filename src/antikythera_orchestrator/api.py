@@ -1,4 +1,5 @@
 import logging
+import re
 import tempfile
 import time
 import uuid
@@ -28,6 +29,7 @@ from fastapi.concurrency import asynccontextmanager
 from pydantic import BaseModel
 from pydantic import Field
 
+from antikythera import config
 from antikythera.io import BlueprintJsonSerializer
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
@@ -113,14 +115,15 @@ class ActiveSession:
 
 class StartBlueprintRequest(BaseModel):
     blueprint_id: str = Field(..., description="ID of the blueprint to start.")
-    broker_host: str = Field("127.0.0.1", description="MQTT broker host.")
-    broker_port: int = Field(1883, ge=1, le=65535, description="MQTT broker port.")
+    broker_host: str = Field(default_factory=lambda: config.MQTT_BROKER_HOST, description="MQTT broker host.")
+    broker_port: int = Field(default_factory=lambda: config.MQTT_BROKER_PORT, description="MQTT broker port.")
     params: Dict[str, str] = Field(default_factory=dict, description="Arbitrary parameters for the session.")
+    session_name: Optional[str] = Field(None, description="Optional human-readable name used as session ID (slugified). Auto-generated UUID if omitted.")
 
 
 class RestartSessionRequest(BaseModel):
-    broker_host: str = Field("127.0.0.1", description="MQTT broker host.")
-    broker_port: int = Field(1883, ge=1, le=65535, description="MQTT broker port.")
+    broker_host: str = Field(default_factory=lambda: config.MQTT_BROKER_HOST, description="MQTT broker host.")
+    broker_port: int = Field(default_factory=lambda: config.MQTT_BROKER_PORT, description="MQTT broker port.")
 
 
 class StartBlueprintResponse(BaseModel):
@@ -168,6 +171,11 @@ class UploadBlueprintResponse(BaseModel):
 
 class DeleteBlueprintResponse(BaseModel):
     blueprint_id: str
+    message: str
+
+
+class DeleteSessionResponse(BaseModel):
+    session_id: str
     message: str
 
 
@@ -285,6 +293,32 @@ def get_timing_metrics():
         return results
 
 
+def _slugify_session_name(name: str) -> str:
+    """Convert a human-readable session name into a URL/ID-safe slug."""
+    slug = re.sub(r"[^\w-]+", "-", name.lower()).strip("-")
+    slug = re.sub(r"-{2,}", "-", slug)
+    if not slug:
+        raise HTTPException(status_code=400, detail="session_name produced an empty slug after sanitisation.")
+    return slug
+
+
+def _resolve_session_id(request: StartBlueprintRequest) -> str:
+    """Return the session ID to use: slugified name or a fresh UUID."""
+    if not request.session_name:
+        return uuid.uuid4().hex
+
+    session_id = _slugify_session_name(request.session_name)
+
+    with _sessions_lock:
+        if session_id in _sessions:
+            raise HTTPException(status_code=409, detail=f"A session with ID '{session_id}' already exists.")
+    with SessionStorage(session_id) as storage:
+        if storage.load_session_with_metadata() is not None:
+            raise HTTPException(status_code=409, detail=f"A session with ID '{session_id}' already exists in storage.")
+
+    return session_id
+
+
 def _start_blueprint_session(request: StartBlueprintRequest) -> str:
     try:
         with BlueprintStorage() as storage:
@@ -294,7 +328,7 @@ def _start_blueprint_session(request: StartBlueprintRequest) -> str:
         LOG.exception(f"Failed to load blueprint with id {request.blueprint_id}")
         raise HTTPException(status_code=400, detail=f"Failed to load blueprint: {exc}")
 
-    session_id = uuid.uuid4().hex
+    session_id = _resolve_session_id(request)
     session = BlueprintSession(bsid=session_id, blueprint=blueprint, params=request.params)
     orchestrator = Orchestrator(session, broker_host=request.broker_host, broker_port=request.broker_port)
 
@@ -455,6 +489,26 @@ def delete_blueprint(blueprint_id: str) -> DeleteBlueprintResponse:
         raise HTTPException(status_code=500, detail=f"Failed to delete blueprint: {exc}")
 
     return DeleteBlueprintResponse(blueprint_id=blueprint_id, message="Blueprint deleted successfully.")
+
+
+@app.delete("/sessions/{session_id}", response_model=DeleteSessionResponse)
+def delete_session(session_id: str) -> DeleteSessionResponse:
+    # Prevent deleting an active session
+    with _sessions_lock:
+        if session_id in _sessions:
+            raise HTTPException(status_code=409, detail=f"Session {session_id} is currently active. Stop it before deleting.")
+
+    try:
+        with SessionStorage(session_id) as storage:
+            storage.remove_session()
+    except RequestedSessionNotFound as exc:
+        LOG.warning(f"Session {session_id} not found: {exc}")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    except Exception as exc:
+        LOG.exception(f"Failed to delete session {session_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete session: {exc}")
+
+    return DeleteSessionResponse(session_id=session_id, message="Session deleted successfully.")
 
 
 @app.get("/sessions/{session_id}/diagram", response_model=BlueprintDiagramResponse)
@@ -621,9 +675,13 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
     with _sessions_lock:
         session = _sessions.get(session_id)
 
+    LOG.debug(f"Starting session {session_id} with broker {request.broker_host}:{request.broker_port}")
     if not session:
-        # Check if it exists in storage and revive it
-        session = _revive_session(session_id, request.broker_host, request.broker_port)
+        # Check if it exists in storage and revive it.
+        # Always use the server-side MQTT config — the client-supplied broker_host
+        # reflects the agent-facing address (e.g. localhost for browser agents) and
+        # is not usable for the orchestrator's own connection inside Docker.
+        session = _revive_session(session_id, config.MQTT_BROKER_HOST, config.MQTT_BROKER_PORT)
 
     try:
         session.orchestrator.start()

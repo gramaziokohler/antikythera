@@ -13,29 +13,21 @@ from antikythera import config
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 
+from .exceptions import RequestedBlueprintNotFound
+from .exceptions import RequestedModelNotFound
+from .exceptions import RequestedSessionNotFound
+from .interfaces import BaseBlueprintStorage
+from .interfaces import BaseModelStorage
+from .interfaces import BaseSessionStorage
+
 LOG = logging.getLogger(__name__)
 
 
-class RequestedBlueprintNotFound(Exception):
-    """Raised when a requested blueprint is not found in storage."""
-
-    pass
-
-
-class RequestedModelNotFound(Exception):
-    """Raised when a requested model is not found in storage."""
-
-    pass
-
-
-class RequestedSessionNotFound(Exception):
-    """Raised when a requested session is not found in storage."""
-
-    pass
-
-
 def _create_immudb_client(db_name: str) -> ImmudbClient:
-    client = ImmudbClient(max_grpc_message_length=config.IMMUDB_MAX_GRPC_MESSAGE_LENGTH)
+    client = ImmudbClient(
+        immudUrl=f"{config.IMMUDB_HOST}:{config.IMMUDB_PORT}",
+        max_grpc_message_length=config.IMMUDB_MAX_GRPC_MESSAGE_LENGTH,
+    )
     try:
         client.login(config.IMMUDB_USER, config.IMMUDB_PASSWORD)
     except KeyError:
@@ -85,7 +77,7 @@ def remove_from_index(client: ImmudbClient, index_key: bytes, item_to_remove: st
     return _update_index(client, index_key, items_to_remove=[item_to_remove])
 
 
-class SessionStorage:
+class SessionStorage(BaseSessionStorage):
     SESSIONS_DB_NAME = "orchestrator_session"
 
     def __init__(self, session_id: str):
@@ -228,8 +220,40 @@ class SessionStorage:
 
         return json_loads(match.value.decode())
 
+    def remove_session(self) -> None:
+        """Remove a session and all its associated data from storage.
 
-class BlueprintStorage:
+        Raises
+        ------
+        RequestedSessionNotFound
+            If the session with the given ID is not found.
+        """
+        LOG.debug(f"Removing session {self.session_id} from immudb")
+
+        session_key = self._session_key().encode()
+        match = self.client.get(session_key)
+        if not match:
+            LOG.error(f"Session {self.session_id} not found in database")
+            raise RequestedSessionNotFound(f"Session {self.session_id} not found")
+
+        # Remove from index
+        index_key = b"session:index"
+        session_index_value = remove_from_index(self.client, index_key, self.session_id)
+        self.client.set(index_key, session_index_value)
+
+        # Find and delete all keys associated with this session
+        prefix = self._session_key().encode()
+        results = self.client.scan(b"", prefix, False, 1000)
+        keys_to_delete = list(results.keys()) if results else []
+        keys_to_delete.append(session_key)
+
+        delete_request = DeleteKeysRequest(keys=keys_to_delete)
+        self.client.delete(delete_request)
+
+        LOG.info(f"Session {self.session_id} deleted")
+
+
+class BlueprintStorage(BaseBlueprintStorage):
     BLUEPRINTS_DB_NAME = "orchestrator_blueprints"
 
     def __init__(self):
@@ -372,7 +396,7 @@ class BlueprintStorage:
         LOG.info(f"Blueprint {blueprint_id} deleted")
 
 
-class ModelStorage:
+class ModelStorage(BaseModelStorage):
     MODELS_DB_NAME = "orchestrator_models"
 
     def __init__(self):

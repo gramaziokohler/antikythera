@@ -220,7 +220,7 @@ class TaskScheduler:
         Returns
         -------
         str
-           Gantt chart representation of the blueprint session.
+            Gantt chart representation of the blueprint session.
         """
         import datetime
 
@@ -351,7 +351,10 @@ class Orchestrator:
     @state.setter
     def state(self, value: BlueprintSessionState) -> None:
         self.session.state = value
-        self.session_storage.save_session(self.session)
+        try:
+            self.session_storage.save_session(self.session)
+        except Exception as state_err:
+            LOG.exception(f"failed to save session state to persistent storage. Error: {state_err}")
 
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
@@ -756,6 +759,7 @@ class Orchestrator:
                 inputs = self._map_inputs_from_session(blueprint_id, task)
 
                 if task.state == TaskState.SKIP_REQUESTED or self._evaluate_skip_condition(task, inputs, blueprint_id):
+                    LOG.debug(f"Pending task [{task.id}] will be skipped.")
                     self._handle_skipped_task(task, blueprint_id)
                     continue
 
@@ -778,19 +782,20 @@ class Orchestrator:
 
                 # TODO: what do we do if no agent even claims the task.. should there be some timeout? YES!
                 task.state = TaskState.READY
-                self.task_start_publisher.publish(
-                    TaskAssignmentMessage(
-                        id=_create_global_id(blueprint_id, task),
-                        type=task.type,
-                        inputs=inputs,
-                        output_keys=outputs_to_keys(task.outputs),
-                        params=params_to_dict(task.params),
-                        execution_mode=execution_mode,
-                        context=context,
-                    )
+                LOG.debug(f"Publishing TaskAssignmentMessage for task [{task.id}]")
+                message = TaskAssignmentMessage(
+                    id=_create_global_id(blueprint_id, task),
+                    type=task.type,
+                    inputs=inputs,
+                    output_keys=outputs_to_keys(task.outputs),
+                    params=params_to_dict(task.params),
+                    execution_mode=execution_mode,
+                    context=context,
                 )
+                self.task_start_publisher.publish(message)
+                LOG.debug("Published TaskAssignmentMessage...")
             except Exception as e:
-                LOG.exception(f"Failed to start task {task.id}: {e}")
+                LOG.exception(f"Failed to start task [{task.id}]: {e}")
                 task.state = TaskState.FAILED
                 self.state = BlueprintSessionState.FAILED
                 self._completion_event.set()
@@ -859,7 +864,7 @@ class Orchestrator:
 
         task_id = message.task_id
         task = cast(Task, self.graph.node_attribute(task_id, "task"))
-        if task_id is None:
+        if task is None:
             LOG.warning(f"Received claim for unknown task: {task_id}")
             return
 
@@ -956,7 +961,12 @@ class Orchestrator:
 
         if "static" in blueprint_param:
             blueprint_id = blueprint_param["static"]
-            return self.blueprint_storage.get_blueprint(blueprint_id)
+            blueprint = self.blueprint_storage.get_blueprint(blueprint_id)
+            # Create a unique instance per composite task to avoid ID collisions when
+            # multiple tasks reference the same inner blueprint archetype.
+            expanded_blueprint_id = f"{blueprint_id}_{task.id}"
+            blueprint.id = expanded_blueprint_id
+            return blueprint
         if "dynamic" in blueprint_param:
             # Get data from the expanded dynamic blueprint task data
             blueprint_id = blueprint_param["dynamic"]["blueprint_id"]
@@ -1038,6 +1048,6 @@ class Orchestrator:
         Returns
         -------
         str
-           Gantt chart representation of the blueprint session.
+            Gantt chart representation of the blueprint session.
         """
         return self.scheduler.to_mermaid_diagram(title)

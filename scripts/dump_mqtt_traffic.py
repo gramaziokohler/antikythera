@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# requires: compas_timber==2.1.1-rc1, compas_pb, paho-mqtt
 """
 MQTT Traffic Recorder
 
@@ -6,17 +6,18 @@ Records MQTT messages from specified topics to a JSON file.
 Press Ctrl+C to stop recording and save the file.
 
 Usage:
+    uv pip install compas_timber==2.1.1-rc1 compas_pb paho-mqtt
     python mqtt_recorder.py [output_file] [topic1] [topic2] ...
 
 Example:
-    python mqtt_recorder.py mqtt_log.json "sensor/#" "device/status"
+    python scripts/dump_mqtt_traffic.py output.log "antikythera/task/claim" "antikythera/task/allocation" "antikythera/task/start" "antikythera/task/completed"
 """
 
-import json
 import sys
 from datetime import datetime
 
 import paho.mqtt.client as mqtt
+from compas_pb import pb_load_bts
 
 
 class MQTTRecorder:
@@ -25,7 +26,7 @@ class MQTTRecorder:
         self.port = port
         self.output_file = output_file
         self.topics = topics or ["#"]  # Subscribe to all topics by default
-        self.messages = []
+        self._file = None
         self.client = mqtt.Client()
         self.running = False
 
@@ -54,24 +55,16 @@ class MQTTRecorder:
         except UnicodeDecodeError:
             payload = msg.payload.hex()
 
-        message_data = {"timestamp": timestamp, "topic": msg.topic, "payload": payload, "qos": msg.qos, "retain": msg.retain}
-
-        self.messages.append(message_data)
-        print(f"[{timestamp}] {msg.topic}: {payload}")
+        payload_bts = bytes.fromhex(payload)
+        entry = f"[{timestamp}] {msg.topic}: {pb_load_bts(payload_bts)}"
+        if self._file:
+            self._file.write(entry + "\n")
+            self._file.flush()
 
     def on_disconnect(self, client, userdata, rc):
         """Callback when disconnected from MQTT broker"""
         if rc != 0:
             print(f"Unexpected disconnect (code: {rc})")
-
-    def save_messages(self):
-        """Save recorded messages to JSON file"""
-        try:
-            with open(self.output_file, "w") as f:
-                json.dump(self.messages, f, indent=2)
-            print(f"\n{len(self.messages)} messages saved to {self.output_file}")
-        except Exception as e:
-            print(f"Error saving messages: {e}")
 
     def start(self):
         """Start recording MQTT traffic"""
@@ -81,6 +74,7 @@ class MQTTRecorder:
         print("Press Ctrl+C to stop recording\n")
 
         try:
+            self._file = open(self.output_file, "a")
             self.client.connect(self.broker, self.port, 60)
             self.running = True
             self.client.loop_forever()
@@ -92,11 +86,13 @@ class MQTTRecorder:
             self.stop()
 
     def stop(self):
-        """Stop recording and save messages"""
+        """Stop recording"""
         if self.running:
             self.running = False
             self.client.disconnect()
-            self.save_messages()
+        if self._file:
+            self._file.close()
+            self._file = None
 
 
 def main():

@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 # ============================================================================
 
 [project]
-name = "antikythera"
+name = "antikythera-sdk"
 description = "An all knowing, all controlling, robotic and otherwise, process manager."
 keywords = ["magic", "orchestrator", "fabrication", "robotics", "automation", "architecture", "distributed systems", "events"]
 authors = [
@@ -67,16 +67,14 @@ files = ["requirements.txt"]
 
 [tool.hatch.metadata.hooks.requirements_txt.optional-dependencies]
 dev = ["requirements-dev.txt"]
+deployment = ["requirements-orchestrator.txt"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/antikythera", "src/antikythera_agents", "src/antikythera_ghpython", "src/antikythera_orchestrator"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tasks.py", "requirements.txt", "requirements-dev.txt"]
+include = ["src", "tasks.py", "requirements.txt", "requirements-dev.txt", "requirements-orchestrator.txt"]
 artifacts = ["src/antikythera/proto/antikythera_pb2.py", "src/antikythera/proto/antikythera_pb2.pyi"]
-
-[tool.hatch.build.hooks.custom]
-path = "hatch_build.py"
 
 # ============================================================================
 # replace pytest.ini
@@ -121,6 +119,12 @@ filename = "CHANGELOG.md"
 search = "Unreleased"
 replace = "[{new_version}] {now:%Y-%m-%d}"
 
+[[tool.bumpversion.files]]
+filename = "Dockerfile"
+search = "{current_version}"
+replace = "{new_version}"
+
+
 # ============================================================================
 # replace setup.cfg
 # ============================================================================
@@ -153,3 +157,4 @@ max-doc-length = 179
 [tool.ruff.format]
 docstring-code-format = true
 docstring-code-line-length = "dynamic"
+

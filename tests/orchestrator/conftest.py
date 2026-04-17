@@ -1,10 +1,95 @@
+from dataclasses import dataclass
+from typing import Dict
+from typing import List
+from typing import Optional
 from unittest.mock import patch
 
+import fakeredis
 import pytest
 from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.memory import InMemoryTransport
 
-from antikythera_orchestrator.storage_mock import MockImmudbClient
+
+@dataclass
+class MockGetResponse:
+    value: bytes
+
+
+class MockImmudbClient:
+    """A mock implementation of ImmudbClient for testing and in-memory usage."""
+
+    # Class-level storage to persist data across multiple client instances
+    # mimicking a persistent database server
+    _databases: Dict[str, Dict[bytes, bytes]] = {}
+
+    def __init__(self):
+        self.current_db: Optional[str] = None
+        self.logged_in = False
+
+    def login(self, username, password):
+        self.logged_in = True
+
+    def databaseList(self) -> List[str]:
+        return list(self._databases.keys())
+
+    def createDatabase(self, db_name: bytes):
+        name = db_name.decode()
+        if name not in self._databases:
+            self._databases[name] = {}
+
+    def useDatabase(self, db_name: bytes):
+        name = db_name.decode()
+        if name not in self._databases:
+            self._databases[name] = {}
+        self.current_db = name
+
+    def shutdown(self):
+        pass
+
+    def get(self, key: bytes) -> Optional[MockGetResponse]:
+        if not self.current_db:
+            raise Exception("No database selected")
+
+        val = self._databases[self.current_db].get(key)
+        if val is not None:
+            return MockGetResponse(val)
+        return None
+
+    def set(self, key: bytes, value: bytes):
+        if not self.current_db:
+            raise Exception("No database selected")
+        self._databases[self.current_db][key] = value
+
+    def setAll(self, kv_pairs: Dict[bytes, bytes]):
+        if not self.current_db:
+            raise Exception("No database selected")
+        self._databases[self.current_db].update(kv_pairs)
+
+    def scan(self, seekKey: bytes, prefix: bytes, desc: bool, limit: int) -> Dict[bytes, bytes]:
+        if not self.current_db:
+            raise Exception("No database selected")
+
+        db = self._databases[self.current_db]
+        result = {}
+
+        for k, v in db.items():
+            if k.startswith(prefix):
+                result[k] = v
+
+        return result
+
+    def delete(self, request):
+        if not self.current_db:
+            raise Exception("No database selected")
+
+        for key in request.keys:
+            if key in self._databases[self.current_db]:
+                del self._databases[self.current_db][key]
+
+    @classmethod
+    def clear_all(cls):
+        """Helper to clear all data (useful for test teardown)."""
+        cls._databases = {}
 
 
 @pytest.fixture(scope="module")
@@ -13,20 +98,24 @@ def in_memory_transport():
 
 
 @pytest.fixture
-def mock_immudb():
-    # Reset the mock storage before each test
-    MockImmudbClient._databases = {}
+def mock_storage():
+    """Patch the Redis storage backend with an in-memory fakeredis server.
 
-    def side_effect(db_name):
-        client = MockImmudbClient()
-        client.login("user", "password")
-        if db_name not in client.databaseList():
-            client.createDatabase(db_name.encode())
-        client.useDatabase(db_name.encode())
-        return client
+    Each test gets a fresh FakeServer so state never leaks between tests.
+    All storage classes (session/blueprint/model) share the same server and
+    use separate logical databases (db=0/1/2), exactly mirroring real Redis.
+    """
+    server = fakeredis.FakeServer()
 
-    with patch("antikythera_orchestrator.storage._create_immudb_client", side_effect=side_effect) as mock:
-        yield mock
+    def fake_create_redis_client(db: int):
+        return fakeredis.FakeRedis(server=server, db=db, decode_responses=False)
+
+    with patch("antikythera_orchestrator.storage.redis_storage._create_redis_client", side_effect=fake_create_redis_client):
+        yield
+
+
+# Backward-compatible alias so existing test signatures don't need changing.
+mock_immudb = mock_storage
 
 
 @pytest.fixture
