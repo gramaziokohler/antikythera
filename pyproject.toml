@@ -71,6 +71,7 @@ deployment = ["requirements-orchestrator.txt"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/antikythera", "src/antikythera_agents", "src/antikythera_ghpython", "src/antikythera_orchestrator"]
+artifacts = ["src/antikythera/proto/antikythera_pb2.py", "src/antikythera/proto/antikythera_pb2.pyi"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src", "tasks.py", "requirements.txt", "requirements-dev.txt", "requirements-orchestrator.txt"]
