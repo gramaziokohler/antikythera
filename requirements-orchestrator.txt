@@ -1,0 +1,6 @@
+asteval
+fastapi >= 0.111,<1
+immudb-py
+python-multipart
+redis
+uvicorn >= 0.25,<1

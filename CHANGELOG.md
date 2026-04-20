@@ -5,7 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## Unreleased
+
+### Added
+
+### Changed
+
+### Removed
+
+
+## [0.1.2] 2026-04-17
+
+### Added
+
+### Changed
+
+### Removed
+
+
+## [0.1.1] 2026-04-17
+
+### Added
+
+### Changed
+
+### Removed
+
+
+## [0.1.0] 2026-04-17
 
 ### Added
 - Named sessions: new session API endpoint accepts an optional session name.
@@ -72,7 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - `Task.input_values` and `Task.param_values` convenience properties have been removed to prevent ambiguity.
 
-## [0.1.0] - Initial Capabilities
+## [0.0.0] - Initial Capabilities
 
 ### Added
 - **Orchestration**:
