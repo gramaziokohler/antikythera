@@ -31,6 +31,22 @@ def docker(ctx):
     ctx.run(f'docker build -t antikythera-frontend:dev "{frontend_repo}"')
 
 
+@task
+def mcp(ctx, transport="stdio", host="0.0.0.0", port=8001, api_base=None):
+    """Run the Antikythera MCP server.
+
+    By default uses stdio transport (for Claude Desktop / VS Code agents).
+    Pass --transport sse for a network-accessible SSE server.
+    """
+    cmd = "python -m antikythera_orchestrator.mcp_server"
+    cmd += f" --transport {transport}"
+    if transport == "sse":
+        cmd += f" --host {host} --port {port}"
+    if api_base:
+        cmd += f" --api-base {api_base}"
+    ctx.run(cmd, pty=True)
+
+
 ns = Collection(
     style.check,
     style.lint,
@@ -45,6 +61,7 @@ ns = Collection(
     generate_proto_classes,
     pre_build,
     docker,
+    mcp,
 )
 ns.configure(
     {
