@@ -779,6 +779,8 @@ class Orchestrator:
 
         scope.reset_tasks(self.graph)
         self.session.scope_iterations.pop(scope_name, None)
+        for nested in self._scopes.nested_within(scope):
+            self.session.scope_iterations.pop(nested.name, None)
 
         if self.session.state in (BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED):
             LOG.info(f"Resetting session state from {self.session.state} to STOPPED after scope reset.")
@@ -814,6 +816,8 @@ class Orchestrator:
 
         self.session.scope_iterations[scope.name] = iterations + 1
         scope.reset_tasks(self.graph)
+        for nested in self._scopes.nested_within(scope):
+            self.session.scope_iterations.pop(nested.name, None)
         LOG.info(f"Scope '{scope.name}': reset {len(scope.task_fqns)} tasks to PENDING for iteration {iterations + 2}.")
         return True
 
