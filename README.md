@@ -2,7 +2,7 @@
 
 [![Made with COMPAS](https://compas.dev/badge.svg)](https://compas.dev)
 [![PyPI Package latest release](https://img.shields.io/pypi/v/antikythera-sdk.svg)](https://pypi.python.org/pypi/antikythera-sdk)
-[![Docker Image Version](https://img.shields.io/docker/v/gramaziokohler/antikythera?style=flat)](https://hub.docker.com/r/gramaziokohler/antikythera)
+[![Docker Image Version](https://img.shields.io/docker/v/gramaziokohler/antikythera?logo=docker)](https://hub.docker.com/r/gramaziokohler/antikythera)
 [![License](https://img.shields.io/github/license/gramaziokohler/antikythera.svg)](https://pypi.python.org/pypi/antikythera-sdk)
 
 </div>
