@@ -146,6 +146,65 @@ If a task ends up in a failed state, the orchestrator should be able to resume e
 
 Initially, only very simple agents will be implemented to execute toy problems.
 
+### Agent/Tool Descriptor
+
+Blueprint authors — whether human or LLM — need to know which task types are available and what inputs, outputs, and parameters each one accepts. Agents do not announce themselves over the protocol by design, so this information must be available as a static artifact, independent of whether any agent is currently running.
+
+#### Recommended approach: MCP tool schema + `describe` CLI command
+
+Rather than inventing a custom format, the recommendation is to reuse the [MCP tool schema](https://spec.modelcontextprotocol.io/specification/server/tools/) (which is identical to OpenAI/Anthropic function-calling schema). LLMs already understand this format natively, and it maps naturally onto the existing `@agent` / `@tool` decorator model.
+
+**Schema annotation on `@tool`**
+
+The `@tool` decorator is extended with optional `description`, `params_schema`, `inputs_schema`, and `outputs_schema` keyword arguments. This keeps schema co-located with the implementation, so it does not drift:
+
+```python
+@tool(
+    name="user_input",
+    description="Prompts the user to provide one or more values.",
+    outputs_schema={"user_value": {"type": "string", "description": "Value entered by the user"}},
+)
+def get_user_input(self, task: Task) -> Dict[str, Any]:
+    ...
+```
+
+Fields are optional — undescribed tools simply emit `"description": ""` in the output.
+
+**`antikythera-agents describe` CLI command**
+
+A new CLI subcommand imports all registered agents and emits a static JSON file — a list of MCP-shaped tool descriptors, one per `{agent_type}.{tool_name}`:
+
+```bash
+antikythera-agents describe > tools.json
+antikythera-agents describe --format json   # same
+```
+
+Example output:
+```json
+[
+  {
+    "name": "user_interaction.user_input",
+    "description": "Prompts the user to provide one or more values.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "user_value": {"type": "string", "description": "Value entered by the user"}
+      }
+    }
+  }
+]
+```
+
+#### Distribution
+
+Since agents are often project-specific, the natural distribution unit is the agent Python package itself. Projects commit a `tools.json` (generated via `antikythera-agents describe`) alongside their agent code. Blueprint authors — human or LLM — consume this file at authoring time. The MCP server can optionally expose it as a resource so that connected LLM clients receive it automatically.
+
+No changes to the Agent Communication Protocol are required.
+
 ### Sequencers
 
 Sequencers are responsible for the dynamic expansion of blueprints. When a `system.composite` task is marked as `dynamic`, the sequencer requested in `sequencer` is invoked to generate a set of tasks that replace the original composite task. This allows for data-driven blueprint generation, where the structure of the process depends on the input data (e.g., the number of elements in a model).
