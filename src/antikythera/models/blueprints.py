@@ -413,7 +413,7 @@ class Blueprint(Data):
         version: Optional[str] = "1.0",
         description: Optional[str] = None,
         tasks: List[Task] = None,
-        **kwargs,
+        **kwargs,  #  TODO: make custom __from_data__ to deserialize scopes instead of just swallowing them here.
     ) -> None:
         super().__init__()
         self.id = id
