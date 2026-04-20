@@ -92,6 +92,7 @@ class RuntimeScope:
         -------
         bool
         """
+        # TODO: make a small class for each policy type and move evaluation logic there so that it's easier to add new policies and keep this method clean
         if self.retry_policy:
             return self._evaluate_retry(iterations_so_far)
         if self.while_policy:
