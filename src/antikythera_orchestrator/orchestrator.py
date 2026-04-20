@@ -37,6 +37,7 @@ from antikythera.models.conversions import outputs_to_keys
 from antikythera.models.conversions import params_to_dict
 
 from .conditionals import safe_eval_condition
+from .scopes import ScopeRegistry
 from .sequencers import SequencerRegistry
 from .storage import BlueprintStorage
 from .storage import ModelStorage
@@ -340,6 +341,7 @@ class Orchestrator:
         LOG.info(f"Initialized session storage for session BSID={self.session.bsid}")
 
         self._build_graph()
+        self._scopes = ScopeRegistry(self.session, self.graph)
         self.scheduler = TaskScheduler(self.session, self.graph)
 
         self.register_instance(self)
@@ -702,6 +704,12 @@ class Orchestrator:
             if inner_blueprint_id:
                 self._set_inner_blueprint_tasks_state(inner_blueprint_id, TaskState.SKIPPED)
 
+        # If this is a scope_start task, cascade SKIPPED to all other tasks in the scope
+        if task.scope_start is not None:
+            scope = self._scopes.get(task.id)
+            if scope:
+                scope.skip_tasks(self.graph, excluded_fqn=fqn_task_id)
+
         completion_msg = TaskCompletionMessage(id=fqn_task_id, state=TaskState.SKIPPED, outputs={}, agent_id="system")
 
         self.on_task_completed(completion_msg)
@@ -737,6 +745,37 @@ class Orchestrator:
                 nested_blueprint_id = self.session.composite_to_inner_blueprint_map.get(fqn_inner_task_id)
                 if nested_blueprint_id:
                     self._set_inner_blueprint_tasks_state(nested_blueprint_id, target_state)
+
+    def _build_scope_registry(self) -> None:
+        """Rebuild the scope registry from the current graph (e.g. after resume)."""
+        self._scopes = ScopeRegistry(self.session, self.graph)
+
+    def _handle_scope_completion(self, processed_task: ProcessedTask) -> bool:
+        """Evaluate the scope loop policy when a scope_end task completes.
+
+        Returns True if scope tasks were reset for another iteration, False otherwise.
+        """
+        task = processed_task.task
+        if not task.scope_end:
+            return False
+
+        scope = self._scopes.get(task.scope_end)
+        if scope is None:
+            LOG.warning(f"Scope '{task.scope_end}' not found in registry; skipping policy evaluation.")
+            return False
+
+        iterations = self.session.scope_iterations.get(scope.name, 0)
+
+        eval_context = self.session_storage.get_all(processed_task.blueprint_id)
+        eval_context.update(self.get_composite_blueprint_context(processed_task.blueprint_id) or {})
+
+        if not scope.should_loop(iterations, eval_context):
+            return False
+
+        self.session.scope_iterations[scope.name] = iterations + 1
+        scope.reset_tasks(self.graph)
+        LOG.info(f"Scope '{scope.name}': reset {len(scope.task_fqns)} tasks to PENDING for iteration {iterations + 2}.")
+        return True
 
     def _schedule_tasks(self) -> None:
         """Schedules tasks for execution."""
@@ -845,6 +884,10 @@ class Orchestrator:
                 self.state = BlueprintSessionState.COMPLETED
                 self._completion_event.set()
                 self.stop()
+
+            # Handle scope loop policy (only for successfully completed tasks)
+            if processed_task.task.state == TaskState.SUCCEEDED and self.state == BlueprintSessionState.RUNNING:
+                self._handle_scope_completion(processed_task)
 
         # Send ACK
         ack = TaskCompletionAckMessage(id=message.id, state=TaskState(message.state), accepted_agent_id=message.agent_id)

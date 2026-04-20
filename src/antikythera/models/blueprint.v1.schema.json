@@ -84,6 +84,13 @@
                 },
                 "state": {
                     "$ref": "#/definitions/TaskState"
+                },
+                "scope_start": {
+                    "$ref": "#/definitions/ScopeStart"
+                },
+                "scope_end": {
+                    "type": "string",
+                    "description": "Task ID of the scope_start task that this task closes. Marks the end of a scope region."
                 }
             }
         },
@@ -180,6 +187,68 @@
                 "UNSPECIFIED"
             ],
             "default": "PENDING"
+        },
+        "ScopeStart": {
+            "type": "object",
+            "description": "Marks a task as the opening of a scope region. The scope is identified by this task's ID. An optional name can be provided for display purposes.",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Optional human-readable label for the scope (not used at runtime)."
+                },
+                "retry_policy": {
+                    "$ref": "#/definitions/RetryPolicy"
+                },
+                "while_policy": {
+                    "$ref": "#/definitions/WhilePolicy"
+                }
+            },
+            "additionalProperties": false
+        },
+        "RetryPolicy": {
+            "type": "object",
+            "description": "Re-runs the scope a fixed number of times after the initial execution.",
+            "required": [
+                "retries"
+            ],
+            "properties": {
+                "retries": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Number of additional times to re-run the scope after the initial execution."
+                },
+                "backoff": {
+                    "type": "object",
+                    "description": "Optional backoff configuration between retries (experimental, not yet enforced).",
+                    "properties": {
+                        "constant_ms": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Constant delay in milliseconds between retries."
+                        }
+                    }
+                }
+            },
+            "additionalProperties": false
+        },
+        "WhilePolicy": {
+            "type": "object",
+            "description": "Re-runs the scope as long as a condition evaluates to True.",
+            "required": [
+                "condition"
+            ],
+            "properties": {
+                "condition": {
+                    "type": "string",
+                    "description": "Expression evaluated against session data after each iteration. Scope loops while this is True."
+                },
+                "max_iterations": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional cap on the total number of iterations (including the initial run)."
+                }
+            },
+            "additionalProperties": false
         }
     }
 }

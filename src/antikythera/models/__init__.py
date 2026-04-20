@@ -10,7 +10,7 @@ from .tasks import (
     TaskCompletionAckMessage,
     ExecutionMode,
 )
-from .blueprints import Blueprint, Task, Dependency, BlueprintSession, BlueprintSessionState, TaskInput, TaskOutput, TaskParam, TaskIO
+from .blueprints import Blueprint, Task, Dependency, BlueprintSession, BlueprintSessionState, TaskInput, TaskOutput, TaskParam, TaskIO, Scope
 
 __all__ = [
     "TaskState",
@@ -20,6 +20,7 @@ __all__ = [
     "Dependency",
     "BlueprintSession",
     "BlueprintSessionState",
+    "Scope",
     "TaskAssignmentMessage",
     "TaskCompletionMessage",
     "TaskError",

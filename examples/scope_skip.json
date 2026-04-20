@@ -1,0 +1,88 @@
+{
+    "version": "1.0",
+    "id": "scope_skip_example",
+    "name": "Scope – Skip Policy",
+    "description": "Demonstrates the skip-scope policy. The scope runs only when the condition on scope_open evaluates to True. If the condition is False the orchestrator marks every task inside the scope as SKIPPED and execution continues past scope_close without interruption.",
+    "tasks": [
+        {
+            "id": "start",
+            "type": "system.start"
+        },
+        {
+            "id": "scope_open",
+            "type": "system.sleep",
+            "description": "Gate task that opens the scope. The condition reads 'needs_processing' from session data. If False, the entire scope (including scope_close) is skipped.",
+            "condition": "needs_processing",
+            "scope_start": {},
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 0
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ]
+        },
+        {
+            "id": "do_work",
+            "type": "system.sleep",
+            "description": "Actual work that should be skipped when needs_processing is False.",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 1
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "scope_open"
+                }
+            ]
+        },
+        {
+            "id": "scope_close",
+            "type": "system.sleep",
+            "description": "Closes the scope. Because scope_end is set, the orchestrator checks the scope policy here.",
+            "scope_end": "scope_open",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 0
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "do_work"
+                }
+            ]
+        },
+        {
+            "id": "post_scope_task",
+            "type": "system.sleep",
+            "description": "Always runs regardless of whether the scope was skipped or executed.",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 0
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "scope_close"
+                }
+            ]
+        },
+        {
+            "id": "end",
+            "type": "system.end",
+            "depends_on": [
+                {
+                    "id": "post_scope_task"
+                }
+            ]
+        }
+    ]
+}
