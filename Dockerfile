@@ -5,10 +5,16 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /build
 
 # Copy only the files required to build the package
-COPY pyproject.toml requirements.txt requirements-dev.txt requirements-orchestrator.txt README.md LICENSE ./
+COPY pyproject.toml requirements.txt requirements-dev.txt requirements-orchestrator.txt README.md LICENSE tasks.py ./
 COPY src/ src/
 
-# Proto files are pre-generated and packaged with the source; just build the wheel.
+# Install tools needed to generate proto classes
+RUN uv pip install --system invoke compas_pb grpcio-tools compas_invocations2
+
+# Generate proto classes from .proto files
+RUN invoke generate-proto-classes
+
+# Build the wheel (artifacts include generated proto files)
 RUN uv build --wheel --out-dir /dist
 
 # ============================================================================
