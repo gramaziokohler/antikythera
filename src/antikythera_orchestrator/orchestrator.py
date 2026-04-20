@@ -750,6 +750,46 @@ class Orchestrator:
         """Rebuild the scope registry from the current graph (e.g. after resume)."""
         self._scopes = ScopeRegistry(self.session, self.graph)
 
+    def reset_scope(self, scope_name: str) -> list[str]:
+        """Reset all tasks in a scope and clear its iteration counter.
+
+        This is the user-initiated reset path (as opposed to the internal
+        loop-policy reset done by ``_handle_scope_completion``).  It restores
+        the full retry/iteration budget so the scope behaves as if it has
+        never run.
+
+        Parameters
+        ----------
+        scope_name : str
+            The scope name (i.e. the task ID of the ``scope_start`` task).
+
+        Returns
+        -------
+        list[str]
+            Sorted list of fully-qualified task IDs that were reset.
+
+        Raises
+        ------
+        KeyError
+            If no scope with the given name exists in the registry.
+        """
+        scope = self._scopes.get(scope_name)
+        if scope is None:
+            raise KeyError(f"Scope not found: {scope_name}")
+
+        scope.reset_tasks(self.graph)
+        self.session.scope_iterations.pop(scope_name, None)
+
+        if self.session.state in (BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED):
+            LOG.info(f"Resetting session state from {self.session.state} to STOPPED after scope reset.")
+            self.session.state = BlueprintSessionState.STOPPED
+
+        self.session_storage.save_session(self.session)
+
+        reset_fqns = sorted(scope.task_fqns)
+        LOG.info(f"Scope '{scope_name}': user-initiated reset of {len(reset_fqns)} tasks.")
+        return reset_fqns
+
     def _handle_scope_completion(self, processed_task: ProcessedTask) -> bool:
         """Evaluate the scope loop policy when a scope_end task completes.
 

@@ -747,6 +747,55 @@ def reset_task(session_id: str, request: ResetTaskRequest) -> SessionActionRespo
     return SessionActionResponse(session_id=session_id, message=f"Reset {len(tasks_to_reset)} task(s) to PENDING.")
 
 
+@app.post("/sessions/{session_id}/scopes/{scope_name}/reset", response_model=SessionActionResponse)
+def reset_scope(session_id: str, scope_name: str) -> SessionActionResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if session:
+        if session.orchestrator.state == BlueprintSessionState.RUNNING:
+            raise HTTPException(status_code=409, detail="Session is running. Pause it before resetting a scope.")
+
+        try:
+            reset_tasks = session.orchestrator.reset_scope(scope_name)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+        return SessionActionResponse(session_id=session_id, message=f"Reset scope '{scope_name}' ({len(reset_tasks)} task(s)) to PENDING.")
+
+    with SessionStorage(session_id) as storage:
+        session_data = storage.load_session()
+        if not session_data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        all_blueprints = [session_data.blueprint] + list(session_data.inner_blueprints.values())
+        scope_blueprint, model_scope = next(
+            ((bp, s) for bp in all_blueprints for s in bp.scopes if s.id == scope_name),
+            (None, None),
+        )
+        if not model_scope or not scope_blueprint:
+            raise HTTPException(status_code=404, detail=f"Scope not found: {scope_name}")
+
+        task_ids_in_scope = set(model_scope.task_ids)
+        scope_tasks = [t for t in scope_blueprint.tasks if t.id in task_ids_in_scope]
+
+        for task in scope_tasks:
+            task.state = TaskState.PENDING
+            for output in task.outputs:
+                output.value = None
+                storage.set(scope_blueprint.id, output.set_to or output.name, None)
+
+        session_data.scope_iterations.pop(scope_name, None)
+
+        if session_data.state in (BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED):
+            LOG.info(f"Resetting session {session_id} state from {session_data.state} to STOPPED after scope reset.")
+            session_data.state = BlueprintSessionState.STOPPED
+
+        storage.save_session(session_data)
+
+    return SessionActionResponse(session_id=session_id, message=f"Reset scope '{scope_name}' ({len(scope_tasks)} task(s)) to PENDING.")
+
+
 @app.post("/sessions/{session_id}/tasks/skip", response_model=SessionActionResponse)
 def skip_task(session_id: str, request: SkipTaskRequest) -> SessionActionResponse:
     with _sessions_lock:

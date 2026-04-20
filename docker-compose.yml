@@ -43,7 +43,7 @@ services:
   orchestrator:
     build:
       context: .
-    image: antikythera:latest
+    image: antikythera:dev
     container_name: akt-orchestrator
     ports:
       - "8000:8000"   # REST API (proxied by the frontend nginx)
@@ -64,7 +64,7 @@ services:
   # System agents — background workers for built-in task types (system.*)
   # ---------------------------------------------------------------------------
   agents:
-    image: antikythera:latest
+    image: antikythera:dev
     container_name: akt-agents-sys
     depends_on:
       mqtt-broker:
@@ -91,6 +91,7 @@ services:
       context: ../antikythera-frontend
       args:
         VITE_MQTT_BROKER_HOST: mqtt-broker
+    image: antikythera-frontend:dev
     container_name: akt-frontend
     ports:
       - "80:80"       # Serves the UI; /api/* is proxied to orchestrator:8000
