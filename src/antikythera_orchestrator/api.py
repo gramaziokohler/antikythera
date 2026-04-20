@@ -493,10 +493,18 @@ def delete_blueprint(blueprint_id: str) -> DeleteBlueprintResponse:
 
 @app.delete("/sessions/{session_id}", response_model=DeleteSessionResponse)
 def delete_session(session_id: str) -> DeleteSessionResponse:
-    # Prevent deleting an active session
     with _sessions_lock:
-        if session_id in _sessions:
-            raise HTTPException(status_code=409, detail=f"Session {session_id} is currently active. Stop it before deleting.")
+        session = _sessions.get(session_id)
+        if session:
+            state = session.orchestrator.state
+            if state == BlueprintSessionState.RUNNING:
+                raise HTTPException(status_code=409, detail=f"Session {session_id} is currently running. Pause it before deleting.")
+            # Stopped/finished in-memory session: stop cleanly and evict
+            try:
+                session.orchestrator.stop()
+            except Exception:
+                pass
+            del _sessions[session_id]
 
     try:
         with SessionStorage(session_id) as storage:
@@ -614,8 +622,8 @@ def _revive_session(session_id: str, broker_host: str, broker_port: int) -> Acti
     session = _get_bp_session_from_storage(session_id)
 
     if session.state == BlueprintSessionState.COMPLETED:
-        # NOTE: not sure if we actually want this restriction
-        raise ValueError("Cannot revive a completed session. Just start a new one.")
+        # Reset to STOPPED so the orchestrator can be started again
+        session.state = BlueprintSessionState.STOPPED
 
     orchestrator = Orchestrator(session, broker_host=broker_host, broker_port=broker_port)
 
@@ -676,6 +684,17 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
         session = _sessions.get(session_id)
 
     LOG.debug(f"Starting session {session_id} with broker {request.broker_host}:{request.broker_port}")
+
+    if session and session.orchestrator.state in (BlueprintSessionState.COMPLETED, BlueprintSessionState.FAILED):
+        # Finished in-memory session: stop and evict so it can be re-revived from storage
+        try:
+            session.orchestrator.stop()
+        except Exception:
+            pass
+        with _sessions_lock:
+            _sessions.pop(session_id, None)
+        session = None
+
     if not session:
         # Check if it exists in storage and revive it.
         # Always use the server-side MQTT config — the client-supplied broker_host
