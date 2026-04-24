@@ -65,7 +65,6 @@ ns = Collection(
 )
 ns.configure(
     {
-        "run": {"pty": True},
         "base_folder": os.path.dirname(__file__),
         "frontend_repo": "../antikythera-frontend",
         "proto_folder": Path("./src") / "antikythera" / "proto",
