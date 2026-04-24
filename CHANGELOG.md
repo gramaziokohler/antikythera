@@ -9,7 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added MCP server.....
+- Added `invoke docker` which builds both images
+
 ### Changed
+
+- Fixed scope reset behavior
+- Allow deleting sessions which are still in-memory
 
 ### Removed
 

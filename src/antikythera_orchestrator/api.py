@@ -493,10 +493,18 @@ def delete_blueprint(blueprint_id: str) -> DeleteBlueprintResponse:
 
 @app.delete("/sessions/{session_id}", response_model=DeleteSessionResponse)
 def delete_session(session_id: str) -> DeleteSessionResponse:
-    # Prevent deleting an active session
     with _sessions_lock:
-        if session_id in _sessions:
-            raise HTTPException(status_code=409, detail=f"Session {session_id} is currently active. Stop it before deleting.")
+        session = _sessions.get(session_id)
+        if session:
+            state = session.orchestrator.state
+            if state == BlueprintSessionState.RUNNING:
+                raise HTTPException(status_code=409, detail=f"Session {session_id} is currently running. Pause it before deleting.")
+            # Stopped/finished in-memory session: stop cleanly and evict
+            try:
+                session.orchestrator.stop()
+            except Exception:
+                pass
+            del _sessions[session_id]
 
     try:
         with SessionStorage(session_id) as storage:
@@ -614,8 +622,8 @@ def _revive_session(session_id: str, broker_host: str, broker_port: int) -> Acti
     session = _get_bp_session_from_storage(session_id)
 
     if session.state == BlueprintSessionState.COMPLETED:
-        # NOTE: not sure if we actually want this restriction
-        raise ValueError("Cannot revive a completed session. Just start a new one.")
+        # Reset to STOPPED so the orchestrator can be started again
+        session.state = BlueprintSessionState.STOPPED
 
     orchestrator = Orchestrator(session, broker_host=broker_host, broker_port=broker_port)
 
@@ -676,6 +684,17 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
         session = _sessions.get(session_id)
 
     LOG.debug(f"Starting session {session_id} with broker {request.broker_host}:{request.broker_port}")
+
+    if session and session.orchestrator.state in (BlueprintSessionState.COMPLETED, BlueprintSessionState.FAILED):
+        # Finished in-memory session: stop and evict so it can be re-revived from storage
+        try:
+            session.orchestrator.stop()
+        except Exception:
+            pass
+        with _sessions_lock:
+            _sessions.pop(session_id, None)
+        session = None
+
     if not session:
         # Check if it exists in storage and revive it.
         # Always use the server-side MQTT config — the client-supplied broker_host
@@ -745,6 +764,57 @@ def reset_task(session_id: str, request: ResetTaskRequest) -> SessionActionRespo
         storage.save_session(session_data)
 
     return SessionActionResponse(session_id=session_id, message=f"Reset {len(tasks_to_reset)} task(s) to PENDING.")
+
+
+@app.post("/sessions/{session_id}/scopes/{scope_name}/reset", response_model=SessionActionResponse)
+def reset_scope(session_id: str, scope_name: str) -> SessionActionResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if session:
+        if session.orchestrator.state == BlueprintSessionState.RUNNING:
+            raise HTTPException(status_code=409, detail="Session is running. Pause it before resetting a scope.")
+
+        try:
+            reset_tasks = session.orchestrator.reset_scope(scope_name)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+        return SessionActionResponse(session_id=session_id, message=f"Reset scope '{scope_name}' ({len(reset_tasks)} task(s)) to PENDING.")
+
+    # TODO: this resets scope tasks in dead sessions, it's shitty because it breaks encapsulation
+    # and also I'm not sure if this really needs to be possible. leaving for now for reasons, but probably needs to be removed.
+    with SessionStorage(session_id) as storage:
+        session_data = storage.load_session()
+        if not session_data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        all_blueprints = [session_data.blueprint] + list(session_data.inner_blueprints.values())
+        scope_blueprint, model_scope = next(
+            ((bp, s) for bp in all_blueprints for s in bp.scopes if s.id == scope_name),
+            (None, None),
+        )
+        if not model_scope or not scope_blueprint:
+            raise HTTPException(status_code=404, detail=f"Scope not found: {scope_name}")
+
+        task_ids_in_scope = set(model_scope.task_ids)
+        scope_tasks = [t for t in scope_blueprint.tasks if t.id in task_ids_in_scope]
+
+        for task in scope_tasks:
+            task.state = TaskState.PENDING
+            for output in task.outputs:
+                output.value = None
+                storage.set(scope_blueprint.id, output.set_to or output.name, None)
+
+        session_data.scope_iterations.pop(scope_name, None)
+
+        if session_data.state in (BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED):
+            LOG.info(f"Resetting session {session_id} state from {session_data.state} to STOPPED after scope reset.")
+            session_data.state = BlueprintSessionState.STOPPED
+
+        storage.save_session(session_data)
+
+    return SessionActionResponse(session_id=session_id, message=f"Reset scope '{scope_name}' ({len(scope_tasks)} task(s)) to PENDING.")
 
 
 @app.post("/sessions/{session_id}/tasks/skip", response_model=SessionActionResponse)

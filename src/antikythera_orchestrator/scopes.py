@@ -166,6 +166,10 @@ class ScopeRegistry:
     def get(self, scope_name: str) -> Optional[RuntimeScope]:
         return self._scopes.get(scope_name)
 
+    def nested_within(self, scope: RuntimeScope) -> list:
+        """Return all scopes whose task set is fully contained within *scope*."""
+        return [s for s in self._scopes.values() if s.name != scope.name and s.task_fqns.issubset(scope.task_fqns)]
+
     # -- Construction --------------------------------------------------------
 
     def _build(self, session: BlueprintSession, graph: Graph) -> None:

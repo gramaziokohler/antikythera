@@ -329,3 +329,79 @@ def test_scope_while_policy_max_iterations(mock_immudb, mock_transport_orchestra
 
     orchestrator.stop()
     launcher.stop()
+
+
+# ---------------------------------------------------------------------------
+# Tests: user-initiated scope reset (Orchestrator.reset_scope)
+# ---------------------------------------------------------------------------
+
+
+def test_reset_scope_raises_for_unknown_scope(mock_immudb, mock_transport_orchestrator, cleanup_manager):
+    """reset_scope raises KeyError when the scope name does not exist."""
+    blueprint = _make_scope_retry_blueprint(retries=1)
+    session = BlueprintSession(bsid="test_reset_scope_unknown", blueprint=blueprint)
+    orchestrator = cleanup_manager.register(Orchestrator(session))
+
+    with pytest.raises(KeyError, match="nonexistent"):
+        orchestrator.reset_scope("nonexistent")
+
+
+def test_reset_scope_restores_scope_to_initial_state(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+    """After reset_scope all scope tasks are PENDING, outputs are cleared, and the
+    iteration counter is removed — tasks outside the scope are unaffected."""
+    retries = 2
+    blueprint = _make_scope_retry_blueprint(retries=retries)
+    session = BlueprintSession(bsid="test_reset_scope_full", blueprint=blueprint)
+    orchestrator = cleanup_manager.register(Orchestrator(session))
+    launcher = cleanup_manager.register(AgentLauncher())
+    launcher.start()
+
+    orchestrator.start()
+    completed = orchestrator.await_completion(timeout=15)
+
+    assert completed, "Session did not complete in time"
+    # Precondition: all retries consumed
+    assert orchestrator.session.scope_iterations.get("scope_open") == retries
+
+    bp_id = blueprint.id
+    scope_fqns = {f"{bp_id}.scope_open", f"{bp_id}.scope_body", f"{bp_id}.scope_close"}
+    outside_fqns = {f"{bp_id}.start", f"{bp_id}.end"}
+
+    # Act
+    reset_fqns = orchestrator.reset_scope("scope_open")
+
+    # Iteration counter cleared
+    assert "scope_open" not in orchestrator.session.scope_iterations
+
+    # All scope tasks reset to PENDING
+    for fqn in scope_fqns:
+        task = orchestrator.graph.node[fqn]["task"]
+        assert task.state == TaskState.PENDING, f"{fqn}: expected PENDING, got {task.state}"
+        for output in task.outputs:
+            assert output.value is None, f"{fqn} output '{output.name}' should be cleared"
+
+    # Tasks outside the scope remain SUCCEEDED
+    for fqn in outside_fqns:
+        task = orchestrator.graph.node[fqn]["task"]
+        assert task.state == TaskState.SUCCEEDED, f"{fqn}: expected SUCCEEDED, got {task.state}"
+
+    # Returned list covers exactly the scope tasks
+    assert set(reset_fqns) == scope_fqns
+
+    orchestrator.stop()
+    launcher.stop()
+
+
+@pytest.mark.parametrize("terminal_state", [BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED])
+def test_reset_scope_transitions_terminal_session_to_stopped(mock_immudb, mock_transport_orchestrator, cleanup_manager, terminal_state):
+    """reset_scope moves a FAILED or COMPLETED session back to STOPPED."""
+    blueprint = _make_scope_retry_blueprint(retries=1)
+    session = BlueprintSession(bsid=f"test_reset_scope_state_{terminal_state}", blueprint=blueprint)
+    orchestrator = cleanup_manager.register(Orchestrator(session))
+
+    # Put the session into the terminal state without running the full blueprint
+    orchestrator.session.state = terminal_state
+
+    orchestrator.reset_scope("scope_open")
+
+    assert orchestrator.session.state == BlueprintSessionState.STOPPED
