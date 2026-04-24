@@ -782,6 +782,8 @@ def reset_scope(session_id: str, scope_name: str) -> SessionActionResponse:
 
         return SessionActionResponse(session_id=session_id, message=f"Reset scope '{scope_name}' ({len(reset_tasks)} task(s)) to PENDING.")
 
+    # TODO: this resets scope tasks in dead sessions, it's shitty because it breaks encapsulation
+    # and also I'm not sure if this really needs to be possible. leaving for now for reasons, but probably needs to be removed.
     with SessionStorage(session_id) as storage:
         session_data = storage.load_session()
         if not session_data:
