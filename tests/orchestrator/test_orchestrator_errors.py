@@ -100,6 +100,53 @@ def test_task_failure_and_retry(mock_immudb, mock_transport_orchestrator, mock_t
     assert result == "success"
 
 
+def test_failed_task_does_not_overwrite_session_data(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+    """Verify that when a task fails, its (empty) outputs do not overwrite existing valid session data."""
+
+    # 1. Define Blueprint
+    task_start = Task(id="start", type="system.start")
+
+    # Task will fail, but declares an output mapped to "result" — same key we pre-populate
+    task = Task(
+        id="failing_task",
+        type="failing_agent.fail_sometimes",
+        inputs=[TaskInput(name="should_fail", value=True)],
+        outputs=[TaskOutput(name="result", set_to="result")],
+    )
+
+    task_end = Task(id="end", type="system.end")
+
+    task_start >> task >> task_end
+
+    blueprint = Blueprint(
+        id="fail_no_overwrite_bp",
+        name="Fail No Overwrite Blueprint",
+        tasks=[task_start, task, task_end],
+    )
+
+    # 2. Session
+    session = BlueprintSession(bsid="test_session_fail_no_overwrite", blueprint=blueprint)
+    orchestrator = cleanup_manager.register(Orchestrator(session))
+
+    # Pre-populate session data with a valid value under the same key the failing task would write
+    orchestrator.session_storage.set(blueprint.id, "result", "pre_existing_valid_data")
+
+    # 3. Launcher
+    launcher = cleanup_manager.register(AgentLauncher())
+    launcher.start()
+
+    # 4. Start and wait for failure
+    orchestrator.start()
+    completed = orchestrator.await_completion(timeout=5)
+    assert completed
+    assert orchestrator.session.state == BlueprintSessionState.FAILED
+    assert orchestrator.graph.node[f"{blueprint.id}.{task.id}"]["task"].state == TaskState.FAILED
+
+    # 5. The pre-existing value must still be intact — the failed task must not have overwritten it
+    result = orchestrator.session_storage.get(blueprint.id, "result")
+    assert result == "pre_existing_valid_data", f"Failed task overwrote valid session data. Got: {result!r}"
+
+
 def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
     from antikythera_orchestrator.storage import SessionStorage
 

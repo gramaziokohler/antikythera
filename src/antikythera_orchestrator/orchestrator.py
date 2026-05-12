@@ -911,18 +911,18 @@ class Orchestrator:
 
             blueprint_id = processed_task.blueprint_id
 
-            # Handle outs from inner blueprints
-            if processed_task.task.is_composite:
-                self._map_outputs_to_outer_session(blueprint_id, processed_task.task)
-            else:
-                self._map_outputs_to_session(blueprint_id, processed_task.task)
-
             if processed_task.task.state == TaskState.FAILED:
                 LOG.error(f"Task {processed_task.task_id} failed, aborting session.")
                 self.state = BlueprintSessionState.FAILED
                 self._completion_event.set()
                 self.stop()
                 return
+
+            # Handle outputs from finished task
+            if processed_task.task.is_composite:
+                self._map_outputs_to_outer_session(blueprint_id, processed_task.task)
+            else:
+                self._map_outputs_to_session(blueprint_id, processed_task.task)
 
             if self._is_last_task_in_blueprint(processed_task):
                 self.state = BlueprintSessionState.COMPLETED
