@@ -912,7 +912,7 @@ class Orchestrator:
             blueprint_id = processed_task.blueprint_id
 
             if processed_task.task.state == TaskState.FAILED:
-                LOG.error(f"Task {processed_task.task_id} failed, aborting session.")
+                LOG.error(f"Task {processed_task.task_id} failed with error: {message.error}, aborting session.")
                 self.state = BlueprintSessionState.FAILED
                 self._completion_event.set()
                 self.stop()

@@ -184,6 +184,8 @@ class AgentLauncher:
             LOG.debug(f"{Colors.WARNING}⚠️  [WARNING] No agent found for task type: {task.type}{Colors.ENDC}")
             return
 
+        outputs = {}
+        error = None
         try:
             outputs = agent.execute_task(task, context=context)
             if not isinstance(outputs, dict):
@@ -198,9 +200,9 @@ class AgentLauncher:
 
             LOG.debug(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Agent Error: {e}{Colors.ENDC}")
             state = TaskState.FAILED
-            outputs = {"exception": str(e)}
+            error = TaskError(code="TOOL_FAILURE", message="The tool failed to complete its task. Bad tool.", details=str(e))
 
-        msg = TaskCompletionMessage(id=task.id, state=state, outputs=outputs, agent_id=self.launcher_id)
+        msg = TaskCompletionMessage(id=task.id, state=state, outputs=outputs, agent_id=self.launcher_id, error=error)
         self.task_completion_publisher.publish(msg)
 
     def on_task_ack(self, message: TaskCompletionAckMessage) -> None:
