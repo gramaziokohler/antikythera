@@ -140,10 +140,21 @@ nav:
       - antikythera_agents:
           - antikythera_agents: reference/antikythera_agents.md
           - antikythera_agents.base_agent: reference/antikythera_agents.base_agent.md
+          - antikythera_agents.decorators: reference/antikythera_agents.decorators.md
+          - antikythera_agents.launcher: reference/antikythera_agents.launcher.md
+          - antikythera_agents.context: reference/antikythera_agents.context.md
+          - antikythera_agents.io_agent: reference/antikythera_agents.io_agent.md
+          - antikythera_agents.user_interaction: reference/antikythera_agents.user_interaction.md
       - antikythera_orchestrator:
           - antikythera_orchestrator: reference/antikythera_orchestrator.md
           - antikythera_orchestrator.orchestrator: reference/antikythera_orchestrator.orchestrator.md
           - antikythera_orchestrator.api: reference/antikythera_orchestrator.api.md
+          - antikythera_orchestrator.scopes: reference/antikythera_orchestrator.scopes.md
+          - antikythera_orchestrator.sequencers: reference/antikythera_orchestrator.sequencers.md
+          - antikythera_orchestrator.conditionals: reference/antikythera_orchestrator.conditionals.md
+          - antikythera_orchestrator.storage: reference/antikythera_orchestrator.storage.md
+          - antikythera_orchestrator.storage.interfaces: reference/antikythera_orchestrator.storage.interfaces.md
+          - antikythera_orchestrator.storage.redis_storage: reference/antikythera_orchestrator.storage.redis_storage.md
       - antikythera_ghpython: reference/antikythera_ghpython.md
   - Other:
       - Changelog: changelog.md
