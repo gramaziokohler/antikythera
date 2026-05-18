@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added MCP Server service to dev docker compose file.
+
 ### Changed
+
+- Outputs from failed tasks are disregarded as to not overwrite valid data in session data.
+- Fixed MCP server fails to start when using sse as transport.
 
 ### Removed
 

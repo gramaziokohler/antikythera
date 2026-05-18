@@ -14,6 +14,7 @@ from antikythera.compat import StrEnum
 
 from .tasks import DependencyType
 from .tasks import SystemTaskType
+from .tasks import TaskError
 from .tasks import TaskState
 
 
@@ -608,6 +609,7 @@ class BlueprintSession(Data):
             "composite_to_inner_blueprint_map": self.composite_to_inner_blueprint_map,
             "blueprint_contexts": self.blueprint_contexts,
             "scope_iterations": self.scope_iterations,
+            "last_task_error": self.last_task_error,
         }
 
     def __init__(
@@ -620,6 +622,7 @@ class BlueprintSession(Data):
         composite_to_inner_blueprint_map: Dict[str, str] = None,
         blueprint_contexts: Dict[str, Any] = None,
         scope_iterations: Dict[str, int] = None,
+        last_task_error: Optional[TaskError] = None,
     ) -> None:
         super().__init__()
         self.bsid = bsid
@@ -630,6 +633,7 @@ class BlueprintSession(Data):
         self.composite_to_inner_blueprint_map = composite_to_inner_blueprint_map or {}
         self.blueprint_contexts = blueprint_contexts or {}
         self.scope_iterations = scope_iterations or {}
+        self.last_task_error = last_task_error
 
     def get_blueprint(self, blueprint_id: str) -> Optional[Blueprint]:
         if self.blueprint.id == blueprint_id:

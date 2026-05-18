@@ -640,7 +640,9 @@ def main() -> None:
         _api_base = args.api_base
 
     if args.transport == "sse":
-        mcp.run(transport="sse", host=args.host, port=args.port)
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        mcp.run(transport="sse")
     else:
         mcp.run(transport="stdio")
 

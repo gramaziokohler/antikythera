@@ -81,6 +81,33 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
+  # MCP server — exposes the orchestrator over the Model Context Protocol
+  # so LLMs (Claude Desktop, VS Code Copilot, etc.) can author blueprints
+  # and control sessions via SSE transport.
+  # Connect clients to: http://localhost:8001/sse
+  # ---------------------------------------------------------------------------
+  mcp-server:
+    image: antikythera:dev
+    container_name: akt-mcp-server
+    ports:
+      - "8001:8001"   # MCP SSE endpoint
+    environment:
+      ANTIKYTHERA_API_BASE: http://orchestrator:8000
+    depends_on:
+      - orchestrator
+    command:
+      - python
+      - -m
+      - antikythera_orchestrator.mcp_server
+      - --transport
+      - sse
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8001"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
   # Frontend — React app served by nginx, proxies /api → orchestrator
   # To build WITHOUT the blueprint editor (author.html), you can override the
   # build arg: `--build-arg VITE_INCLUDE_AUTHOR=false` (requires vite.config.ts

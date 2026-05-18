@@ -45,6 +45,15 @@ def _get_plugin_manager():
 
 
 class AgentLauncher:
+    """Subscribes to the MQTT task bus, claims tasks on behalf of registered agents, and
+    executes them in background threads.
+
+    Each launcher instance is assigned a unique ID.  When the orchestrator broadcasts a
+    new task assignment, all running launchers compete to claim it; the orchestrator picks
+    one winner and broadcasts an allocation message.  Only the winning launcher executes
+    the task; any others that started work cancel themselves on receipt of the ACK.
+    """
+
     def __init__(self, broker_host="127.0.0.1", broker_port=1883, sys_only=False):
         self.launcher_id = coolname.generate_slug(4)
         self.sys_only = sys_only
@@ -65,11 +74,15 @@ class AgentLauncher:
         LOG.info(f"Agent Launcher initialized with ID: {Colors.HEADER}{self.launcher_id}{Colors.ENDC}")
 
     def start(self):
+        """Subscribe to all MQTT topics and begin accepting tasks."""
         self.task_start_subscriber.subscribe()
         self.task_allocation_subscriber.subscribe()
         self.task_ack_subscriber.subscribe()
 
     def stop(self):
+        """Unsubscribe from MQTT topics, wait for in-flight tasks to finish, and dispose
+        of all agent instances.
+        """
         self.task_start_subscriber.unsubscribe()
         self.task_allocation_subscriber.unsubscribe()
         self.task_ack_subscriber.unsubscribe()
@@ -117,6 +130,11 @@ class AgentLauncher:
         LOG.info(f"Total agents initialized: {len(self.agents)}")
 
     def on_task_start(self, message: TaskAssignmentMessage) -> None:
+        """Handle an incoming task assignment broadcast.
+
+        If a registered agent can handle the task type, the launcher publishes a claim
+        request so the orchestrator can allocate it.
+        """
         # Reconstruct valid Task object from assignment message
 
         inputs = dict_to_inputs(message.inputs)
@@ -142,6 +160,11 @@ class AgentLauncher:
                 break
 
     def on_task_allocation(self, message: TaskAllocationMessage) -> None:
+        """Handle a task allocation decision from the orchestrator.
+
+        If this launcher was selected as the winner, the claimed task is dispatched to a
+        background thread for execution.
+        """
         if message.assigned_agent_id == self.launcher_id:
             task_id = message.task_id
             claim_info = self.pending_claims.pop(task_id, None)
@@ -184,6 +207,8 @@ class AgentLauncher:
             LOG.debug(f"{Colors.WARNING}⚠️  [WARNING] No agent found for task type: {task.type}{Colors.ENDC}")
             return
 
+        outputs = {}
+        error = None
         try:
             outputs = agent.execute_task(task, context=context)
             if not isinstance(outputs, dict):
@@ -198,12 +223,17 @@ class AgentLauncher:
 
             LOG.debug(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Agent Error: {e}{Colors.ENDC}")
             state = TaskState.FAILED
-            outputs = {"exception": str(e)}
+            error = TaskError(code="TOOL_FAILURE", message="The tool failed to complete its task. Bad tool.", details=str(e))
 
-        msg = TaskCompletionMessage(id=task.id, state=state, outputs=outputs, agent_id=self.launcher_id)
+        msg = TaskCompletionMessage(id=task.id, state=state, outputs=outputs, agent_id=self.launcher_id, error=error)
         self.task_completion_publisher.publish(msg)
 
     def on_task_ack(self, message: TaskCompletionAckMessage) -> None:
+        """Handle a task completion acknowledgement from the orchestrator.
+
+        If another launcher was accepted for the same task and this launcher is still
+        executing it, the local execution context is cancelled.
+        """
         if message.accepted_agent_id != self.launcher_id:
             with self.thread_lock:
                 context = self.active_contexts.get(message.id)
@@ -214,6 +244,10 @@ class AgentLauncher:
                 context.cancel()
 
     def reload_agents(self):
+        """Dispose of all current agent instances, reload plugins, and re-initialise agents.
+
+        Useful for picking up newly installed agent packages without restarting the process.
+        """
         LOG.debug(f"{Colors.OKBLUE}Reloading agents...{Colors.ENDC}")
 
         # Dispose of existing agents before reloading
