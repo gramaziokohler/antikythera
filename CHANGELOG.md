@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Outputs from failed tasks are disregarded as to not overwrite valid data in session data.
 - Fixed MCP server fails to start when using sse as transport.
+- Bumped min `compas_eve` version to `2.3.0`.
+- Added passthrough transport and tls to agent launcher.
+
 
 ### Removed
 
