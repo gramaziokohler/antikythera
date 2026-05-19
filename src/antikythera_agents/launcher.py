@@ -30,8 +30,8 @@ THREAD_JOIN_TIMEOUT = 10
 LOG = logging.getLogger(__name__)
 
 
-def _get_eve_transport(host, port, codec):
-    return MqttTransport(host=host, port=port, codec=codec)
+def _get_eve_transport(host, port, codec, transport, tls):
+    return MqttTransport(host=host, port=port, codec=codec, tls=tls, transport=transport)
 
 
 def _ensure_agents():
@@ -54,7 +54,7 @@ class AgentLauncher:
     the task; any others that started work cancel themselves on receipt of the ACK.
     """
 
-    def __init__(self, broker_host="127.0.0.1", broker_port=1883, sys_only=False):
+    def __init__(self, broker_host="127.0.0.1", broker_port=1883, sys_only=False, mqtt_transport="tcp", tls=False):
         self.launcher_id = coolname.generate_slug(4)
         self.sys_only = sys_only
         self.pending_claims = {}  # task_id -> Task
@@ -62,7 +62,7 @@ class AgentLauncher:
 
         self.threads = []
         self.thread_lock = threading.Lock()
-        self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
+        self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec(), transport=mqtt_transport, tls=tls)
         self.task_start_subscriber = Subscriber(Topic("antikythera/task/start"), self.on_task_start, transport=self.transport)
         self.task_completion_publisher = Publisher(Topic("antikythera/task/completed"), transport=self.transport)
         self.task_claim_publisher = Publisher(Topic("antikythera/task/claim"), transport=self.transport)
