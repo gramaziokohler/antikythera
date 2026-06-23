@@ -359,11 +359,7 @@ class Orchestrator:
             self.session_storage.save_session(self.session)
         except Exception as state_err:
             LOG.exception(f"failed to save session state to persistent storage. Error: {state_err}")
-        for cb in self._session_state_callbacks:
-            try:
-                cb(str(value))
-            except Exception:
-                LOG.exception("Error in session state SSE callback")
+        self._notify_session_state_change(value)
 
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
@@ -380,6 +376,36 @@ class Orchestrator:
                 if inst.state == BlueprintSessionState.RUNNING:
                     LOG.warning("Another orchestrator instance is already running in the background.")
                     # inst.stop()
+
+    def register_session_state_callback(self, callback) -> None:
+        """Registers a callback function to be called when the session state changes.
+
+        The callback should accept a single argument: the new session state as a string.
+        """
+        self._session_state_callbacks.append(callback)
+
+    def register_task_state_callback(self, callback) -> None:
+        """Registers a callback function to be called when a task state changes.
+
+        The callback should accept three arguments: the blueprint ID, the task ID, and the new task state as a string.
+        """
+        self._task_state_callbacks.append(callback)
+
+    def _notify_session_state_change(self, state: BlueprintSessionState) -> None:
+        # notifies callbacks of session state changes, e.g. for SSE updates
+        for cb in self._session_state_callbacks:
+            try:
+                cb(str(state))
+            except Exception:
+                LOG.exception("Error in session state SSE callback")
+
+    def _notify_task_state_change(self, blueprint_id: str, task_id: str, state: str) -> None:
+        # notifies callbacks of task state changes, e.g. for SSE updates
+        for cb in self._task_state_callbacks:
+            try:
+                cb(blueprint_id, task_id, state)
+            except Exception:
+                LOG.exception("Error in task state SSE callback")
 
     def _reset_failed_tasks(self) -> None:
         """Resets tasks that are in a non-resumable state to PENDING.
@@ -883,6 +909,7 @@ class Orchestrator:
                     context=context,
                 )
                 self.task_start_publisher.publish(message)
+                self._notify_task_state_change(blueprint_id, task.id, str(task.state))
                 LOG.debug("Published TaskAssignmentMessage...")
             except Exception as e:
                 LOG.exception(f"Failed to start task [{task.id}]: {e}")
@@ -918,11 +945,7 @@ class Orchestrator:
 
             blueprint_id = processed_task.blueprint_id
 
-            for cb in self._task_state_callbacks:
-                try:
-                    cb(blueprint_id, processed_task.task.id, str(processed_task.task.state))
-                except Exception:
-                    LOG.exception("Error in task state SSE callback")
+            self._notify_task_state_change(blueprint_id, processed_task.task.id, str(processed_task.task.state))
 
             if processed_task.task.state == TaskState.FAILED:
                 LOG.error(f"Task {processed_task.task_id} failed with error: {message.error}, aborting session.")
@@ -983,11 +1006,7 @@ class Orchestrator:
             self.task_allocation_publisher.publish(allocation)
             LOG.info(f"Allocated task {task_id} to agent {message.agent_id} (Mode: {execution_mode})")
 
-            for cb in self._task_state_callbacks:
-                try:
-                    cb(blueprint_id, task.id, str(task.state))
-                except Exception:
-                    LOG.exception("Error in task state SSE callback")
+            self._notify_task_state_change(blueprint_id, task.id, str(task.state))
 
             # Persist the updated session state
             self.session_storage.save_session(self.session)

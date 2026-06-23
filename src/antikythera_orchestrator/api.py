@@ -234,8 +234,8 @@ def _register_sse_callbacks(session_id: str, orchestrator: "Orchestrator") -> No
     def on_session_state(state: str) -> None:
         _push_sse_event(session_id, "session_state_changed", {"state": state})
 
-    orchestrator._task_state_callbacks.append(on_task_state)
-    orchestrator._session_state_callbacks.append(on_session_state)
+    orchestrator.register_task_state_callback(on_task_state)
+    orchestrator.register_session_state_callback(on_session_state)
 
 
 @asynccontextmanager
