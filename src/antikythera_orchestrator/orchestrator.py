@@ -309,6 +309,8 @@ class Orchestrator:
         self.session: BlueprintSession = session
         self.graph: Graph = None
         self._completion_event = threading.Event()
+        self._task_state_callbacks: list = []
+        self._session_state_callbacks: list = []
 
         self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start = Topic("antikythera/task/start")
@@ -357,6 +359,11 @@ class Orchestrator:
             self.session_storage.save_session(self.session)
         except Exception as state_err:
             LOG.exception(f"failed to save session state to persistent storage. Error: {state_err}")
+        for cb in self._session_state_callbacks:
+            try:
+                cb(str(value))
+            except Exception:
+                LOG.exception("Error in session state SSE callback")
 
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
@@ -911,6 +918,12 @@ class Orchestrator:
 
             blueprint_id = processed_task.blueprint_id
 
+            for cb in self._task_state_callbacks:
+                try:
+                    cb(blueprint_id, processed_task.task.id, str(processed_task.task.state))
+                except Exception:
+                    LOG.exception("Error in task state SSE callback")
+
             if processed_task.task.state == TaskState.FAILED:
                 LOG.error(f"Task {processed_task.task_id} failed with error: {message.error}, aborting session.")
                 self.state = BlueprintSessionState.FAILED
@@ -964,10 +977,17 @@ class Orchestrator:
 
         if can_allocate:
             task.state = TaskState.RUNNING
+            blueprint_id = self.graph.node_attribute(task_id, "blueprint_id")
 
             allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
             self.task_allocation_publisher.publish(allocation)
             LOG.info(f"Allocated task {task_id} to agent {message.agent_id} (Mode: {execution_mode})")
+
+            for cb in self._task_state_callbacks:
+                try:
+                    cb(blueprint_id, task.id, str(task.state))
+                except Exception:
+                    LOG.exception("Error in task state SSE callback")
 
             # Persist the updated session state
             self.session_storage.save_session(self.session)

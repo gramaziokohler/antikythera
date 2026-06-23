@@ -1,3 +1,5 @@
+import asyncio
+import json
 import logging
 import re
 import tempfile
@@ -14,6 +16,7 @@ from threading import Lock
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import cast
 
 from compas.data import json_dumps
@@ -26,6 +29,7 @@ from fastapi import Request
 from fastapi import Response
 from fastapi import UploadFile
 from fastapi.concurrency import asynccontextmanager
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -209,6 +213,30 @@ class SkipTaskRequest(BaseModel):
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
 
+_sse_listeners_lock = Lock()
+_sse_listeners: Dict[str, List[Tuple[asyncio.AbstractEventLoop, "asyncio.Queue[Optional[dict]]"]]] = {}
+
+
+def _push_sse_event(session_id: str, event_type: str, data: dict) -> None:
+    """Thread-safe push of an SSE event to all connected listeners for a session."""
+    with _sse_listeners_lock:
+        listeners = _sse_listeners.get(session_id, [])
+        for loop, queue in listeners:
+            loop.call_soon_threadsafe(queue.put_nowait, {"event": event_type, "data": data})
+
+
+def _register_sse_callbacks(session_id: str, orchestrator: "Orchestrator") -> None:
+    """Register SSE push callbacks on an orchestrator so state changes stream to clients."""
+
+    def on_task_state(blueprint_id: str, task_id: str, state: str) -> None:
+        _push_sse_event(session_id, "task_state_changed", {"blueprint_id": blueprint_id, "task_id": task_id, "state": state})
+
+    def on_session_state(state: str) -> None:
+        _push_sse_event(session_id, "session_state_changed", {"state": state})
+
+    orchestrator._task_state_callbacks.append(on_task_state)
+    orchestrator._session_state_callbacks.append(on_session_state)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -334,6 +362,8 @@ def _start_blueprint_session(request: StartBlueprintRequest) -> str:
 
     # Not starting the orchestrator yet, just creating the session and storing it
     # The user can now inspect the session in "preview" mode and hit resume when it's time to run.
+
+    _register_sse_callbacks(session_id, orchestrator)
 
     started_at = datetime.now(timezone.utc)
     with _sessions_lock:
@@ -626,6 +656,8 @@ def _revive_session(session_id: str, broker_host: str, broker_port: int) -> Acti
         session.state = BlueprintSessionState.STOPPED
 
     orchestrator = Orchestrator(session, broker_host=broker_host, broker_port=broker_port)
+
+    _register_sse_callbacks(session_id, orchestrator)
 
     active_session = ActiveSession(
         orchestrator=orchestrator,
@@ -1210,3 +1242,40 @@ def get_running_composites(session_id: str):
         running_blueprints = active_session.orchestrator.get_currently_running_composite_blueprints()
 
         return Response(content=json_dumps(list(running_blueprints)), media_type="application/json")
+
+
+@app.get("/sessions/{session_id}/stream")
+async def stream_session_events(session_id: str):
+    """Server-Sent Events stream for real-time session and task state updates.
+
+    Emits ``task_state_changed`` and ``session_state_changed`` events as the
+    session progresses.  The connection stays open until the session reaches a
+    terminal state or the client disconnects.
+    """
+    with SessionStorage(session_id) as storage:
+        if storage.load_session() is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    loop = asyncio.get_event_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    with _sse_listeners_lock:
+        _sse_listeners.setdefault(session_id, []).append((loop, queue))
+
+    async def generate():
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
+        finally:
+            with _sse_listeners_lock:
+                if session_id in _sse_listeners:
+                    _sse_listeners[session_id] = [(l, q) for l, q in _sse_listeners[session_id] if q is not queue]
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
