@@ -13,3 +13,4 @@ fakeredis
 asteval
 immudb-py
 fastapi
+python-multipart
