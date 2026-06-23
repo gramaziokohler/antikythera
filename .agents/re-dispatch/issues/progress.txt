@@ -1,2 +1,19 @@
-01-core-implementation.md  [ ] not started
-02-tests.md                [ ] not started (blocked by 01)
+01-core-implementation.md  [x] done (2026-06-23)
+02-tests.md                [ ] not started
+
+## 2026-06-23 — Issue 01 complete
+
+Implemented orchestrator-side re-dispatch polling loop.
+
+Changes:
+- src/antikythera/config.py: added REDISPATCH_BASE_DELAY (2s), REDISPATCH_MAX_DELAY (90s), MAX_REDISPATCHES (5), all env-var overridable
+- src/antikythera_orchestrator/orchestrator.py:
+  - Added _dispatch_times, _dispatch_counts, _dispatch_lock instance dicts
+  - Added _poll_thread / _poll_stop for background polling
+  - _poll_for_stale_tasks(): wakes every 1s, re-publishes unclaimed READY tasks with exponential backoff (min(base*2^attempts, max)); fails with NO_AGENT_CLAIMED after MAX_REDISPATCHES
+  - _schedule_tasks(): stores TaskAssignmentMessage on graph node, populates dispatch dicts, removed TODO comment
+  - on_task_claim(): clears dispatch dicts on READY→RUNNING allocation
+  - _reset_failed_tasks() / reset_task_state(): clears dispatch dicts for reset tasks
+  - start() / stop(): starts / joins poll thread
+
+All 102 existing tests pass.
