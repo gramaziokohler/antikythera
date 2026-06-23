@@ -139,6 +139,9 @@ class RedispatchPoller:
         self._thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
+        # Stop any previously running thread before starting a new one so that
+        # pause() + start() sequences never leave orphaned poller threads.
+        self.stop()
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -223,6 +226,14 @@ class TaskScheduler:
         # create and return a ProcessedTask object
         if message.state not in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.SKIPPED):
             raise ValueError(f"Invalid task state: {message.state}")
+
+        # Ignore duplicate completions: never downgrade a terminal task state.
+        # A task that already reached a terminal state is authoritative; the
+        # duplicate message (e.g. from the re-dispatch poller failing a task
+        # that actually succeeded) must be silently discarded.
+        if task.state in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.SKIPPED):
+            LOG.debug(f"Ignoring duplicate completion for task {task.id} already in terminal state {task.state}.")
+            return ProcessedTask(task_id=task.id, blueprint_id=blueprint_id, task=task)
 
         task.state = TaskState(message.state)
         if message.outputs:
@@ -606,6 +617,18 @@ class Orchestrator:
         """Starts the orchestrator."""
         if self.state == BlueprintSessionState.RUNNING:
             LOG.warning("Session is already running.")
+            return
+
+        # If the session already completed successfully (e.g. completion fired
+        # while the orchestrator was paused and all tasks finished before the
+        # second start() call), signal any waiters and return immediately.
+        # To re-run a completed session, first call reset_task_state() or
+        # reset_scope(), which move state back to STOPPED.
+        # NOTE: FAILED sessions are intentionally NOT guarded here — the normal
+        # retry flow calls start() directly after a failure to reset and re-run.
+        if self.state == BlueprintSessionState.COMPLETED:
+            LOG.info(f"Session {self.session.bsid} is already COMPLETED; signalling completion.")
+            self._completion_event.set()
             return
 
         self._reset_failed_tasks()
@@ -1004,6 +1027,14 @@ class Orchestrator:
     def on_task_completed(self, message: TaskCompletionMessage) -> None:
         """Handles incoming task completion messages."""
         LOG.info(f"task completion received : {message}")
+
+        # Drop messages that arrive after the session has already terminated.
+        # This can happen when the re-dispatch poller injects a failure for a
+        # task that actually succeeded, or when stale agent messages arrive
+        # after stop().
+        if self.state in (BlueprintSessionState.COMPLETED, BlueprintSessionState.FAILED):
+            LOG.debug(f"Dropping completion for {message.id}: session already in terminal state {self.state}.")
+            return
 
         self.scheduler.queue_message(message)
         processed_tasks = self.scheduler.process_queue()
