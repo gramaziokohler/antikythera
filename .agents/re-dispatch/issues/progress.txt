@@ -1,5 +1,5 @@
 01-core-implementation.md  [x] done (2026-06-23)
-02-tests.md                [ ] not started
+02-tests.md                [x] done (2026-06-24)
 
 ## 2026-06-23 — Issue 01 complete
 
@@ -17,3 +17,24 @@ Changes:
   - start() / stop(): starts / joins poll thread
 
 All 102 existing tests pass.
+
+## 2026-06-24 — Issue 02 complete
+
+Added test coverage for the re-dispatch polling loop.
+
+Changes:
+- tests/orchestrator/test_orchestrator_redispatch.py (new file, 3 tests):
+  - test_dispatch_tracking_lifecycle: integration test verifying RedispatchPoller._entries
+    is populated on dispatch and cleared by on_task_claim, _reset_failed_tasks, and reset_task_state
+  - test_redispatch_publishes_with_backoff: unit test of RedispatchPoller directly; uses
+    backdated _entries to assert publish fires after backoff window and not before
+  - test_no_agent_claimed_session_fails: integration test with REDISPATCH_BASE_DELAY=0 and
+    MAX_REDISPATCHES=2 (patched via config); asserts session.state == FAILED and task
+    state == FAILED after the poller exhausts all re-dispatch attempts
+
+- src/antikythera_orchestrator/orchestrator.py:
+  - Fixed RedispatchPoller.stop() to skip Thread.join() when called from within the polling
+    thread itself (the _fail callback triggered orchestrator.stop() which called stop()
+    re-entrantly, raising RuntimeError: cannot join current thread)
+
+All 61 tests pass (58 pre-existing + 3 new).
