@@ -8,6 +8,7 @@ from queue import Empty
 from queue import LifoQueue
 from queue import Queue
 from typing import Any
+from typing import Callable
 from typing import Dict
 from typing import Optional
 from typing import Tuple
@@ -106,6 +107,88 @@ class ProcessedTask:
     task_id: str
     blueprint_id: str
     task: Task
+
+
+class RedispatchPoller:
+    """Tracks dispatched tasks and re-publishes them if unclaimed within the backoff window.
+
+    Call ``track`` when a task is dispatched, ``untrack`` when it is claimed or reset,
+    ``start`` / ``stop`` to control the background polling thread.
+    """
+
+    def __init__(
+        self,
+        publish_fn: Callable[[TaskAssignmentMessage], None],
+        fail_fn: Callable[[TaskCompletionMessage], None],
+        get_task_state_fn: Callable[[str], Optional[TaskState]],
+        base_delay: int,
+        max_delay: int,
+        max_redispatches: int,
+    ) -> None:
+        self._publish = publish_fn
+        self._fail = fail_fn
+        self._get_task_state = get_task_state_fn
+        self._base_delay = base_delay
+        self._max_delay = max_delay
+        self._max_redispatches = max_redispatches
+
+        # fqn_task_id -> (last_dispatch_time, attempt_count, message)
+        self._entries: Dict[str, Tuple[float, int, TaskAssignmentMessage]] = {}
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> None:
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+            self._thread = None
+
+    def track(self, fqn_task_id: str, message: TaskAssignmentMessage) -> None:
+        with self._lock:
+            self._entries[fqn_task_id] = (time.monotonic(), 0, message)
+
+    def untrack(self, fqn_task_id: str) -> None:
+        with self._lock:
+            self._entries.pop(fqn_task_id, None)
+
+    def _run(self) -> None:
+        while not self._stop.wait(1.0):
+            with self._lock:
+                snapshot = list(self._entries.items())
+
+            for fqn_task_id, (last_dispatch, attempts, message) in snapshot:
+                task_state = self._get_task_state(fqn_task_id)
+                if task_state != TaskState.READY:
+                    self.untrack(fqn_task_id)
+                    continue
+
+                delay = min(self._base_delay * (2 ** attempts), self._max_delay)
+                if time.monotonic() - last_dispatch < delay:
+                    continue
+
+                if attempts >= self._max_redispatches:
+                    LOG.warning(f"Task {fqn_task_id} was not claimed after {attempts} re-dispatches; failing with NO_AGENT_CLAIMED.")
+                    self.untrack(fqn_task_id)
+                    self._fail(
+                        TaskCompletionMessage(
+                            id=fqn_task_id,
+                            state=TaskState.FAILED,
+                            outputs={},
+                            agent_id="orchestrator",
+                            error=TaskError(code="NO_AGENT_CLAIMED", message=f"No agent claimed task {fqn_task_id} after {attempts} re-dispatches"),
+                        )
+                    )
+                else:
+                    LOG.info(f"Re-dispatching task {fqn_task_id} (attempt {attempts + 1})")
+                    self._publish(message)
+                    with self._lock:
+                        self._entries[fqn_task_id] = (time.monotonic(), attempts + 1, message)
 
 
 class TaskScheduler:
@@ -347,11 +430,14 @@ class Orchestrator:
         self._scopes = ScopeRegistry(self.session, self.graph)
         self.scheduler = TaskScheduler(self.session, self.graph)
 
-        self._dispatch_times: Dict[str, float] = {}
-        self._dispatch_counts: Dict[str, int] = {}
-        self._dispatch_lock = threading.Lock()
-        self._poll_stop = threading.Event()
-        self._poll_thread: Optional[threading.Thread] = None
+        self._redispatch_poller = RedispatchPoller(
+            publish_fn=self.task_start_publisher.publish,
+            fail_fn=self.on_task_completed,
+            get_task_state_fn=lambda fqn: self.graph.node[fqn]["task"].state if self.graph and fqn in self.graph.node else None,
+            base_delay=config.REDISPATCH_BASE_DELAY,
+            max_delay=config.REDISPATCH_MAX_DELAY,
+            max_redispatches=config.MAX_REDISPATCHES,
+        )
 
         self.register_instance(self)
 
@@ -396,9 +482,7 @@ class Orchestrator:
             if task.state in (TaskState.FAILED, TaskState.RUNNING, TaskState.READY):
                 LOG.debug(f"Resetting task {task.id} (state={task.state}) to PENDING")
                 task.state = TaskState.PENDING
-                with self._dispatch_lock:
-                    self._dispatch_times.pop(node, None)
-                    self._dispatch_counts.pop(node, None)
+                self._redispatch_poller.untrack(node)
 
     def reset_task_state(self, blueprint_id: str, task_id: str, include_downstream: bool = True, clear_outputs: bool = True) -> list[str]:
         """Reset a task (and optionally its downstream dependents) to PENDING.
@@ -442,9 +526,7 @@ class Orchestrator:
             task: Task = self.graph.node[fqn_id]["task"]
             task_blueprint_id = self.graph.node[fqn_id]["blueprint_id"]
             task.state = TaskState.PENDING
-            with self._dispatch_lock:
-                self._dispatch_times.pop(fqn_id, None)
-                self._dispatch_counts.pop(fqn_id, None)
+            self._redispatch_poller.untrack(fqn_id)
             if clear_outputs:
                 for output in task.outputs:
                     output.value = None
@@ -533,9 +615,7 @@ class Orchestrator:
         self.task_completion_subscriber.subscribe()
         self.task_claim_subscriber.subscribe()
 
-        self._poll_stop.clear()
-        self._poll_thread = threading.Thread(target=self._poll_for_stale_tasks, daemon=True)
-        self._poll_thread.start()
+        self._redispatch_poller.start()
 
         self.state = BlueprintSessionState.RUNNING
         LOG.info(f"Orchestrator session with id {self.session.bsid} started!")
@@ -546,10 +626,7 @@ class Orchestrator:
         self.task_completion_subscriber.unsubscribe()
         self.task_claim_subscriber.unsubscribe()
 
-        self._poll_stop.set()
-        if self._poll_thread is not None:
-            self._poll_thread.join(timeout=2.0)
-            self._poll_thread = None
+        self._redispatch_poller.stop()
 
         # there might be pending completion messages in the scheduler queue of composite tasks
         # set them back to PENDING when orchestrator is stopped so that they can be processed when the session resumes.
@@ -845,65 +922,6 @@ class Orchestrator:
         LOG.info(f"Scope '{scope.name}': reset {len(scope.task_fqns)} tasks to PENDING for iteration {iterations + 2}.")
         return True
 
-    def _poll_for_stale_tasks(self) -> None:
-        """Background thread: re-dispatches READY tasks that have not been claimed."""
-        _TICK = 1.0
-        while not self._poll_stop.wait(_TICK):
-            if self.state != BlueprintSessionState.RUNNING:
-                continue
-
-            with self._dispatch_lock:
-                snapshot = list(self._dispatch_times.items())
-
-            for fqn_task_id, last_dispatch in snapshot:
-                with self._dispatch_lock:
-                    attempts = self._dispatch_counts.get(fqn_task_id)
-                    if attempts is None:
-                        continue
-
-                delay = min(config.REDISPATCH_BASE_DELAY * (2 ** attempts), config.REDISPATCH_MAX_DELAY)
-                elapsed = time.monotonic() - last_dispatch
-                if elapsed < delay:
-                    continue
-
-                if fqn_task_id not in self.graph.node:
-                    with self._dispatch_lock:
-                        self._dispatch_times.pop(fqn_task_id, None)
-                        self._dispatch_counts.pop(fqn_task_id, None)
-                    continue
-
-                task: Task = self.graph.node[fqn_task_id]["task"]
-                if task.state != TaskState.READY:
-                    with self._dispatch_lock:
-                        self._dispatch_times.pop(fqn_task_id, None)
-                        self._dispatch_counts.pop(fqn_task_id, None)
-                    continue
-
-                if attempts >= config.MAX_REDISPATCHES:
-                    LOG.warning(f"Task {fqn_task_id} was not claimed after {attempts} re-dispatches; failing with NO_AGENT_CLAIMED.")
-                    with self._dispatch_lock:
-                        self._dispatch_times.pop(fqn_task_id, None)
-                        self._dispatch_counts.pop(fqn_task_id, None)
-                    failure_msg = TaskCompletionMessage(
-                        id=fqn_task_id,
-                        state=TaskState.FAILED,
-                        outputs={},
-                        agent_id="orchestrator",
-                        error=TaskError(code="NO_AGENT_CLAIMED", message=f"No agent claimed task {fqn_task_id} after {attempts} re-dispatches"),
-                    )
-                    self.on_task_completed(failure_msg)
-                else:
-                    blueprint_id = self.graph.node[fqn_task_id]["blueprint_id"]
-                    LOG.info(f"Re-dispatching task {fqn_task_id} (attempt {attempts + 1})")
-                    message = self.graph.node[fqn_task_id].get("last_assignment_message")
-                    if message is None:
-                        LOG.warning(f"No cached assignment message for {fqn_task_id}; skipping re-dispatch.")
-                        continue
-                    self.task_start_publisher.publish(message)
-                    with self._dispatch_lock:
-                        self._dispatch_times[fqn_task_id] = time.monotonic()
-                        self._dispatch_counts[fqn_task_id] = attempts + 1
-
     def _schedule_tasks(self) -> None:
         """Schedules tasks for execution."""
         pending_tasks = self.scheduler.get_pending_tasks()
@@ -958,11 +976,8 @@ class Orchestrator:
                     execution_mode=execution_mode,
                     context=context,
                 )
-                self.graph.node[fqn_task_id]["last_assignment_message"] = message
                 self.task_start_publisher.publish(message)
-                with self._dispatch_lock:
-                    self._dispatch_times[fqn_task_id] = time.monotonic()
-                    self._dispatch_counts[fqn_task_id] = 0
+                self._redispatch_poller.track(fqn_task_id, message)
                 LOG.debug("Published TaskAssignmentMessage...")
             except Exception as e:
                 LOG.exception(f"Failed to start task [{task.id}]: {e}")
@@ -1051,9 +1066,7 @@ class Orchestrator:
 
         if can_allocate:
             task.state = TaskState.RUNNING
-            with self._dispatch_lock:
-                self._dispatch_times.pop(task_id, None)
-                self._dispatch_counts.pop(task_id, None)
+            self._redispatch_poller.untrack(task_id)
 
             allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
             self.task_allocation_publisher.publish(allocation)
