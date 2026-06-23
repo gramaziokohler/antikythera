@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Orchestrator-side re-dispatch polling loop: unclaimed `READY` tasks are re-published with exponential backoff (`min(base * 2^attempts, max)`) and failed with error code `NO_AGENT_CLAIMED` after `MAX_REDISPATCHES` attempts. Configurable via `REDISPATCH_BASE_DELAY` (default 2 s), `REDISPATCH_MAX_DELAY` (default 90 s), and `MAX_REDISPATCHES` (default 5) env vars.
+
 ### Changed
+
+- Fixed `RedispatchPoller.stop()` to skip `Thread.join()` when invoked from within the polling thread (prevented `RuntimeError: cannot join current thread` when a task failure triggered `orchestrator.stop()` from the poller callback).
 
 ### Removed
 
