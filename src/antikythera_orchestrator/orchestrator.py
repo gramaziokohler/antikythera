@@ -145,9 +145,9 @@ class RedispatchPoller:
 
     def stop(self) -> None:
         self._stop.set()
-        if self._thread is not None:
+        if self._thread is not None and self._thread is not threading.current_thread():
             self._thread.join(timeout=2.0)
-            self._thread = None
+        self._thread = None
 
     def track(self, fqn_task_id: str, message: TaskAssignmentMessage) -> None:
         with self._lock:

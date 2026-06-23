@@ -15,9 +15,9 @@ Configure `MAX_REDISPATCHES=2` for the test. Dispatch a task, exhaust all re-dis
 
 ## Acceptance criteria
 
-- [ ] Test 1 passes: tracking dicts are populated on dispatch and cleared on claim and reset
-- [ ] Test 2 passes: re-publishes occur at the correct exponential intervals and not before
-- [ ] Test 3 passes: session fails with `NO_AGENT_CLAIMED` after MAX_REDISPATCHES
+- [x] Test 1 passes: tracking dicts are populated on dispatch and cleared on claim and reset
+- [x] Test 2 passes: re-publishes occur at the correct exponential intervals and not before
+- [x] Test 3 passes: session fails with `NO_AGENT_CLAIMED` after MAX_REDISPATCHES
 
 ## Blocked by
 
