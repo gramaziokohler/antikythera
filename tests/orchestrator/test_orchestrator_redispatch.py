@@ -1,22 +1,20 @@
 """Tests for the orchestrator re-dispatch polling loop (issue 02)."""
-import time
-from unittest.mock import MagicMock, patch
 
-import pytest
+import time
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 from antikythera import config as antikythera_config
-from antikythera.models import (
-    Blueprint,
-    BlueprintSession,
-    BlueprintSessionState,
-    Task,
-    TaskAssignmentMessage,
-    TaskClaimRequest,
-    TaskState,
-)
+from antikythera.models import Blueprint
+from antikythera.models import BlueprintSession
+from antikythera.models import BlueprintSessionState
+from antikythera.models import Task
+from antikythera.models import TaskAssignmentMessage
+from antikythera.models import TaskClaimRequest
+from antikythera.models import TaskState
 from antikythera_agents.launcher import AgentLauncher
-from antikythera_orchestrator.orchestrator import Orchestrator, RedispatchPoller
-
+from antikythera_orchestrator.orchestrator import Orchestrator
+from antikythera_orchestrator.orchestrator import RedispatchPoller
 
 # ---------------------------------------------------------------------------
 # Test 1 — dispatch tracking lifecycle
