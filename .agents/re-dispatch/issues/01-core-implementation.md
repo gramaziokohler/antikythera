@@ -22,13 +22,13 @@ The polling thread wakes on a short tick (e.g. 1 s) rather than sleeping for the
 
 ## Acceptance criteria
 
-- [ ] `config.py` exposes `REDISPATCH_BASE_DELAY`, `REDISPATCH_MAX_DELAY`, `MAX_REDISPATCHES` with env overrides
-- [ ] `Orchestrator._dispatch_times` and `Orchestrator._dispatch_counts` are populated when a task goes READY, and cleared on claim and on any reset path
-- [ ] Re-dispatch polling thread is started by `start()` and stops within ~1 s of `stop()` being called
-- [ ] A READY task that goes unclaimed is re-published after `min(base * 2^attempts, max)` seconds, with attempt count incrementing each time
-- [ ] After `MAX_REDISPATCHES` re-dispatches without a claim, the task fails with error code `NO_AGENT_CLAIMED` via `on_task_completed()`
-- [ ] Session transitions to FAILED state when a task hits `NO_AGENT_CLAIMED`
-- [ ] The TODO comment in `_schedule_tasks` (line 866 of orchestrator.py) is removed
+- [x] `config.py` exposes `REDISPATCH_BASE_DELAY`, `REDISPATCH_MAX_DELAY`, `MAX_REDISPATCHES` with env overrides
+- [x] `Orchestrator._dispatch_times` and `Orchestrator._dispatch_counts` are populated when a task goes READY, and cleared on claim and on any reset path
+- [x] Re-dispatch polling thread is started by `start()` and stops within ~1 s of `stop()` being called
+- [x] A READY task that goes unclaimed is re-published after `min(base * 2^attempts, max)` seconds, with attempt count incrementing each time
+- [x] After `MAX_REDISPATCHES` re-dispatches without a claim, the task fails with error code `NO_AGENT_CLAIMED` via `on_task_completed()`
+- [x] Session transitions to FAILED state when a task hits `NO_AGENT_CLAIMED`
+- [x] The TODO comment in `_schedule_tasks` (line 866 of orchestrator.py) is removed
 
 ## Blocked by
 
