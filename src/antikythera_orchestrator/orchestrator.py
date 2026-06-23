@@ -22,6 +22,7 @@ from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
 from compas_model.models import Model
 
+from antikythera import config
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
@@ -38,7 +39,6 @@ from antikythera.models import TaskError
 from antikythera.models import TaskState
 from antikythera.models.conversions import outputs_to_keys
 from antikythera.models.conversions import params_to_dict
-from antikythera import config
 
 from .conditionals import safe_eval_condition
 from .scopes import ScopeRegistry
@@ -168,7 +168,7 @@ class RedispatchPoller:
                     self.untrack(fqn_task_id)
                     continue
 
-                delay = min(self._base_delay * (2 ** attempts), self._max_delay)
+                delay = min(self._base_delay * (2**attempts), self._max_delay)
                 if time.monotonic() - last_dispatch < delay:
                     continue
 
