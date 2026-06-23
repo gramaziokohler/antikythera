@@ -1,4 +1,5 @@
 """Tests for GET /sessions/{id}/stream SSE endpoint."""
+
 import asyncio
 import threading
 from unittest.mock import patch
@@ -7,7 +8,11 @@ import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 
-from antikythera_orchestrator.api import app, _push_sse_event, _register_sse_callbacks, _sse_listeners, _sse_listeners_lock
+from antikythera_orchestrator.api import _push_sse_event
+from antikythera_orchestrator.api import _register_sse_callbacks
+from antikythera_orchestrator.api import _sse_listeners
+from antikythera_orchestrator.api import _sse_listeners_lock
+from antikythera_orchestrator.api import app
 
 
 @pytest.fixture()
@@ -29,7 +34,9 @@ def client(mock_redis):
 
 def _seed_session(session_id: str):
     """Store a minimal session so the SSE endpoint can find it."""
-    from antikythera.models import Blueprint, BlueprintSession, Task
+    from antikythera.models import Blueprint
+    from antikythera.models import BlueprintSession
+    from antikythera.models import Task
     from antikythera_orchestrator.storage import SessionStorage
 
     start = Task(id="start", type="system.start")

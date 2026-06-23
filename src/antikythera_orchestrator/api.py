@@ -1277,7 +1277,7 @@ async def stream_session_events(session_id: str):
         finally:
             with _sse_listeners_lock:
                 if session_id in _sse_listeners:
-                    _sse_listeners[session_id] = [(l, q) for l, q in _sse_listeners[session_id] if q is not queue]
+                    _sse_listeners[session_id] = [(li, q) for li, q in _sse_listeners[session_id] if q is not queue]
 
     return StreamingResponse(
         generate(),

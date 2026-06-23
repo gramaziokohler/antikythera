@@ -1,10 +1,12 @@
 """Unit tests for the datastore update callback mechanism on Orchestrator."""
-from unittest.mock import MagicMock
 
-import pytest
-
-from antikythera.models import Blueprint, BlueprintSession, Task, TaskOutput, TaskParam
-from antikythera_orchestrator.orchestrator import Orchestrator, _create_global_id
+from antikythera.models import Blueprint
+from antikythera.models import BlueprintSession
+from antikythera.models import Task
+from antikythera.models import TaskOutput
+from antikythera.models import TaskParam
+from antikythera_orchestrator.orchestrator import Orchestrator
+from antikythera_orchestrator.orchestrator import _create_global_id
 
 
 def _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, session_id: str) -> Orchestrator:
@@ -17,9 +19,7 @@ def _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, session_
 
 
 class TestPersistOutputs:
-    def test_persist_outputs_writes_to_storage_and_fires_callback(
-        self, mock_immudb, mock_transport_orchestrator
-    ):
+    def test_persist_outputs_writes_to_storage_and_fires_callback(self, mock_immudb, mock_transport_orchestrator):
         orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-persist-1")
 
         received = []
@@ -31,9 +31,7 @@ class TestPersistOutputs:
         assert orch.session_storage.get("my-blueprint", "result") == 42
         assert orch.session_storage.get("my-blueprint", "name") == "hello"
 
-    def test_persist_outputs_does_not_fire_callback_for_empty_dict(
-        self, mock_immudb, mock_transport_orchestrator
-    ):
+    def test_persist_outputs_does_not_fire_callback_for_empty_dict(self, mock_immudb, mock_transport_orchestrator):
         orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-persist-2")
 
         received = []
@@ -43,9 +41,7 @@ class TestPersistOutputs:
 
         assert received == []
 
-    def test_persist_outputs_callback_exception_does_not_propagate(
-        self, mock_immudb, mock_transport_orchestrator
-    ):
+    def test_persist_outputs_callback_exception_does_not_propagate(self, mock_immudb, mock_transport_orchestrator):
         orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-persist-3")
 
         def bad_cb(bp, data):
@@ -58,9 +54,7 @@ class TestPersistOutputs:
 
 
 class TestMapOutputsToSession:
-    def test_fires_callback_with_correct_blueprint_id_and_outputs(
-        self, mock_immudb, mock_transport_orchestrator
-    ):
+    def test_fires_callback_with_correct_blueprint_id_and_outputs(self, mock_immudb, mock_transport_orchestrator):
         orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-map-1")
 
         received = []
@@ -74,9 +68,7 @@ class TestMapOutputsToSession:
         assert bp_id == "test-bp"
         assert data == {"score": 99}
 
-    def test_no_callback_when_task_has_no_outputs(
-        self, mock_immudb, mock_transport_orchestrator
-    ):
+    def test_no_callback_when_task_has_no_outputs(self, mock_immudb, mock_transport_orchestrator):
         orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-map-2")
 
         received = []
@@ -87,9 +79,7 @@ class TestMapOutputsToSession:
 
         assert received == []
 
-    def test_respects_set_to_mapping(
-        self, mock_immudb, mock_transport_orchestrator
-    ):
+    def test_respects_set_to_mapping(self, mock_immudb, mock_transport_orchestrator):
         orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-map-3")
 
         received = []
@@ -106,9 +96,7 @@ class TestMapOutputsToSession:
 
 
 class TestMapOutputsToOuterSession:
-    def test_non_dynamic_composite_fires_callback_with_outer_blueprint_id(
-        self, mock_immudb, mock_transport_orchestrator
-    ):
+    def test_non_dynamic_composite_fires_callback_with_outer_blueprint_id(self, mock_immudb, mock_transport_orchestrator):
         orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-outer-1")
 
         received = []
@@ -138,9 +126,7 @@ class TestMapOutputsToOuterSession:
         assert bp_id == outer_bp_id
         assert data == {"result": "computed_value"}
 
-    def test_dynamic_composite_fires_callback_with_accumulated_dict(
-        self, mock_immudb, mock_transport_orchestrator
-    ):
+    def test_dynamic_composite_fires_callback_with_accumulated_dict(self, mock_immudb, mock_transport_orchestrator):
         orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-outer-2")
 
         received = []
