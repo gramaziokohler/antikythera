@@ -234,8 +234,13 @@ def _register_sse_callbacks(session_id: str, orchestrator: "Orchestrator") -> No
     def on_session_state(state: str) -> None:
         _push_sse_event(session_id, "session_state_changed", {"state": state})
 
+    def on_datastore_updated(blueprint_id: str, data: dict) -> None:
+        enriched = _enrich_data_with_types(data)
+        _push_sse_event(session_id, "datastore_updated", {"blueprint_id": blueprint_id, "data": enriched})
+
     orchestrator.register_task_state_callback(on_task_state)
     orchestrator.register_session_state_callback(on_session_state)
+    orchestrator.register_datastore_update_callback(on_datastore_updated)
 
 
 @asynccontextmanager

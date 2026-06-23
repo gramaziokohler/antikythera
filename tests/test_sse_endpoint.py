@@ -7,7 +7,7 @@ import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 
-from antikythera_orchestrator.api import app, _push_sse_event, _sse_listeners, _sse_listeners_lock
+from antikythera_orchestrator.api import app, _push_sse_event, _register_sse_callbacks, _sse_listeners, _sse_listeners_lock
 
 
 @pytest.fixture()
@@ -153,3 +153,83 @@ class TestSseEventFormat:
 
         assert any("event: session_state_changed" in line for line in collected)
         assert any('"state": "completed"' in line for line in collected)
+
+
+class TestDatastoreUpdatedEvent:
+    def test_push_delivers_datastore_updated_event(self):
+        session_id = "sse-ds-deliver"
+        loop = asyncio.new_event_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+
+        with _sse_listeners_lock:
+            _sse_listeners.setdefault(session_id, []).append((loop, queue))
+
+        try:
+            _push_sse_event(
+                session_id,
+                "datastore_updated",
+                {"blueprint_id": "bp1", "data": {"score": {"value": 99, "type": "number"}}},
+            )
+
+            event = loop.run_until_complete(queue.get())
+            assert event["event"] == "datastore_updated"
+            assert event["data"]["blueprint_id"] == "bp1"
+            assert event["data"]["data"]["score"]["value"] == 99
+        finally:
+            with _sse_listeners_lock:
+                _sse_listeners.pop(session_id, None)
+            loop.close()
+
+    def test_register_sse_callbacks_wires_datastore_update_callback(self, mock_redis):
+        """Registering callbacks should include the datastore_updated callback."""
+        from unittest.mock import MagicMock
+
+        mock_orchestrator = MagicMock()
+        session_id = "sse-ds-wire-test"
+
+        _register_sse_callbacks(session_id, mock_orchestrator)
+
+        # All three register_* methods must have been called
+        mock_orchestrator.register_task_state_callback.assert_called_once()
+        mock_orchestrator.register_session_state_callback.assert_called_once()
+        mock_orchestrator.register_datastore_update_callback.assert_called_once()
+
+    def test_datastore_update_callback_enriches_and_pushes(self, mock_redis):
+        """The registered datastore callback enriches values and pushes SSE events."""
+        import asyncio as _asyncio
+
+        session_id = "sse-ds-enrich-test"
+        loop = _asyncio.new_event_loop()
+        queue: _asyncio.Queue = _asyncio.Queue()
+
+        with _sse_listeners_lock:
+            _sse_listeners.setdefault(session_id, []).append((loop, queue))
+
+        try:
+            from unittest.mock import MagicMock
+
+            mock_orchestrator = MagicMock()
+            captured_cb = {}
+
+            def capture_datastore_cb(cb):
+                captured_cb["fn"] = cb
+
+            mock_orchestrator.register_datastore_update_callback.side_effect = capture_datastore_cb
+
+            _register_sse_callbacks(session_id, mock_orchestrator)
+
+            # Invoke the registered callback with raw (un-enriched) data
+            captured_cb["fn"]("my-bp", {"score": 42, "label": "good"})
+
+            event = loop.run_until_complete(queue.get())
+            assert event["event"] == "datastore_updated"
+            assert event["data"]["blueprint_id"] == "my-bp"
+            # Values must be enriched with type info
+            assert event["data"]["data"]["score"]["value"] == 42
+            assert event["data"]["data"]["score"]["type"] == "number"
+            assert event["data"]["data"]["label"]["value"] == "good"
+            assert event["data"]["data"]["label"]["type"] == "text"
+        finally:
+            with _sse_listeners_lock:
+                _sse_listeners.pop(session_id, None)
+            loop.close()
