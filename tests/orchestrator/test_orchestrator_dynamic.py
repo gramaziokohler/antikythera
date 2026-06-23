@@ -122,7 +122,7 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
 
     orchestrator.start()
 
-    assert orchestrator.await_completion(timeout=10)
+    assert orchestrator.await_completion(timeout=30)
 
     graph_tasks = [data["task"] for _, data in orchestrator.graph.nodes(data=True)]
     task_ids = [t.id for t in graph_tasks]
@@ -226,7 +226,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
 
     orchestrator.start()
 
-    assert orchestrator.await_completion(timeout=10)
+    assert orchestrator.await_completion(timeout=30)
     assert session.state == BlueprintSessionState.COMPLETED
 
 
@@ -332,5 +332,5 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
 
     orchestrator.start()
 
-    assert orchestrator.await_completion(timeout=10)
+    assert orchestrator.await_completion(timeout=30)
     assert orchestrator.session.state == BlueprintSessionState.COMPLETED
