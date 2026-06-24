@@ -1285,9 +1285,13 @@ async def stream_session_events(session_id: str):
                 yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
         finally:
             with _sse_listeners_lock:
-                if session_id in _sse_listeners:
-                    _sse_listeners[session_id] = [(li, q) for li, q in _sse_listeners[session_id] if q is not queue]
-
+                listeners = _sse_listeners.get(session_id)
+                if listeners is not None:
+                    remaining = [(li, q) for li, q in listeners if q is not queue]
+                    if remaining:
+                        _sse_listeners[session_id] = remaining
+                    else:
+                        _sse_listeners.pop(session_id, None)
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
