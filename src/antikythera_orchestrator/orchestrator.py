@@ -920,7 +920,9 @@ class Orchestrator:
                     inputs=inputs,
                     output_keys=outputs_to_keys(task.outputs),
                     params=params_to_dict(task.params),
+                    context=context,
                     execution_mode=execution_mode,
+                )
                 self.task_start_publisher.publish(message)
                 self._notify_task_state_change(blueprint_id, task.id, task.state.value)
                 LOG.debug("Published TaskAssignmentMessage...")
