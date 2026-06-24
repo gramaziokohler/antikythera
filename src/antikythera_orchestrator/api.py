@@ -1292,6 +1292,7 @@ async def stream_session_events(session_id: str):
                         _sse_listeners[session_id] = remaining
                     else:
                         _sse_listeners.pop(session_id, None)
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",

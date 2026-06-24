@@ -131,6 +131,7 @@ class TestSseEventDelivery:
                 _sse_listeners.pop(session_id, None)
             asyncio.set_event_loop(None)
             loop.close()
+
     def test_push_with_no_listeners_is_silent(self):
         _push_sse_event("no-such-session", "session_state_changed", {"state": "running"})
 
@@ -226,6 +227,7 @@ class TestDatastoreUpdatedEvent:
                 _sse_listeners.pop(session_id, None)
             asyncio.set_event_loop(None)
             loop.close()
+
     def test_register_sse_callbacks_wires_datastore_update_callback(self, mock_redis):
         """Registering callbacks should include the datastore_updated callback."""
         from unittest.mock import MagicMock
