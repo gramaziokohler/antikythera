@@ -1261,8 +1261,8 @@ async def stream_session_events(session_id: str):
         if storage.load_session() is None:
             raise HTTPException(status_code=404, detail="Session not found")
 
-    loop = asyncio.get_event_loop()
-    queue: asyncio.Queue = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[Optional[dict]] = asyncio.Queue()
 
     with _sse_listeners_lock:
         _sse_listeners.setdefault(session_id, []).append((loop, queue))
