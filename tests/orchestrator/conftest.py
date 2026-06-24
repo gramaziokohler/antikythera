@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass
 from typing import Dict
 from typing import List
@@ -8,6 +9,8 @@ import fakeredis
 import pytest
 from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.memory import InMemoryTransport
+
+from antikythera import config as antikythera_config
 
 
 @dataclass
@@ -135,6 +138,27 @@ def mock_agent_discovery():
     """Prevent plugin discovery from loading external agents (e.g., fall_demo_2025 agents that require ROS)."""
     with patch("antikythera_agents.launcher._ensure_agents"):
         yield
+
+
+@pytest.fixture(autouse=True)
+def fast_redispatch_polling():
+    with patch.object(antikythera_config, "REDISPATCH_POLL_INTERVAL", 0.05):
+        yield
+
+
+@pytest.fixture
+def wait_until():
+    """Poll a predicate until it succeeds or the timeout elapses."""
+
+    def _wait_until(predicate, timeout=5.0, interval=0.05):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if predicate():
+                return True
+            time.sleep(interval)
+        return False
+
+    return _wait_until
 
 
 @pytest.fixture

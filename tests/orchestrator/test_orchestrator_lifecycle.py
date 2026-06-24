@@ -10,14 +10,14 @@ from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 
-def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
+def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, wait_until):
     # 1. Define a blueprint with two sequential tasks
     task_start = Task(id="start", type="system.start")
 
     # Task 1: Sleep for a bit to give us time to pause
-    task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=0.5)])
+    task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=0.2)])
     # Task 2: Another sleep
-    task_2 = Task(id="task_2", type="system.sleep", params=[TaskParam(name="duration", value=0.1)])
+    task_2 = Task(id="task_2", type="system.sleep", params=[TaskParam(name="duration", value=0.05)])
 
     task_end = Task(id="end", type="system.end")
 
@@ -61,17 +61,15 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
     loaded_session = orchestrator.session_storage.load_session()
     assert loaded_session.state == BlueprintSessionState.STOPPED
 
-    # Wait enough time for task_1 to definitely finish
-    time.sleep(1.0)
+    assert wait_until(
+        lambda: orchestrator.graph.node[f"{blueprint.id}.{task_1.id}"]["task"].state == TaskState.SUCCEEDED,
+        timeout=2.0,
+    ), "Task 1 should have completed (it was already running when pause was called)"
 
     # At this point, task_1 should be SUCCEEDED, but task_2 should NOT be scheduled yet because we are paused.
     # We can check the internal graph or the session storage to verify task_1 state.
     # Note: The orchestrator instance still exists and receives the completion message,
     # but it won't schedule the next task.
-
-    task_1_node = orchestrator.graph.node[f"{blueprint.id}.{task_1.id}"]
-    task_1_state = task_1_node["task"].state
-    assert task_1_state == TaskState.SUCCEEDED, "Task 1 should have completed even while paused"
 
     task_2_node = orchestrator.graph.node[f"{blueprint.id}.{task_2.id}"]
     task_2_state = task_2_node["task"].state
@@ -96,7 +94,7 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
 def test_orchestrator_stop(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define a simple blueprint
     task_start = Task(id="start", type="system.start")
-    task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=1.0)])
+    task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=0.05)])
     task_end = Task(id="end", type="system.end")
 
     task_start.then(task_1).then(task_end)

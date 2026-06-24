@@ -124,13 +124,17 @@ class RedispatchPoller:
         base_delay: int,
         max_delay: int,
         max_redispatches: int,
+        poll_interval: float = 1.0,
     ) -> None:
+        if poll_interval <= 0:
+            raise ValueError("poll_interval must be positive")
         self._publish = publish_fn
         self._fail = fail_fn
         self._get_task_state = get_task_state_fn
         self._base_delay = base_delay
         self._max_delay = max_delay
         self._max_redispatches = max_redispatches
+        self._poll_interval = poll_interval
 
         # fqn_task_id -> (last_dispatch_time, attempt_count, message)
         self._entries: Dict[str, Tuple[float, int, TaskAssignmentMessage]] = {}
@@ -161,7 +165,7 @@ class RedispatchPoller:
             self._entries.pop(fqn_task_id, None)
 
     def _run(self) -> None:
-        while not self._stop.wait(1.0):
+        while not self._stop.wait(self._poll_interval):
             with self._lock:
                 snapshot = list(self._entries.items())
 
@@ -448,6 +452,7 @@ class Orchestrator:
             base_delay=config.REDISPATCH_BASE_DELAY,
             max_delay=config.REDISPATCH_MAX_DELAY,
             max_redispatches=config.MAX_REDISPATCHES,
+            poll_interval=config.REDISPATCH_POLL_INTERVAL,
         )
 
         self.register_instance(self)
