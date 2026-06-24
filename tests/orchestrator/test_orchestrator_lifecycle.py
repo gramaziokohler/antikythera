@@ -64,7 +64,7 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
     assert wait_until(
         lambda: orchestrator.graph.node[f"{blueprint.id}.{task_1.id}"]["task"].state == TaskState.SUCCEEDED,
         timeout=2.0,
-    ), "Task 1 should have completed even while paused"
+    ), "Task 1 should have completed (it was already running when pause was called)"
 
     # At this point, task_1 should be SUCCEEDED, but task_2 should NOT be scheduled yet because we are paused.
     # We can check the internal graph or the session storage to verify task_1 state.
@@ -73,7 +73,7 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
 
     task_1_node = orchestrator.graph.node[f"{blueprint.id}.{task_1.id}"]
     task_1_state = task_1_node["task"].state
-    assert task_1_state == TaskState.SUCCEEDED, "Task 1 should have completed even while paused"
+    assert task_1_state == TaskState.SUCCEEDED, "Task 1 should have completed (it was already running when pause was called)"
 
     task_2_node = orchestrator.graph.node[f"{blueprint.id}.{task_2.id}"]
     task_2_state = task_2_node["task"].state

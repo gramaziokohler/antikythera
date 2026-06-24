@@ -154,7 +154,7 @@ def wait_until():
             if predicate():
                 return True
             time.sleep(interval)
-        return predicate()
+        return False
 
     return _wait_until
 
