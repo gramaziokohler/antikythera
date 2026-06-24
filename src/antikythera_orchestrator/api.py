@@ -225,6 +225,13 @@ def _push_sse_event(session_id: str, event_type: str, data: dict) -> None:
             loop.call_soon_threadsafe(queue.put_nowait, {"event": event_type, "data": data})
 
 
+def _close_sse_listeners(session_id: str) -> None:
+    """Thread-safe close of all SSE streams for a session by sending the None sentinel."""
+    with _sse_listeners_lock:
+        for loop, queue in _sse_listeners.get(session_id, []):
+            loop.call_soon_threadsafe(queue.put_nowait, None)
+
+
 def _register_sse_callbacks(session_id: str, orchestrator: "Orchestrator") -> None:
     """Register SSE push callbacks on an orchestrator so state changes stream to clients."""
 
@@ -233,6 +240,8 @@ def _register_sse_callbacks(session_id: str, orchestrator: "Orchestrator") -> No
 
     def on_session_state(state: str) -> None:
         _push_sse_event(session_id, "session_state_changed", {"state": state})
+        if state in (BlueprintSessionState.COMPLETED, BlueprintSessionState.FAILED):
+            _close_sse_listeners(session_id)
 
     def on_datastore_updated(blueprint_id: str, data: dict) -> None:
         enriched = _enrich_data_with_types(data)

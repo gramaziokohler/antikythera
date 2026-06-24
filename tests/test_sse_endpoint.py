@@ -8,6 +8,7 @@ import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 
+from antikythera.models import BlueprintSessionState
 from antikythera_orchestrator.api import _push_sse_event
 from antikythera_orchestrator.api import _register_sse_callbacks
 from antikythera_orchestrator.api import _sse_listeners
@@ -129,6 +130,40 @@ class TestSseEventDelivery:
 
     def test_push_with_no_listeners_is_silent(self):
         _push_sse_event("no-such-session", "session_state_changed", {"state": "running"})
+
+    @pytest.mark.parametrize("terminal_state", [BlueprintSessionState.COMPLETED, BlueprintSessionState.FAILED])
+    def test_terminal_session_state_closes_stream(self, terminal_state):
+        from unittest.mock import MagicMock
+
+        session_id = f"sse-terminal-{terminal_state}"
+        loop = asyncio.new_event_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+
+        with _sse_listeners_lock:
+            _sse_listeners.setdefault(session_id, []).append((loop, queue))
+
+        try:
+            mock_orchestrator = MagicMock()
+            captured_cb = {}
+
+            def capture_session_cb(cb):
+                captured_cb["fn"] = cb
+
+            mock_orchestrator.register_session_state_callback.side_effect = capture_session_cb
+            _register_sse_callbacks(session_id, mock_orchestrator)
+
+            captured_cb["fn"](terminal_state)
+
+            event = loop.run_until_complete(queue.get())
+            assert event["event"] == "session_state_changed"
+            assert event["data"]["state"] == str(terminal_state)
+
+            sentinel = loop.run_until_complete(queue.get())
+            assert sentinel is None
+        finally:
+            with _sse_listeners_lock:
+                _sse_listeners.pop(session_id, None)
+            loop.close()
 
 
 class TestSseEventFormat:
