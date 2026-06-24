@@ -422,7 +422,7 @@ class Orchestrator:
         # notifies callbacks of session state changes, e.g. for SSE updates
         for cb in self._session_state_callbacks:
             try:
-                cb(str(state))
+                cb(state.value)
             except Exception:
                 LOG.exception("Error in session state SSE callback")
 
@@ -921,10 +921,8 @@ class Orchestrator:
                     output_keys=outputs_to_keys(task.outputs),
                     params=params_to_dict(task.params),
                     execution_mode=execution_mode,
-                    context=context,
-                )
                 self.task_start_publisher.publish(message)
-                self._notify_task_state_change(blueprint_id, task.id, str(task.state))
+                self._notify_task_state_change(blueprint_id, task.id, task.state.value)
                 LOG.debug("Published TaskAssignmentMessage...")
             except Exception as e:
                 LOG.exception(f"Failed to start task [{task.id}]: {e}")
@@ -960,8 +958,7 @@ class Orchestrator:
 
             blueprint_id = processed_task.blueprint_id
 
-            self._notify_task_state_change(blueprint_id, processed_task.task.id, str(processed_task.task.state))
-
+            self._notify_task_state_change(blueprint_id, processed_task.task.id, processed_task.task.state.value)
             if processed_task.task.state == TaskState.FAILED:
                 LOG.error(f"Task {processed_task.task_id} failed with error: {message.error}, aborting session.")
                 self.state = BlueprintSessionState.FAILED
@@ -1021,7 +1018,7 @@ class Orchestrator:
             self.task_allocation_publisher.publish(allocation)
             LOG.info(f"Allocated task {task_id} to agent {message.agent_id} (Mode: {execution_mode})")
 
-            self._notify_task_state_change(blueprint_id, task.id, str(task.state))
+            self._notify_task_state_change(blueprint_id, task.id, task.state.value)
 
             # Persist the updated session state
             self.session_storage.save_session(self.session)
