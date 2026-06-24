@@ -148,6 +148,8 @@ def fast_redispatch_polling():
 
 @pytest.fixture
 def wait_until():
+    """Poll a predicate until it succeeds or the timeout elapses."""
+
     def _wait_until(predicate, timeout=5.0, interval=0.05):
         deadline = time.time() + timeout
         while time.time() < deadline:

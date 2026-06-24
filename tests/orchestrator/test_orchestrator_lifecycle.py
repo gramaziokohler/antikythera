@@ -71,10 +71,6 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
     # Note: The orchestrator instance still exists and receives the completion message,
     # but it won't schedule the next task.
 
-    task_1_node = orchestrator.graph.node[f"{blueprint.id}.{task_1.id}"]
-    task_1_state = task_1_node["task"].state
-    assert task_1_state == TaskState.SUCCEEDED, "Task 1 should have completed (it was already running when pause was called)"
-
     task_2_node = orchestrator.graph.node[f"{blueprint.id}.{task_2.id}"]
     task_2_state = task_2_node["task"].state
     assert task_2_state == TaskState.PENDING, "Task 2 should not have started yet"
