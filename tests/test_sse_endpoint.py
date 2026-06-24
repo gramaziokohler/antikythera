@@ -141,6 +141,7 @@ class TestSseEventDelivery:
 
         session_id = f"sse-terminal-{terminal_state}"
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         queue: asyncio.Queue = asyncio.Queue()
 
         with _sse_listeners_lock:
@@ -167,6 +168,7 @@ class TestSseEventDelivery:
         finally:
             with _sse_listeners_lock:
                 _sse_listeners.pop(session_id, None)
+            asyncio.set_event_loop(None)
             loop.close()
 
 
@@ -244,12 +246,10 @@ class TestDatastoreUpdatedEvent:
 
     def test_datastore_update_callback_enriches_and_pushes(self, mock_redis):
         """The registered datastore callback enriches values and pushes SSE events."""
-        import asyncio as _asyncio
-
         session_id = "sse-ds-enrich-test"
-        loop = _asyncio.new_event_loop()
-        _asyncio.set_event_loop(loop)
-        queue: _asyncio.Queue = _asyncio.Queue()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        queue: asyncio.Queue = asyncio.Queue()
 
         with _sse_listeners_lock:
             _sse_listeners.setdefault(session_id, []).append((loop, queue))
@@ -281,5 +281,5 @@ class TestDatastoreUpdatedEvent:
         finally:
             with _sse_listeners_lock:
                 _sse_listeners.pop(session_id, None)
-            _asyncio.set_event_loop(None)
+            asyncio.set_event_loop(None)
             loop.close()
