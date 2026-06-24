@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass
 from typing import Dict
 from typing import List
@@ -143,6 +144,19 @@ def mock_agent_discovery():
 def fast_redispatch_polling():
     with patch.object(antikythera_config, "REDISPATCH_POLL_INTERVAL", 0.05):
         yield
+
+
+@pytest.fixture
+def wait_until():
+    def _wait_until(predicate, timeout=5.0, interval=0.05):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if predicate():
+                return True
+            time.sleep(interval)
+        return predicate()
+
+    return _wait_until
 
 
 @pytest.fixture

@@ -1,5 +1,4 @@
 import threading
-import time
 from typing import Any
 from typing import Dict
 
@@ -21,15 +20,6 @@ from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.storage import BlueprintStorage
 from antikythera_orchestrator.storage import ModelStorage
 from antikythera_orchestrator.storage import SessionStorage
-
-
-def _wait_for(predicate, timeout=5.0, interval=0.05):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if predicate():
-            return True
-        time.sleep(interval)
-    return predicate()
 
 
 @agent(type="test_dynamic")
@@ -155,7 +145,7 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
     assert session.state == BlueprintSessionState.COMPLETED
 
 
-def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager, wait_until):
     # Setup
     model = Model()
     element1 = Element()
@@ -231,7 +221,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
 
     blocking_event.set()
 
-    assert _wait_for(lambda: not any(thread.is_alive() for thread in launcher.threads), timeout=5.0)
+    assert wait_until(lambda: not any(thread.is_alive() for thread in launcher.threads), timeout=5.0)
 
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
@@ -246,7 +236,9 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
         return session_storage.load_session()
 
 
-def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_dynamic_expansion_pause_resume_dead_session(
+    mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager, wait_until
+):
     # 1. Setup Model (Same as basic test)
     model = Model()
     element1 = Element(name="Element 1")
@@ -329,7 +321,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     orchestrator.pause()
 
     blocking_event.set()
-    assert _wait_for(lambda: not any(thread.is_alive() for thread in launcher.threads), timeout=5.0)
+    assert wait_until(lambda: not any(thread.is_alive() for thread in launcher.threads), timeout=5.0)
 
     orchestrator.stop()
     assert orchestrator.state == BlueprintSessionState.STOPPED

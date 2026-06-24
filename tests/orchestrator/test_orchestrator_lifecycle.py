@@ -10,16 +10,7 @@ from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 
-def _wait_for(predicate, timeout=5.0, interval=0.05):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if predicate():
-            return True
-        time.sleep(interval)
-    return predicate()
-
-
-def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
+def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, wait_until):
     # 1. Define a blueprint with two sequential tasks
     task_start = Task(id="start", type="system.start")
 
@@ -70,7 +61,7 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
     loaded_session = orchestrator.session_storage.load_session()
     assert loaded_session.state == BlueprintSessionState.STOPPED
 
-    assert _wait_for(
+    assert wait_until(
         lambda: orchestrator.graph.node[f"{blueprint.id}.{task_1.id}"]["task"].state == TaskState.SUCCEEDED,
         timeout=2.0,
     ), "Task 1 should have completed even while paused"
