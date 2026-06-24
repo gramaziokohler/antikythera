@@ -93,6 +93,7 @@ class TestSseEventDelivery:
     def test_push_delivers_task_state_event(self):
         session_id = "sse-task-deliver"
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         queue: asyncio.Queue = asyncio.Queue()
 
         with _sse_listeners_lock:
@@ -107,6 +108,7 @@ class TestSseEventDelivery:
         finally:
             with _sse_listeners_lock:
                 _sse_listeners.pop(session_id, None)
+            asyncio.set_event_loop(None)
             loop.close()
 
     def test_push_delivers_session_state_event(self):
