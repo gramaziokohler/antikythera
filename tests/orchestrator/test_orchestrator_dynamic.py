@@ -23,6 +23,15 @@ from antikythera_orchestrator.storage import ModelStorage
 from antikythera_orchestrator.storage import SessionStorage
 
 
+def _wait_for(predicate, timeout=5.0, interval=0.05):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return predicate()
+
+
 @agent(type="test_dynamic")
 class DynamicExpansionTestAgent(Agent):
     @tool(name="process")
@@ -197,11 +206,13 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     launcher = cleanup_manager.register(AgentLauncher())
 
     blocking_event = threading.Event()
+    blocking_started = threading.Event()
 
     class BlockingTestAgent(Agent):
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
             # Wait for event
+            blocking_started.set()
             blocking_event.wait(timeout=5)
             return {"processed": True}
 
@@ -211,7 +222,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     # Test starts!
     orchestrator.start()
 
-    time.sleep(1.0)
+    assert blocking_started.wait(timeout=5)
 
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
@@ -220,7 +231,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
 
     blocking_event.set()
 
-    time.sleep(1.0)
+    assert _wait_for(lambda: not any(thread.is_alive() for thread in launcher.threads), timeout=5.0)
 
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
@@ -291,6 +302,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     launcher = cleanup_manager.register(AgentLauncher())
 
     blocking_event = threading.Event()
+    blocking_started = threading.Event()
 
     class BlockingTestAgent(Agent):
         @tool(name="process")
@@ -300,6 +312,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
             element_guid = task.context["element_id"]
             element = model._elements[element_guid]
             if element.name == "Element 2":
+                blocking_started.set()
                 blocking_event.wait(timeout=5)
             return {"processed": True}
 
@@ -309,15 +322,14 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
 
     orchestrator.start()
 
-    # Allow some time for the first task to start and block
-    time.sleep(1.0)
+    assert blocking_started.wait(timeout=5)
 
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
     orchestrator.pause()
 
     blocking_event.set()
-    time.sleep(1.0)
+    assert _wait_for(lambda: not any(thread.is_alive() for thread in launcher.threads), timeout=5.0)
 
     orchestrator.stop()
     assert orchestrator.state == BlueprintSessionState.STOPPED

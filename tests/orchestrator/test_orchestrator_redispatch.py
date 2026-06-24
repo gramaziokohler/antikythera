@@ -91,6 +91,7 @@ def test_redispatch_publishes_with_backoff():
         base_delay=2,
         max_delay=90,
         max_redispatches=5,
+        poll_interval=0.05,
     )
 
     message = TaskAssignmentMessage(id="bp.work", type="agent.do")
@@ -171,7 +172,7 @@ def test_no_agent_claimed_session_fails(mock_storage, mock_transport_orchestrato
     launcher.start()
     orchestrator.start()
 
-    # Session should fail within ~4 s (3 ticks × 1 s + margin for system.start)
+    # Session should fail within a few poller ticks plus message-passing overhead.
     completed = orchestrator.await_completion(timeout=15)
 
     assert completed, "Session should have completed (as FAILED) within the timeout"

@@ -10,14 +10,23 @@ from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 
+def _wait_for(predicate, timeout=5.0, interval=0.05):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return predicate()
+
+
 def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define a blueprint with two sequential tasks
     task_start = Task(id="start", type="system.start")
 
     # Task 1: Sleep for a bit to give us time to pause
-    task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=0.5)])
+    task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=0.2)])
     # Task 2: Another sleep
-    task_2 = Task(id="task_2", type="system.sleep", params=[TaskParam(name="duration", value=0.1)])
+    task_2 = Task(id="task_2", type="system.sleep", params=[TaskParam(name="duration", value=0.05)])
 
     task_end = Task(id="end", type="system.end")
 
@@ -61,8 +70,10 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
     loaded_session = orchestrator.session_storage.load_session()
     assert loaded_session.state == BlueprintSessionState.STOPPED
 
-    # Wait enough time for task_1 to definitely finish
-    time.sleep(1.0)
+    assert _wait_for(
+        lambda: orchestrator.graph.node[f"{blueprint.id}.{task_1.id}"]["task"].state == TaskState.SUCCEEDED,
+        timeout=2.0,
+    ), "Task 1 should have completed even while paused"
 
     # At this point, task_1 should be SUCCEEDED, but task_2 should NOT be scheduled yet because we are paused.
     # We can check the internal graph or the session storage to verify task_1 state.
@@ -96,7 +107,7 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
 def test_orchestrator_stop(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define a simple blueprint
     task_start = Task(id="start", type="system.start")
-    task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=1.0)])
+    task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=0.05)])
     task_end = Task(id="end", type="system.end")
 
     task_start.then(task_1).then(task_end)

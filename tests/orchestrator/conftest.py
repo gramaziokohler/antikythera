@@ -9,6 +9,8 @@ import pytest
 from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.memory import InMemoryTransport
 
+from antikythera import config as antikythera_config
+
 
 @dataclass
 class MockGetResponse:
@@ -134,6 +136,12 @@ def mock_transport_launcher(in_memory_transport):
 def mock_agent_discovery():
     """Prevent plugin discovery from loading external agents (e.g., fall_demo_2025 agents that require ROS)."""
     with patch("antikythera_agents.launcher._ensure_agents"):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def fast_redispatch_polling():
+    with patch.object(antikythera_config, "REDISPATCH_POLL_INTERVAL", 0.05):
         yield
 
 
