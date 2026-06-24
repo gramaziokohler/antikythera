@@ -161,7 +161,7 @@ class TestSseEventDelivery:
 
             event = loop.run_until_complete(queue.get())
             assert event["event"] == "session_state_changed"
-            assert event["data"]["state"] == str(terminal_state)
+            assert event["data"]["state"] == terminal_state
 
             sentinel = loop.run_until_complete(queue.get())
             assert sentinel is None
