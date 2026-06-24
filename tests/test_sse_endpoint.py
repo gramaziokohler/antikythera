@@ -114,6 +114,7 @@ class TestSseEventDelivery:
     def test_push_delivers_session_state_event(self):
         session_id = "sse-sess-deliver"
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         queue: asyncio.Queue = asyncio.Queue()
 
         with _sse_listeners_lock:
@@ -128,8 +129,8 @@ class TestSseEventDelivery:
         finally:
             with _sse_listeners_lock:
                 _sse_listeners.pop(session_id, None)
+            asyncio.set_event_loop(None)
             loop.close()
-
     def test_push_with_no_listeners_is_silent(self):
         _push_sse_event("no-such-session", "session_state_changed", {"state": "running"})
 
@@ -203,6 +204,7 @@ class TestDatastoreUpdatedEvent:
     def test_push_delivers_datastore_updated_event(self):
         session_id = "sse-ds-deliver"
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         queue: asyncio.Queue = asyncio.Queue()
 
         with _sse_listeners_lock:
@@ -222,8 +224,8 @@ class TestDatastoreUpdatedEvent:
         finally:
             with _sse_listeners_lock:
                 _sse_listeners.pop(session_id, None)
+            asyncio.set_event_loop(None)
             loop.close()
-
     def test_register_sse_callbacks_wires_datastore_update_callback(self, mock_redis):
         """Registering callbacks should include the datastore_updated callback."""
         from unittest.mock import MagicMock
@@ -244,6 +246,7 @@ class TestDatastoreUpdatedEvent:
 
         session_id = "sse-ds-enrich-test"
         loop = _asyncio.new_event_loop()
+        _asyncio.set_event_loop(loop)
         queue: _asyncio.Queue = _asyncio.Queue()
 
         with _sse_listeners_lock:
@@ -276,4 +279,5 @@ class TestDatastoreUpdatedEvent:
         finally:
             with _sse_listeners_lock:
                 _sse_listeners.pop(session_id, None)
+            _asyncio.set_event_loop(None)
             loop.close()
