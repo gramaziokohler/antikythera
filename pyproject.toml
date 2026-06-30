@@ -92,6 +92,7 @@ addopts = [
     "--doctest-glob=*.rst",
     "--tb=short",
     "--import-mode=importlib",
+    "--capture=sys",
 ]
 doctest_optionflags = [
     "NORMALIZE_WHITESPACE",
