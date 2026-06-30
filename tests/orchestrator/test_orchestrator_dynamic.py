@@ -202,7 +202,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
             # Wait for event
-            blocking_event.wait(timeout=2)
+            blocking_event.wait(timeout=1)
             return {"processed": True}
 
     launcher.agents["test_dynamic"] = BlockingTestAgent()
@@ -211,7 +211,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     # Test starts!
     orchestrator.start()
 
-    time.sleep(1.0)
+    time.sleep(0.5)
 
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
@@ -220,7 +220,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
 
     blocking_event.set()
 
-    time.sleep(1.0)
+    time.sleep(0.5)
 
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
@@ -300,7 +300,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
             element_guid = task.context["element_id"]
             element = model._elements[element_guid]
             if element.name == "Element 2":
-                blocking_event.wait(timeout=2)
+                blocking_event.wait(timeout=1)
             return {"processed": True}
 
     # Register our test agent
@@ -310,14 +310,14 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     orchestrator.start()
 
     # Allow some time for the first task to start and block
-    time.sleep(1.0)
+    time.sleep(0.5)
 
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
     orchestrator.pause()
 
     blocking_event.set()
-    time.sleep(1.0)
+    time.sleep(0.5)
 
     orchestrator.stop()
     assert orchestrator.state == BlueprintSessionState.STOPPED
