@@ -1,5 +1,4 @@
 import threading
-import time
 from typing import Any
 from typing import Dict
 
@@ -196,13 +195,16 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
 
     launcher = cleanup_manager.register(AgentLauncher())
 
+    agent_started = threading.Event()
     blocking_event = threading.Event()
+    agent_done = threading.Event()
 
     class BlockingTestAgent(Agent):
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
-            # Wait for event
-            blocking_event.wait(timeout=1)
+            agent_started.set()
+            blocking_event.wait()
+            agent_done.set()
             return {"processed": True}
 
     launcher.agents["test_dynamic"] = BlockingTestAgent()
@@ -211,22 +213,20 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     # Test starts!
     orchestrator.start()
 
-    time.sleep(0.5)
-
+    assert agent_started.wait(timeout=5), "Agent did not start executing in time"
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
     orchestrator.pause()
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
     blocking_event.set()
-
-    time.sleep(0.5)
+    assert agent_done.wait(timeout=5), "Agent did not complete in time"
 
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
     orchestrator.start()
 
-    assert orchestrator.await_completion(timeout=12)
+    assert orchestrator.await_completion(timeout=10)
     assert session.state == BlueprintSessionState.COMPLETED
 
 
@@ -290,17 +290,20 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     # 5. Start Execution with Blocking Agent
     launcher = cleanup_manager.register(AgentLauncher())
 
+    element2_started = threading.Event()
     blocking_event = threading.Event()
+    element2_done = threading.Event()
 
     class BlockingTestAgent(Agent):
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
-            # Wait for event
             model = task.get_param_value("model")
             element_guid = task.context["element_id"]
             element = model._elements[element_guid]
             if element.name == "Element 2":
-                blocking_event.wait(timeout=1)
+                element2_started.set()
+                blocking_event.wait()
+                element2_done.set()
             return {"processed": True}
 
     # Register our test agent
@@ -309,15 +312,13 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
 
     orchestrator.start()
 
-    # Allow some time for the first task to start and block
-    time.sleep(0.5)
-
+    assert element2_started.wait(timeout=5), "Element 2 did not start executing in time"
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
     orchestrator.pause()
 
     blocking_event.set()
-    time.sleep(0.5)
+    assert element2_done.wait(timeout=5), "Element 2 did not complete in time"
 
     orchestrator.stop()
     assert orchestrator.state == BlueprintSessionState.STOPPED
