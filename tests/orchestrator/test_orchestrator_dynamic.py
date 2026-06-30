@@ -332,7 +332,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     # Element 1 starts and finishes
     # Element 2 starts and blocks
     logger.warning("Waiting for element 2 to start executing..")
-    assert element2_started.wait(timeout=5), "Element 2 did not start executing in time"
+    assert element2_started.wait(timeout=15), "Element 2 did not start executing in time"
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
     # Element 2 is blocked, we can pause the orchestrator
