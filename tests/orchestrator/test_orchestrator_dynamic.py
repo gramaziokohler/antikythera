@@ -202,7 +202,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
             # Wait for event
-            blocking_event.wait(timeout=5)
+            blocking_event.wait(timeout=2)
             return {"processed": True}
 
     launcher.agents["test_dynamic"] = BlockingTestAgent()
@@ -300,7 +300,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
             element_guid = task.context["element_id"]
             element = model._elements[element_guid]
             if element.name == "Element 2":
-                blocking_event.wait(timeout=5)
+                blocking_event.wait(timeout=2)
             return {"processed": True}
 
     # Register our test agent
