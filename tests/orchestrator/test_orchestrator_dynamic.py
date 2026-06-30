@@ -312,6 +312,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
             element = model._elements[element_guid]
             _start = time.perf_counter()
             if element.name == "Element 2":
+                logger.warning("Element 2 reached process_element after %.3fs", time.perf_counter() - _t0)
                 element2_started.set()
                 blocking_event.wait()
                 element2_done.set()
@@ -326,6 +327,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     logger.warning("Starting orchestrator.. Done!")
 
     logger.warning("Starting orchestrator..")
+    _t0 = time.perf_counter()
     orchestrator.start()
     logger.warning("Starting orchestrator.. Done!")
 
