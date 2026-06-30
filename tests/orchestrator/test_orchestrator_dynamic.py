@@ -320,18 +320,31 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
 
     # Register our test agent
     launcher.agents["test_dynamic"] = BlockingTestAgent()
+
+    logger.warning("Starting orchestrator..")
     launcher.start()
+    logger.warning("Starting orchestrator.. Done!")
 
+    logger.warning("Starting orchestrator..")
     orchestrator.start()
+    logger.warning("Starting orchestrator.. Done!")
 
+    # Element 1 starts and finishes
+    # Element 2 starts and blocks
+    logger.warning("Waiting for element 2 to start executing..")
     assert element2_started.wait(timeout=5), "Element 2 did not start executing in time"
     assert orchestrator.state == BlueprintSessionState.RUNNING
+
+    # Element 2 is blocked, we can pause the orchestrator
 
     orchestrator.pause()
 
     blocking_event.set()
+
+    # Element 2 is released to finish, we wait for it to complete
     assert element2_done.wait(timeout=5), "Element 2 did not complete in time"
 
+    # Element 3 is not started because the orchestrator has been paused
     orchestrator.stop()
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
@@ -344,6 +357,8 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     assert orchestrator.session.composite_to_inner_blueprint_map == original_map
 
     orchestrator.start()
+
+    # Element 3 should now start and finish, completing the session
 
     assert orchestrator.await_completion(timeout=10)
     assert orchestrator.session.state == BlueprintSessionState.COMPLETED
