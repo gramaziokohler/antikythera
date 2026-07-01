@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import threading
 from dataclasses import dataclass
@@ -525,21 +526,25 @@ class Orchestrator:
 
     def stop(self) -> None:
         """Stops the orchestrator."""
-        with self._lock:
-            if self.state != BlueprintSessionState.RUNNING:
-                LOG.warning("Session is already stopped.")
-                return
+        # with self._lock:
+        curframe = inspect.currentframe()
+        calframe = inspect.getouterframes(curframe, 2)
+        LOG.info(f"{calframe[1][3]} called stop()")
 
-            self.task_completion_subscriber.unsubscribe()
-            self.task_claim_subscriber.unsubscribe()
+        if self.state == BlueprintSessionState.STOPPED:
+            LOG.warning("Session is already stopped.")
+            return
 
-            # there might be pending completion messages in the scheduler queue of composite tasks
-            # set them back to PENDING when orchestrator is stopped so that they can be processed when the session resumes.
-            self._flush_scheduler_queue()
+        self.state = BlueprintSessionState.STOPPED
 
-            if self.state == BlueprintSessionState.RUNNING:
-                self.state = BlueprintSessionState.STOPPED
-            LOG.info(f"Execution of session id {self.session.bsid} completed!")
+        self.task_completion_subscriber.unsubscribe()
+        self.task_claim_subscriber.unsubscribe()
+
+        # there might be pending completion messages in the scheduler queue of composite tasks
+        # set them back to PENDING when orchestrator is stopped so that they can be processed when the session resumes.
+        self._flush_scheduler_queue()
+
+        LOG.info(f"Execution of session id {self.session.bsid} completed!")
 
     def pause(self) -> None:
         """Pauses the orchestrator."""
