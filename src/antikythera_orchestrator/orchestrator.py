@@ -525,16 +525,21 @@ class Orchestrator:
 
     def stop(self) -> None:
         """Stops the orchestrator."""
-        self.task_completion_subscriber.unsubscribe()
-        self.task_claim_subscriber.unsubscribe()
+        with self._lock:
+            if self.state != BlueprintSessionState.RUNNING:
+                LOG.warning("Session is already stopped.")
+                return
 
-        # there might be pending completion messages in the scheduler queue of composite tasks
-        # set them back to PENDING when orchestrator is stopped so that they can be processed when the session resumes.
-        self._flush_scheduler_queue()
+            self.task_completion_subscriber.unsubscribe()
+            self.task_claim_subscriber.unsubscribe()
 
-        if self.state == BlueprintSessionState.RUNNING:
-            self.state = BlueprintSessionState.STOPPED
-        LOG.info(f"Execution of session id {self.session.bsid} completed!")
+            # there might be pending completion messages in the scheduler queue of composite tasks
+            # set them back to PENDING when orchestrator is stopped so that they can be processed when the session resumes.
+            self._flush_scheduler_queue()
+
+            if self.state == BlueprintSessionState.RUNNING:
+                self.state = BlueprintSessionState.STOPPED
+            LOG.info(f"Execution of session id {self.session.bsid} completed!")
 
     def pause(self) -> None:
         """Pauses the orchestrator."""
