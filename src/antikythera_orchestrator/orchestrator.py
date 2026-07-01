@@ -902,6 +902,7 @@ class Orchestrator:
                 task.state = TaskState.FAILED
                 self.state = BlueprintSessionState.FAILED
                 self._completion_event.set()
+                self.stop()
 
         # Persist the updated session state
         self.session_storage.save_session(self.session)
