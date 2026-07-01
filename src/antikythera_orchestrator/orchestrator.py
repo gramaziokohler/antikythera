@@ -526,11 +526,6 @@ class Orchestrator:
 
     def stop(self) -> None:
         """Stops the orchestrator."""
-        # with self._lock:
-        curframe = inspect.currentframe()
-        calframe = inspect.getouterframes(curframe, 2)
-        LOG.info(f"{calframe[1][3]} called stop()")
-
         if self.state == BlueprintSessionState.STOPPED:
             LOG.warning("Session is already stopped.")
             return
@@ -876,13 +871,6 @@ class Orchestrator:
 
                 context = self.get_composite_blueprint_context(blueprint_id)
 
-                # Guard against a concurrent _schedule_tasks call (triggered by on_task_completed
-                # in a background agent thread) that may have already dispatched this task while
-                # the GIL was released during the I/O above.
-                # if task.state not in (TaskState.PENDING, TaskState.SKIP_REQUESTED):
-                #     LOG.debug(f"Task [{task.id}] state changed to {task.state} since scheduling started, skipping.")
-                #     continue
-
                 # TODO: what do we do if no agent even claims the task.. should there be some timeout? YES!
                 task.state = TaskState.READY
                 LOG.debug(f"Publishing TaskAssignmentMessage for task [{task.id}]")
@@ -963,11 +951,6 @@ class Orchestrator:
 
         if self.state == BlueprintSessionState.RUNNING:
             self._schedule_tasks()
-
-    def on_task_claim_safe(self, message: TaskClaimRequest) -> None:
-        """Wrapper for on_task_claim to ensure thread safety."""
-        with self._lock:
-            self.on_task_claim(message)
 
     def on_task_claim(self, message: TaskClaimRequest) -> None:
         """Handles incoming task claim requests."""

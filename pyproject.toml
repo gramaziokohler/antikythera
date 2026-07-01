@@ -92,8 +92,6 @@ addopts = [
     "--doctest-glob=*.rst",
     "--tb=short",
     "--import-mode=importlib",
-    "--capture=sys",
-    "-k", "test_dynamic_expansion_pause_resume_dead_session",
 ]
 doctest_optionflags = [
     "NORMALIZE_WHITESPACE",
