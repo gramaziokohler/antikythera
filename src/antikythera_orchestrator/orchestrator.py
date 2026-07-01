@@ -112,7 +112,6 @@ class TaskScheduler:
         self.session = session
         self.graph = graph
         self.queue = LifoQueue()
-        self._lock = threading.Lock()
 
     def queue_message(self, message: TaskCompletionMessage) -> None:
         self.queue.put(message)
@@ -309,7 +308,6 @@ class Orchestrator:
         self.session: BlueprintSession = session
         self.graph: Graph = None
         self._completion_event = threading.Event()
-        self._lock = threading.Lock()
 
         self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start = Topic("antikythera/task/start")
