@@ -322,7 +322,7 @@ class Orchestrator:
         self.task_start_publisher = Publisher(self.task_start, transport=self.transport)
         self.task_completion_subscriber = Subscriber(self.task_completed, self.on_task_completed, transport=self.transport)
         self.task_completion_subscriber.subscribe()
-        self.task_claim_subscriber = Subscriber(self.task_claim, self.on_task_claim_safe, transport=self.transport)
+        self.task_claim_subscriber = Subscriber(self.task_claim, self.on_task_claim, transport=self.transport)
         self.task_claim_subscriber.subscribe()
         self.task_allocation_publisher = Publisher(self.task_allocation, transport=self.transport)
         self.task_ack_publisher = Publisher(self.task_ack, transport=self.transport)
