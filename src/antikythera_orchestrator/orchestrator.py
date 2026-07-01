@@ -864,6 +864,13 @@ class Orchestrator:
 
                 context = self.get_composite_blueprint_context(blueprint_id)
 
+                # Guard against a concurrent _schedule_tasks call (triggered by on_task_completed
+                # in a background agent thread) that may have already dispatched this task while
+                # the GIL was released during the I/O above.
+                # if task.state not in (TaskState.PENDING, TaskState.SKIP_REQUESTED):
+                #     LOG.debug(f"Task [{task.id}] state changed to {task.state} since scheduling started, skipping.")
+                #     continue
+
                 # TODO: what do we do if no agent even claims the task.. should there be some timeout? YES!
                 task.state = TaskState.READY
                 LOG.debug(f"Publishing TaskAssignmentMessage for task [{task.id}]")

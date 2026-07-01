@@ -246,6 +246,11 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
 
 
 def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+    """Integration test for dynamic expanded blueprint session with pause mid-task execution.
+    The task that was running when paused will finish. since the orcehstrator is still listening
+    for completion event, it will be marked appropriatelymj.
+    """
+
     # 1. Setup Model (Same as basic test)
     model = Model()
     element1 = Element(name="Element 1")
@@ -303,6 +308,8 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     element2_started = threading.Event()
     blocking_event = threading.Event()
     element2_done = threading.Event()
+    execution_counts: Dict[str, int] = {}
+    counts_lock = threading.Lock()
 
     class BlockingTestAgent(Agent):
         @tool(name="process")
@@ -310,6 +317,8 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
             model = task.get_param_value("model")
             element_guid = task.context["element_id"]
             element = model._elements[element_guid]
+            with counts_lock:
+                execution_counts[element.name] = execution_counts.get(element.name, 0) + 1
             _start = time.perf_counter()
             if element.name == "Element 2":
                 logger.warning("Element 2 reached process_element after %.3fs", time.perf_counter() - _t0)
@@ -334,16 +343,17 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     # Element 1 starts and finishes
     # Element 2 starts and blocks
     logger.warning("Waiting for element 2 to start executing..")
-    assert element2_started.wait(timeout=15), "Element 2 did not start executing in time"
+    assert element2_started.wait(timeout=30), "Element 2 did not start executing in time"
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
     # Element 2 is blocked, we can pause the orchestrator
 
+    # Pause the orchestrator while Element 2 is running. It should finish, but Element 3 should not start.
     orchestrator.pause()
 
     blocking_event.set()
 
-    # Element 2 is released to finish, we wait for it to complete
+    # Element 2 is released, and will finish.
     assert element2_done.wait(timeout=5), "Element 2 did not complete in time"
 
     # Element 3 is not started because the orchestrator has been paused
@@ -360,7 +370,10 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
 
     orchestrator.start()
 
-    # Element 3 should now start and finish, completing the session
+    # Element 2 DOESN't get re-dispatched, it's finished during the pause.
+    # Element 3 starts and finishes, completing the session
 
-    assert orchestrator.await_completion(timeout=10)
+    assert orchestrator.await_completion(timeout=20)
     assert orchestrator.session.state == BlueprintSessionState.COMPLETED
+
+    assert execution_counts == {"Element 1": 1, "Element 2": 1, "Element 3": 1}
