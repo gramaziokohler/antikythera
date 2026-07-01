@@ -526,16 +526,13 @@ class Orchestrator:
 
     def stop(self) -> None:
         """Stops the orchestrator."""
-        if self.state == BlueprintSessionState.STOPPED:
-            LOG.warning("Session is already stopped.")
-            return
+        # these are idempotent, so safer to always call.
+        self.task_completion_subscriber.unsubscribe()
+        self.task_claim_subscriber.unsubscribe()
 
         if self.state in (BlueprintSessionState.RUNNING, BlueprintSessionState.PENDING):
             # only set to STOPPED if the session is currently active, otherwise we overwrite the state of a completed or failed session
             self.state = BlueprintSessionState.STOPPED
-
-        self.task_completion_subscriber.unsubscribe()
-        self.task_claim_subscriber.unsubscribe()
 
         # there might be pending completion messages in the scheduler queue of composite tasks
         # set them back to PENDING when orchestrator is stopped so that they can be processed when the session resumes.
