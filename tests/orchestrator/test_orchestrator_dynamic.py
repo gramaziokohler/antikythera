@@ -1,6 +1,4 @@
-import logging
 import threading
-import time
 from typing import Any
 from typing import Dict
 
@@ -23,8 +21,6 @@ from antikythera_orchestrator.storage import BlueprintStorage
 from antikythera_orchestrator.storage import ModelStorage
 from antikythera_orchestrator.storage import SessionStorage
 
-logger = logging.getLogger(__name__)
-
 
 @agent(type="test_dynamic")
 class DynamicExpansionTestAgent(Agent):
@@ -32,10 +28,7 @@ class DynamicExpansionTestAgent(Agent):
     def process_element(self, task: Task) -> Dict[str, Any]:
         guid = task.context.get("element_id")
         assert guid is not None
-        logger.warning("process_element starting: %s", guid)
-        _start = time.perf_counter()
         result = {"processed": True}
-        logger.warning("process_element done: %s (%.3fs)", guid, time.perf_counter() - _start)
         return result
 
 
@@ -209,12 +202,9 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     class BlockingTestAgent(Agent):
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
-            guid = task.context.get("element_id")
-            _start = time.perf_counter()
             agent_started.set()
             blocking_event.wait()
             agent_done.set()
-            logger.warning("process_element done: %s (%.3fs)", guid, time.perf_counter() - _start)
             return {"processed": True}
 
     launcher.agents["test_dynamic"] = BlockingTestAgent()
@@ -319,7 +309,6 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
             if element.name == "Element 2":
                 element2_started.set()
                 blocking_event.wait()
-            logger.warning("process_element done: %s %s", element.name, element_guid)
             return {"processed": True}
 
     launcher = cleanup_manager.register(AgentLauncher())
