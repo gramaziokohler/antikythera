@@ -535,7 +535,9 @@ class Orchestrator:
             LOG.warning("Session is already stopped.")
             return
 
-        self.state = BlueprintSessionState.STOPPED
+        if self.state in (BlueprintSessionState.RUNNING, BlueprintSessionState.PENDING):
+            # only set to STOPPED if the session is currently active, otherwise we overwrite the state of a completed or failed session
+            self.state = BlueprintSessionState.STOPPED
 
         self.task_completion_subscriber.unsubscribe()
         self.task_claim_subscriber.unsubscribe()
