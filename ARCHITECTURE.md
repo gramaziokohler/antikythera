@@ -75,8 +75,17 @@ The orchestrator API is exposed through a FastAPI application (`python -m antiky
 - `GET /sessions/{session_id}/blueprint`: Returns the blueprint associated with the session (expanded if applicable).
 - `GET /sessions/{session_id}/diagram`: Returns a Mermaid diagram representing the current execution state of the session.
 - `GET /sessions/{session_id}/data`: Returns the session data (inputs/outputs) stored for the session.
+- `GET /sessions/{session_id}/stream`: Server-Sent Events (SSE) stream of real-time session updates. See below.
 - `POST /sessions/{session_id}/pause`: Pauses the execution of a session.
 - `POST /sessions/{session_id}/start`: Resumes the execution of a session.
+
+**SSE Stream**
+
+`GET /sessions/{session_id}/stream` opens a `text/event-stream` connection and emits events as the orchestrator processes the session: `task_state_changed`, `session_state_changed`, and `datastore_updated` (payload includes type-enriched data, see `_enrich_data_with_types`). Implementation notes (`api.py`):
+
+- Each connection registers an `asyncio.Queue` in a global `_sse_listeners` registry keyed by `session_id`. Orchestrator state-change callbacks (registered once per session via `_register_sse_callbacks`, called on both session start and resume) run on non-async threads and push events via `loop.call_soon_threadsafe`.
+- The stream closes (sends a `None` sentinel) automatically when the session reaches a terminal state (`COMPLETED`/`FAILED`), or on client disconnect, cleaning up its queue from the registry.
+- Multiple clients can subscribe to the same session concurrently; each gets its own queue and receives every event.
 
 **Models**
 - `GET /models`: Lists all available models in the storage.
@@ -662,6 +671,7 @@ The project follows these coding guidelines:
 - **Imports**: Single line imports. The public API of this project should always use 2nd level imports (eg. `from antikythera.models import Blueprint`) and occassionally 1st level imports (eg. `from antikythera import SomethingCore`), but never more than 2nd level imports
 - **Docstrings**: NumPy style
 - **Testing**: `pytest`
+- **CHANGELOG.md**: contains only changes affecting public API, entries regarding internal changes should reflect their effect on the users.
 
 
 ### Repository Structure
@@ -744,7 +754,7 @@ def run_long_process(self, task: Task, context: ExecutionContext) -> dict:
   - fabrication_instructions: dict
 
 
-## TODOs
+## TODOs (for us humans! go away "CLAUDE"!)
 
 - [ ] Prepare Hello World of Antikythera: simple, yet impressive for demo'ing
   - [ ] Demonstrates the distributed nature of the system:

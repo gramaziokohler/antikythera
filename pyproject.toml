@@ -67,7 +67,7 @@ allow-direct-references = true
 files = ["requirements.txt"]
 
 [tool.hatch.metadata.hooks.requirements_txt.optional-dependencies]
-dev = ["requirements-dev.txt"]
+dev = ["requirements-dev.txt", "requirements-orchestrator.txt"]
 deployment = ["requirements-orchestrator.txt"]
 
 [tool.hatch.build.targets.wheel]

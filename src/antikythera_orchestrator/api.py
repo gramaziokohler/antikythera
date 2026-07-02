@@ -1,3 +1,5 @@
+import asyncio
+import json
 import logging
 import re
 import tempfile
@@ -14,6 +16,7 @@ from threading import Lock
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import cast
 
 from compas.data import json_dumps
@@ -26,6 +29,7 @@ from fastapi import Request
 from fastapi import Response
 from fastapi import UploadFile
 from fastapi.concurrency import asynccontextmanager
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -209,6 +213,44 @@ class SkipTaskRequest(BaseModel):
 _sessions_lock = Lock()
 _sessions: Dict[str, ActiveSession] = {}
 
+_sse_listeners_lock = Lock()
+_sse_listeners: Dict[str, List[Tuple[asyncio.AbstractEventLoop, "asyncio.Queue[Optional[dict]]"]]] = {}
+
+
+def _push_sse_event(session_id: str, event_type: str, data: dict) -> None:
+    """Thread-safe push of an SSE event to all connected listeners for a session."""
+    with _sse_listeners_lock:
+        listeners = _sse_listeners.get(session_id, [])
+        for loop, queue in listeners:
+            loop.call_soon_threadsafe(queue.put_nowait, {"event": event_type, "data": data})
+
+
+def _close_sse_listeners(session_id: str) -> None:
+    """Thread-safe close of all SSE streams for a session by sending the None sentinel."""
+    with _sse_listeners_lock:
+        for loop, queue in _sse_listeners.get(session_id, []):
+            loop.call_soon_threadsafe(queue.put_nowait, None)
+
+
+def _register_sse_callbacks(session_id: str, orchestrator: "Orchestrator") -> None:
+    """Register SSE push callbacks on an orchestrator so state changes stream to clients."""
+
+    def on_task_state(blueprint_id: str, task_id: str, state: str) -> None:
+        _push_sse_event(session_id, "task_state_changed", {"blueprint_id": blueprint_id, "task_id": task_id, "state": state})
+
+    def on_session_state(state: str) -> None:
+        _push_sse_event(session_id, "session_state_changed", {"state": state})
+        if state in (BlueprintSessionState.COMPLETED, BlueprintSessionState.FAILED):
+            _close_sse_listeners(session_id)
+
+    def on_datastore_updated(blueprint_id: str, data: dict) -> None:
+        enriched = _enrich_data_with_types(data)
+        _push_sse_event(session_id, "datastore_updated", {"blueprint_id": blueprint_id, "data": enriched})
+
+    orchestrator.register_task_state_callback(on_task_state)
+    orchestrator.register_session_state_callback(on_session_state)
+    orchestrator.register_datastore_update_callback(on_datastore_updated)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -334,6 +376,8 @@ def _start_blueprint_session(request: StartBlueprintRequest) -> str:
 
     # Not starting the orchestrator yet, just creating the session and storing it
     # The user can now inspect the session in "preview" mode and hit resume when it's time to run.
+
+    _register_sse_callbacks(session_id, orchestrator)
 
     started_at = datetime.now(timezone.utc)
     with _sessions_lock:
@@ -626,6 +670,8 @@ def _revive_session(session_id: str, broker_host: str, broker_port: int) -> Acti
         session.state = BlueprintSessionState.STOPPED
 
     orchestrator = Orchestrator(session, broker_host=broker_host, broker_port=broker_port)
+
+    _register_sse_callbacks(session_id, orchestrator)
 
     active_session = ActiveSession(
         orchestrator=orchestrator,
@@ -1210,3 +1256,45 @@ def get_running_composites(session_id: str):
         running_blueprints = active_session.orchestrator.get_currently_running_composite_blueprints()
 
         return Response(content=json_dumps(list(running_blueprints)), media_type="application/json")
+
+
+@app.get("/sessions/{session_id}/stream")
+async def stream_session_events(session_id: str):
+    """Server-Sent Events stream for real-time session and task state updates.
+
+    Emits ``task_state_changed`` and ``session_state_changed`` events as the
+    session progresses.  The connection stays open until the session reaches a
+    terminal state or the client disconnects.
+    """
+    with SessionStorage(session_id) as storage:
+        if storage.load_session() is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[Optional[dict]] = asyncio.Queue()
+
+    with _sse_listeners_lock:
+        _sse_listeners.setdefault(session_id, []).append((loop, queue))
+
+    async def generate():
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
+        finally:
+            with _sse_listeners_lock:
+                listeners = _sse_listeners.get(session_id)
+                if listeners is not None:
+                    remaining = [(li, q) for li, q in listeners if q is not queue]
+                    if remaining:
+                        _sse_listeners[session_id] = remaining
+                    else:
+                        _sse_listeners.pop(session_id, None)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

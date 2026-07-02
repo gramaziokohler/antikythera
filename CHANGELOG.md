@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Orchestrator-side re-dispatch polling loop: unclaimed `READY` tasks are re-published with exponential backoff (`min(base * 2^attempts, max)`) and failed with error code `NO_AGENT_CLAIMED` after `MAX_REDISPATCHES` attempts. Configurable via `REDISPATCH_BASE_DELAY` (default 2 s), `REDISPATCH_MAX_DELAY` (default 90 s), and `MAX_REDISPATCHES` (default 5) env vars.
+- `GET /sessions/{id}/stream` SSE endpoint that pushes `task_state_changed` and `session_state_changed` events as the orchestrator transitions state.
+- `datastore_updated` SSE event emitted after each task that writes outputs, carrying enriched `blueprint_id` + `data` payload.
 
 ### Changed
 
