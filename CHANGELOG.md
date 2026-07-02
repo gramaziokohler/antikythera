@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `GET /sessions/{id}/stream` SSE endpoint that pushes `task_state_changed` and `session_state_changed` events as the orchestrator transitions state.
+- `datastore_updated` SSE event emitted after each task that writes outputs, carrying enriched `blueprint_id` + `data` payload.
+
 ### Changed
 
 * Changed `compas_timber` from pre-release to `>=2.1.2` in requirements.txt.

@@ -308,6 +308,9 @@ class Orchestrator:
         self.session: BlueprintSession = session
         self.graph: Graph = None
         self._completion_event = threading.Event()
+        self._task_state_callbacks: list = []
+        self._session_state_callbacks: list = []
+        self._datastore_update_callbacks: list = []
 
         self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start = Topic("antikythera/task/start")
@@ -356,6 +359,7 @@ class Orchestrator:
             self.session_storage.save_session(self.session)
         except Exception as state_err:
             LOG.exception(f"failed to save session state to persistent storage. Error: {state_err}")
+        self._notify_session_state_change(value)
 
     @classmethod
     def register_instance(cls, instance: Orchestrator) -> None:
@@ -372,6 +376,62 @@ class Orchestrator:
                 if inst.state == BlueprintSessionState.RUNNING:
                     LOG.warning("Another orchestrator instance is already running in the background.")
                     # inst.stop()
+
+    def register_session_state_callback(self, callback) -> None:
+        """Registers a callback function to be called when the session state changes.
+
+        The callback should accept a single argument: the new session state as a string.
+        """
+        self._session_state_callbacks.append(callback)
+
+    def register_task_state_callback(self, callback) -> None:
+        """Registers a callback function to be called when a task state changes.
+
+        The callback should accept three arguments: the blueprint ID, the task ID, and the new task state as a string.
+        """
+        self._task_state_callbacks.append(callback)
+
+    def register_datastore_update_callback(self, callback) -> None:
+        """Register a callback invoked after keys are written to session storage.
+
+        Callback signature: (blueprint_id: str, data: dict) -> None
+        where data is {mapped_key: stored_value} for every key written.
+        """
+        self._datastore_update_callbacks.append(callback)
+
+    def _notify_datastore_updated(self, blueprint_id: str, data: dict) -> None:
+        for cb in self._datastore_update_callbacks:
+            try:
+                cb(blueprint_id, data)
+            except Exception:
+                LOG.exception("Error in datastore update SSE callback")
+
+    def _persist_outputs(self, blueprint_id: str, outputs: dict) -> None:
+        """Write outputs to session storage and notify listeners atomically.
+
+        Always call this instead of session_storage.set() directly when writing
+        task outputs, so the notification can never be missed or duplicated.
+        """
+        for k, v in outputs.items():
+            self.session_storage.set(blueprint_id, k, v)
+        if outputs:
+            self._notify_datastore_updated(blueprint_id, outputs)
+
+    def _notify_session_state_change(self, state: BlueprintSessionState) -> None:
+        # notifies callbacks of session state changes, e.g. for SSE updates
+        for cb in self._session_state_callbacks:
+            try:
+                cb(state.value)
+            except Exception:
+                LOG.exception("Error in session state SSE callback")
+
+    def _notify_task_state_change(self, blueprint_id: str, task_id: str, state: str) -> None:
+        # notifies callbacks of task state changes, e.g. for SSE updates
+        for cb in self._task_state_callbacks:
+            try:
+                cb(blueprint_id, task_id, state)
+            except Exception:
+                LOG.exception("Error in task state SSE callback")
 
     def _reset_failed_tasks(self) -> None:
         """Resets tasks that are in a non-resumable state to PENDING.
@@ -594,21 +654,8 @@ class Orchestrator:
 
     def _map_outputs_to_session(self, blueprint_id: str, task: Task) -> dict:
         """Map task outputs to the names used in session data."""
-        outputs = {}
-        # Iterate over output keys defined in the task configuration
-        for out in task.outputs:
-            # Get the configured mapping name or default to the key itself
-            mapped_key = out.set_to or out.name
-            outputs[mapped_key] = out.value
-
-        # TODO: Should use set_all() here
-        # I implemented set_all in SessionStorage but commented it out for now
-        # because it throws a weird error:
-        # UNKNOWN:Error received from peer ipv6:%5B::1%5D:3322 {grpc_status:2, grpc_message:"no entries provided"}
-        # self.session_storage.set_all(blueprint_id, outputs)
-        for k, v in outputs.items():
-            self.session_storage.set(blueprint_id, k, v)
-
+        outputs = {out.set_to or out.name: out.value for out in task.outputs}
+        self._persist_outputs(blueprint_id, outputs)
         return outputs
 
     def _map_outputs_to_outer_session(self, outer_blueprint_id: str, task: Task):
@@ -620,18 +667,19 @@ class Orchestrator:
             composite_options = task.get_param_value("blueprint")
             element = composite_options["dynamic"]["element"]
 
+        to_write = {}
         for out in task.outputs:
             mapped_key = out.set_to or out.name
             value = self.session_storage.get(inner_blueprint_id, out.name)
-
             if element:
-                # If dynamic, we aggregate into a dictionary in the outer session
                 element_id = element["element_id"]
-                existing_value = self.session_storage.get(outer_blueprint_id, mapped_key) or {}
-                existing_value[element_id] = value
-                self.session_storage.set(outer_blueprint_id, mapped_key, existing_value)
+                accumulated = self.session_storage.get(outer_blueprint_id, mapped_key) or {}
+                accumulated[element_id] = value
+                to_write[mapped_key] = accumulated
             else:
-                self.session_storage.set(outer_blueprint_id, mapped_key, value)
+                to_write[mapped_key] = value
+
+        self._persist_outputs(outer_blueprint_id, to_write)
 
     def _add_composite_blueprint_context(self, blueprint_id: str, task: Task) -> None:
         # make context of composite tasks available to the tasks in the inner blueprint they invoke
@@ -874,10 +922,11 @@ class Orchestrator:
                     inputs=inputs,
                     output_keys=outputs_to_keys(task.outputs),
                     params=params_to_dict(task.params),
-                    execution_mode=execution_mode,
                     context=context,
+                    execution_mode=execution_mode,
                 )
                 self.task_start_publisher.publish(message)
+                self._notify_task_state_change(blueprint_id, task.id, task.state.value)
                 LOG.debug("Published TaskAssignmentMessage...")
             except Exception as e:
                 LOG.exception(f"Failed to start task [{task.id}]: {e}")
@@ -918,6 +967,7 @@ class Orchestrator:
 
             blueprint_id = processed_task.blueprint_id
 
+            self._notify_task_state_change(blueprint_id, processed_task.task.id, processed_task.task.state.value)
             if processed_task.task.state == TaskState.FAILED:
                 LOG.error(f"Task {processed_task.task_id} failed with error: {message.error}, aborting session.")
                 self._end_session_with_state(BlueprintSessionState.FAILED)
@@ -966,10 +1016,13 @@ class Orchestrator:
 
         if can_allocate:
             task.state = TaskState.RUNNING
+            blueprint_id = self.graph.node_attribute(task_id, "blueprint_id")
 
             allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
             self.task_allocation_publisher.publish(allocation)
             LOG.info(f"Allocated task {task_id} to agent {message.agent_id} (Mode: {execution_mode})")
+
+            self._notify_task_state_change(blueprint_id, task.id, task.state.value)
 
             # Persist the updated session state
             self.session_storage.save_session(self.session)

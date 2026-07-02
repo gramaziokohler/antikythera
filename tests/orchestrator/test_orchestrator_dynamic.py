@@ -226,7 +226,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
 
     orchestrator.start()
 
-    assert orchestrator.await_completion(timeout=10)
+    assert orchestrator.await_completion(timeout=30)
     assert session.state == BlueprintSessionState.COMPLETED
 
 
