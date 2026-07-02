@@ -1149,7 +1149,7 @@ class Orchestrator:
         if can_allocate:
             task.state = TaskState.RUNNING
             self._redispatch_poller.untrack(task_id)
-            
+
             allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
             self.task_allocation_publisher.publish(allocation)
             LOG.info(f"Allocated task {task_id} to agent {message.agent_id} (Mode: {execution_mode})")
