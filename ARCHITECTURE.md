@@ -652,6 +652,7 @@ The project follows these coding guidelines:
 - **Imports**: Single line imports. The public API of this project should always use 2nd level imports (eg. `from antikythera.models import Blueprint`) and occassionally 1st level imports (eg. `from antikythera import SomethingCore`), but never more than 2nd level imports
 - **Docstrings**: NumPy style
 - **Testing**: `pytest`
+- **CHANGELOG.md**: contains only changes affecting public API, entries regarding internal changes should reflect their effect on the users.
 
 
 ### Repository Structure
@@ -734,7 +735,7 @@ def run_long_process(self, task: Task, context: ExecutionContext) -> dict:
   - fabrication_instructions: dict
 
 
-## TODOs
+## TODOs (for us humans! go away "CLAUDE"!)
 
 - [ ] Prepare Hello World of Antikythera: simple, yet impressive for demo'ing
   - [ ] Demonstrates the distributed nature of the system:
