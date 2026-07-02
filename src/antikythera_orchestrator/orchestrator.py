@@ -112,7 +112,6 @@ class TaskScheduler:
         self.session = session
         self.graph = graph
         self.queue = LifoQueue()
-        self._lock = threading.Lock()
 
     def queue_message(self, message: TaskCompletionMessage) -> None:
         self.queue.put(message)
@@ -524,15 +523,18 @@ class Orchestrator:
 
     def stop(self) -> None:
         """Stops the orchestrator."""
+        # these are idempotent, so safer to always call.
         self.task_completion_subscriber.unsubscribe()
         self.task_claim_subscriber.unsubscribe()
+
+        if self.state in (BlueprintSessionState.RUNNING, BlueprintSessionState.PENDING):
+            # only set to STOPPED if the session is currently active, otherwise we overwrite the state of a completed or failed session
+            self.state = BlueprintSessionState.STOPPED
 
         # there might be pending completion messages in the scheduler queue of composite tasks
         # set them back to PENDING when orchestrator is stopped so that they can be processed when the session resumes.
         self._flush_scheduler_queue()
 
-        if self.state == BlueprintSessionState.RUNNING:
-            self.state = BlueprintSessionState.STOPPED
         LOG.info(f"Execution of session id {self.session.bsid} completed!")
 
     def pause(self) -> None:
@@ -880,8 +882,7 @@ class Orchestrator:
             except Exception as e:
                 LOG.exception(f"Failed to start task [{task.id}]: {e}")
                 task.state = TaskState.FAILED
-                self.state = BlueprintSessionState.FAILED
-                self._completion_event.set()
+                self._end_session_with_state(BlueprintSessionState.FAILED)
 
         # Persist the updated session state
         self.session_storage.save_session(self.session)
@@ -899,6 +900,12 @@ class Orchestrator:
         fqn_task_id = _create_global_id(processed_task.blueprint_id, processed_task.task)
         return last_task_fqn_id == fqn_task_id
 
+    def _end_session_with_state(self, ending_state: BlueprintSessionState) -> None:
+        # ending session pattern: set the terminal state, notify interested parties, clean up
+        self.state = ending_state
+        self._completion_event.set()
+        self.stop()
+
     def on_task_completed(self, message: TaskCompletionMessage) -> None:
         """Handles incoming task completion messages."""
         LOG.info(f"task completion received : {message}")
@@ -913,9 +920,7 @@ class Orchestrator:
 
             if processed_task.task.state == TaskState.FAILED:
                 LOG.error(f"Task {processed_task.task_id} failed with error: {message.error}, aborting session.")
-                self.state = BlueprintSessionState.FAILED
-                self._completion_event.set()
-                self.stop()
+                self._end_session_with_state(BlueprintSessionState.FAILED)
                 return
 
             # Handle outputs from finished task
@@ -925,9 +930,7 @@ class Orchestrator:
                 self._map_outputs_to_session(blueprint_id, processed_task.task)
 
             if self._is_last_task_in_blueprint(processed_task):
-                self.state = BlueprintSessionState.COMPLETED
-                self._completion_event.set()
-                self.stop()
+                self._end_session_with_state(BlueprintSessionState.COMPLETED)
 
             # Handle scope loop policy (only for successfully completed tasks)
             if processed_task.task.state == TaskState.SUCCEEDED and self.state == BlueprintSessionState.RUNNING:
@@ -946,7 +949,6 @@ class Orchestrator:
     def on_task_claim(self, message: TaskClaimRequest) -> None:
         """Handles incoming task claim requests."""
         LOG.info(f"Task claim received: {message}")
-
         assert self.graph is not None
 
         task_id = message.task_id

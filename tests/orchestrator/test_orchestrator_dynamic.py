@@ -1,5 +1,4 @@
 import threading
-import time
 from typing import Any
 from typing import Dict
 
@@ -29,8 +28,8 @@ class DynamicExpansionTestAgent(Agent):
     def process_element(self, task: Task) -> Dict[str, Any]:
         guid = task.context.get("element_id")
         assert guid is not None
-        print(f"#### Processing element with GUID: {guid}")
-        return {"processed": True}
+        result = {"processed": True}
+        return result
 
 
 def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
@@ -122,7 +121,7 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
 
     orchestrator.start()
 
-    assert orchestrator.await_completion(timeout=10)
+    assert orchestrator.await_completion(timeout=12)
 
     graph_tasks = [data["task"] for _, data in orchestrator.graph.nodes(data=True)]
     task_ids = [t.id for t in graph_tasks]
@@ -196,13 +195,16 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
 
     launcher = cleanup_manager.register(AgentLauncher())
 
+    agent_started = threading.Event()
     blocking_event = threading.Event()
+    agent_done = threading.Event()
 
     class BlockingTestAgent(Agent):
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
-            # Wait for event
-            blocking_event.wait(timeout=5)
+            agent_started.set()
+            blocking_event.wait()
+            agent_done.set()
             return {"processed": True}
 
     launcher.agents["test_dynamic"] = BlockingTestAgent()
@@ -211,16 +213,14 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     # Test starts!
     orchestrator.start()
 
-    time.sleep(1.0)
-
+    assert agent_started.wait(timeout=5), "Agent did not start executing in time"
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
     orchestrator.pause()
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
     blocking_event.set()
-
-    time.sleep(1.0)
+    assert agent_done.wait(timeout=5), "Agent did not complete in time"
 
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
@@ -236,6 +236,11 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
 
 
 def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+    """Integration test for dynamic expanded blueprint session with pause mid-task execution.
+    The task that was running when paused will finish. since the orcehstrator is still listening
+    for completion event, it will be marked appropriatelymj.
+    """
+
     # 1. Setup Model (Same as basic test)
     model = Model()
     element1 = Element(name="Element 1")
@@ -288,49 +293,74 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport
     # assert orchestrator.session.composite_to_inner_blueprint_map == {"test_outer_bp_pr.dynamic_process": "test_inner_bp_pr"}
 
     # 5. Start Execution with Blocking Agent
-    launcher = cleanup_manager.register(AgentLauncher())
-
+    element2_started = threading.Event()
     blocking_event = threading.Event()
+    execution_counts: Dict[str, int] = {}
+    counts_lock = threading.Lock()
 
     class BlockingTestAgent(Agent):
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
-            # Wait for event
             model = task.get_param_value("model")
             element_guid = task.context["element_id"]
             element = model._elements[element_guid]
+            with counts_lock:
+                execution_counts[element.name] = execution_counts.get(element.name, 0) + 1
             if element.name == "Element 2":
-                blocking_event.wait(timeout=5)
+                element2_started.set()
+                blocking_event.wait()
             return {"processed": True}
 
-    # Register our test agent
+    launcher = cleanup_manager.register(AgentLauncher())
     launcher.agents["test_dynamic"] = BlockingTestAgent()
     launcher.start()
 
     orchestrator.start()
 
-    # Allow some time for the first task to start and block
-    time.sleep(1.0)
-
+    # Element 1 starts and finishes
+    # Element 2 starts and blocks
+    assert element2_started.wait(timeout=30), "Element 2 did not start executing in time"
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
+    # Pause the orchestrator while Element 2 is running. It should finish, but Element 3 should not start.
     orchestrator.pause()
 
     blocking_event.set()
-    time.sleep(1.0)
 
+    # `launcher.stop()` joins every in-flight task thread before returning, so once it's
+    # back we know Element 2's completion message has been published *and* processed by
+    # the orchestrator (still subscribed at this point, since only `pause()` was called).
+    # Without this, `orchestrator.stop()` could unsubscribe before the completion is
+    # recorded, leaving the task's state as RUNNING; on resume, `_reset_failed_tasks()`
+    # treats RUNNING as "abandoned by a dead agent" and re-dispatches it, causing Element 2
+    # to execute twice.
+    launcher.stop()
+
+    # Element 3 is not started because the orchestrator has been paused
     orchestrator.stop()
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
+    # Simulate a full restart: both the orchestrator and the agent process are recreated
+    # from scratch, as they would be after a real crash.
     del orchestrator
     del session
+    del launcher
 
     session = _get_bp_session_from_storage("test_session_pause_resume_ds")
     orchestrator = cleanup_manager.register(Orchestrator(session))
 
     assert orchestrator.session.composite_to_inner_blueprint_map == original_map
 
+    launcher = cleanup_manager.register(AgentLauncher())
+    launcher.agents["test_dynamic"] = BlockingTestAgent()
+    launcher.start()
+
     orchestrator.start()
 
-    assert orchestrator.await_completion(timeout=10)
+    # Element 2 DOESN't get re-dispatched, it's finished during the pause.
+    # Element 3 starts and finishes, completing the session
+
+    assert orchestrator.await_completion(timeout=20)
     assert orchestrator.session.state == BlueprintSessionState.COMPLETED
+
+    assert execution_counts == {"Element 1": 1, "Element 2": 1, "Element 3": 1}

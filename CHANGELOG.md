@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Changed `compas_timber` from pre-release to `>=2.1.2` in requirements.txt.
+* Fixed session state gets overwritten to `STOPPED` instead of `SUCCESS` or `FAILED`.
+* Fixed orchestrator stays subscribed after session failure. 
+
 ### Removed
 
 
