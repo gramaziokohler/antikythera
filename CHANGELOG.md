@@ -13,7 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Fixed `RedispatchPoller.stop()` to skip `Thread.join()` when invoked from within the polling thread (prevented `RuntimeError: cannot join current thread` when a task failure triggered `orchestrator.stop()` from the poller callback).
+* Changed `compas_timber` from pre-release to `>=2.1.2` in requirements.txt.
+* Fixed session state gets overwritten to `STOPPED` instead of `SUCCESS` or `FAILED`.
+* Fixed orchestrator stays subscribed after session failure. 
 
 ### Removed
 
