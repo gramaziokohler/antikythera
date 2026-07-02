@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `GET /sessions/{id}/stream` SSE endpoint that pushes `task_state_changed` and `session_state_changed` events as the orchestrator transitions state.
 - `datastore_updated` SSE event emitted after each task that writes outputs, carrying enriched `blueprint_id` + `data` payload.
-- `_persist_outputs` helper on `Orchestrator` that writes to `session_storage` and fires datastore update callbacks atomically.
 
 ### Changed
 
