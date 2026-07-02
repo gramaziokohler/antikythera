@@ -882,9 +882,7 @@ class Orchestrator:
             except Exception as e:
                 LOG.exception(f"Failed to start task [{task.id}]: {e}")
                 task.state = TaskState.FAILED
-                self.state = BlueprintSessionState.FAILED
-                self._completion_event.set()
-                self.stop()
+                self._end_session_with_state(BlueprintSessionState.FAILED)
 
         # Persist the updated session state
         self.session_storage.save_session(self.session)
@@ -902,6 +900,12 @@ class Orchestrator:
         fqn_task_id = _create_global_id(processed_task.blueprint_id, processed_task.task)
         return last_task_fqn_id == fqn_task_id
 
+    def _end_session_with_state(self, ending_state: BlueprintSessionState) -> None:
+        # ending session pattern: set the terminal state, notify interested parties, clean up
+        self.state = ending_state
+        self._completion_event.set()
+        self.stop()
+
     def on_task_completed(self, message: TaskCompletionMessage) -> None:
         """Handles incoming task completion messages."""
         LOG.info(f"task completion received : {message}")
@@ -916,9 +920,7 @@ class Orchestrator:
 
             if processed_task.task.state == TaskState.FAILED:
                 LOG.error(f"Task {processed_task.task_id} failed with error: {message.error}, aborting session.")
-                self.state = BlueprintSessionState.FAILED
-                self._completion_event.set()
-                self.stop()
+                self._end_session_with_state(BlueprintSessionState.FAILED)
                 return
 
             # Handle outputs from finished task
@@ -928,9 +930,7 @@ class Orchestrator:
                 self._map_outputs_to_session(blueprint_id, processed_task.task)
 
             if self._is_last_task_in_blueprint(processed_task):
-                self.state = BlueprintSessionState.COMPLETED
-                self._completion_event.set()
-                self.stop()
+                self._end_session_with_state(BlueprintSessionState.COMPLETED)
 
             # Handle scope loop policy (only for successfully completed tasks)
             if processed_task.task.state == TaskState.SUCCEEDED and self.state == BlueprintSessionState.RUNNING:
