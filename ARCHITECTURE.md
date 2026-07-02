@@ -494,6 +494,16 @@ The system supports different execution modes for tasks:
   * The orchestrator accepts this completion, updates the task state to `SUCCEEDED`, and broadcasts a `TaskCompletionAckMessage` identifying the "winner" (accepted agent).
   * Other agents running the task receive the ACK. If they are not the winner, they must **cancel** their local execution immediately, without sending a `TaskCompletionMessage`.
 
+### Re-dispatch (Unclaimed Task Watchdog)
+
+If a dispatched task (`TaskAssignmentMessage`, state `READY`) receives no `TaskClaimRequest` within a backoff window, the orchestrator's `RedispatchPoller` (`src/antikythera_orchestrator/orchestrator.py`) re-publishes the same `TaskAssignmentMessage`. This only guards against *unclaimed* tasks — it does not handle agent crashes mid-execution, timeouts after claim, or rejected claims.
+
+- A background thread polls tracked tasks every second; a task is tracked from dispatch until claimed (`RUNNING`) or reset.
+- Backoff is exponential: `min(base_delay * 2**attempts, max_delay)` between re-publishes.
+- After `max_redispatches` unclaimed attempts, the poller synthesizes a `TaskCompletionMessage(state=FAILED, error.code="NO_AGENT_CLAIMED")`, failing the task (and session) as if the agent had reported failure.
+- Config knobs (`antikythera/config.py`): `REDISPATCH_BASE_DELAY` (default 2s), `REDISPATCH_MAX_DELAY` (default 90s), `MAX_REDISPATCHES` (default 5).
+- Orthogonal to `ExecutionMode`: tracking always starts at `READY` regardless of EXCLUSIVE/COMPETITIVE.
+
 **Protocol Buffer Definitions**
 
 The complete protobuf schema is maintained in [`src/antikythera/proto/antikythera.proto`](src/antikythera/proto/antikythera.proto).
