@@ -14,7 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `_map_outputs_to_session` and `_map_outputs_to_outer_session` route all writes through `_persist_outputs`; neither calls `session_storage.set()` directly.
+* Changed `compas_timber` from pre-release to `>=2.1.2` in requirements.txt.
+* Fixed session state gets overwritten to `STOPPED` instead of `SUCCESS` or `FAILED`.
+* Fixed orchestrator stays subscribed after session failure. 
 
 ### Removed
 
