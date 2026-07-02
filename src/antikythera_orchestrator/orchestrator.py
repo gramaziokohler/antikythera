@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from queue import Empty
 from queue import LifoQueue
 from queue import Queue
 from typing import Any
+from typing import Callable
 from typing import Dict
 from typing import Optional
 from typing import Tuple
@@ -20,6 +22,7 @@ from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
 from compas_model.models import Model
 
+from antikythera import config
 from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
@@ -32,6 +35,7 @@ from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskClaimRequest
 from antikythera.models import TaskCompletionAckMessage
 from antikythera.models import TaskCompletionMessage
+from antikythera.models import TaskError
 from antikythera.models import TaskState
 from antikythera.models.conversions import outputs_to_keys
 from antikythera.models.conversions import params_to_dict
@@ -105,6 +109,91 @@ class ProcessedTask:
     task: Task
 
 
+class RedispatchPoller:
+    """Tracks dispatched tasks and re-publishes them if unclaimed within the backoff window.
+
+    Call ``track`` when a task is dispatched, ``untrack`` when it is claimed or reset,
+    ``start`` / ``stop`` to control the background polling thread.
+    """
+
+    def __init__(
+        self,
+        publish_fn: Callable[[TaskAssignmentMessage], None],
+        fail_fn: Callable[[TaskCompletionMessage], None],
+        get_task_state_fn: Callable[[str], Optional[TaskState]],
+        base_delay: int,
+        max_delay: int,
+        max_redispatches: int,
+    ) -> None:
+        self._publish = publish_fn
+        self._fail = fail_fn
+        self._get_task_state = get_task_state_fn
+        self._base_delay = base_delay
+        self._max_delay = max_delay
+        self._max_redispatches = max_redispatches
+
+        # fqn_task_id -> (last_dispatch_time, attempt_count, message)
+        self._entries: Dict[str, Tuple[float, int, TaskAssignmentMessage]] = {}
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> None:
+        # Stop any previously running thread before starting a new one so that
+        # pause() + start() sequences never leave orphaned poller threads.
+        self.stop()
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None and self._thread is not threading.current_thread():
+            self._thread.join(timeout=2.0)
+        self._thread = None
+
+    def track(self, fqn_task_id: str, message: TaskAssignmentMessage) -> None:
+        with self._lock:
+            self._entries[fqn_task_id] = (time.monotonic(), 0, message)
+
+    def untrack(self, fqn_task_id: str) -> None:
+        with self._lock:
+            self._entries.pop(fqn_task_id, None)
+
+    def _run(self) -> None:
+        while not self._stop.wait(1.0):
+            with self._lock:
+                snapshot = list(self._entries.items())
+
+            for fqn_task_id, (last_dispatch, attempts, message) in snapshot:
+                task_state = self._get_task_state(fqn_task_id)
+                if task_state != TaskState.READY:
+                    self.untrack(fqn_task_id)
+                    continue
+
+                delay = min(self._base_delay * (2**attempts), self._max_delay)
+                if time.monotonic() - last_dispatch < delay:
+                    continue
+
+                if attempts >= self._max_redispatches:
+                    LOG.warning(f"Task {fqn_task_id} was not claimed after {attempts} re-dispatches; failing with NO_AGENT_CLAIMED.")
+                    self.untrack(fqn_task_id)
+                    self._fail(
+                        TaskCompletionMessage(
+                            id=fqn_task_id,
+                            state=TaskState.FAILED,
+                            outputs={},
+                            agent_id="orchestrator",
+                            error=TaskError(code="NO_AGENT_CLAIMED", message=f"No agent claimed task {fqn_task_id} after {attempts} re-dispatches"),
+                        )
+                    )
+                else:
+                    LOG.info(f"Re-dispatching task {fqn_task_id} (attempt {attempts + 1})")
+                    self._publish(message)
+                    with self._lock:
+                        self._entries[fqn_task_id] = (time.monotonic(), attempts + 1, message)
+
+
 class TaskScheduler:
     """Task scheduler with support for FS and SS task dependencies."""
 
@@ -136,6 +225,14 @@ class TaskScheduler:
         # create and return a ProcessedTask object
         if message.state not in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.SKIPPED):
             raise ValueError(f"Invalid task state: {message.state}")
+
+        # Ignore duplicate completions: never downgrade a terminal task state.
+        # A task that already reached a terminal state is authoritative; the
+        # duplicate message (e.g. from the re-dispatch poller failing a task
+        # that actually succeeded) must be silently discarded.
+        if task.state in (TaskState.SUCCEEDED, TaskState.FAILED, TaskState.SKIPPED):
+            LOG.debug(f"Ignoring duplicate completion for task {task.id} already in terminal state {task.state}.")
+            return ProcessedTask(task_id=task.id, blueprint_id=blueprint_id, task=task)
 
         task.state = TaskState(message.state)
         if message.outputs:
@@ -346,6 +443,15 @@ class Orchestrator:
         self._scopes = ScopeRegistry(self.session, self.graph)
         self.scheduler = TaskScheduler(self.session, self.graph)
 
+        self._redispatch_poller = RedispatchPoller(
+            publish_fn=self.task_start_publisher.publish,
+            fail_fn=self.on_task_completed,
+            get_task_state_fn=lambda fqn: self.graph.node[fqn]["task"].state if self.graph and fqn in self.graph.node else None,
+            base_delay=config.REDISPATCH_BASE_DELAY,
+            max_delay=config.REDISPATCH_MAX_DELAY,
+            max_redispatches=config.MAX_REDISPATCHES,
+        )
+
         self.register_instance(self)
 
     @property
@@ -446,6 +552,7 @@ class Orchestrator:
             if task.state in (TaskState.FAILED, TaskState.RUNNING, TaskState.READY):
                 LOG.debug(f"Resetting task {task.id} (state={task.state}) to PENDING")
                 task.state = TaskState.PENDING
+                self._redispatch_poller.untrack(node)
 
     def reset_task_state(self, blueprint_id: str, task_id: str, include_downstream: bool = True, clear_outputs: bool = True) -> list[str]:
         """Reset a task (and optionally its downstream dependents) to PENDING.
@@ -489,6 +596,7 @@ class Orchestrator:
             task: Task = self.graph.node[fqn_id]["task"]
             task_blueprint_id = self.graph.node[fqn_id]["blueprint_id"]
             task.state = TaskState.PENDING
+            self._redispatch_poller.untrack(fqn_id)
             if clear_outputs:
                 for output in task.outputs:
                     output.value = None
@@ -570,12 +678,26 @@ class Orchestrator:
             LOG.warning("Session is already running.")
             return
 
+        # If the session already completed successfully (e.g. completion fired
+        # while the orchestrator was paused and all tasks finished before the
+        # second start() call), signal any waiters and return immediately.
+        # To re-run a completed session, first call reset_task_state() or
+        # reset_scope(), which move state back to STOPPED.
+        # NOTE: FAILED sessions are intentionally NOT guarded here — the normal
+        # retry flow calls start() directly after a failure to reset and re-run.
+        if self.state == BlueprintSessionState.COMPLETED:
+            LOG.info(f"Session {self.session.bsid} is already COMPLETED; signalling completion.")
+            self._completion_event.set()
+            return
+
         self._reset_failed_tasks()
         self._completion_event.clear()
 
         # Ensure subscriptions are active (in case we are restarting after stop)
         self.task_completion_subscriber.subscribe()
         self.task_claim_subscriber.subscribe()
+
+        self._redispatch_poller.start()
 
         self.state = BlueprintSessionState.RUNNING
         LOG.info(f"Orchestrator session with id {self.session.bsid} started!")
@@ -587,6 +709,7 @@ class Orchestrator:
         self.task_completion_subscriber.unsubscribe()
         self.task_claim_subscriber.unsubscribe()
 
+        self._redispatch_poller.stop()
         if self.state in (BlueprintSessionState.RUNNING, BlueprintSessionState.PENDING):
             # only set to STOPPED if the session is currently active, otherwise we overwrite the state of a completed or failed session
             self.state = BlueprintSessionState.STOPPED
@@ -913,11 +1036,11 @@ class Orchestrator:
 
                 context = self.get_composite_blueprint_context(blueprint_id)
 
-                # TODO: what do we do if no agent even claims the task.. should there be some timeout? YES!
+                fqn_task_id = _create_global_id(blueprint_id, task)
                 task.state = TaskState.READY
                 LOG.debug(f"Publishing TaskAssignmentMessage for task [{task.id}]")
                 message = TaskAssignmentMessage(
-                    id=_create_global_id(blueprint_id, task),
+                    id=fqn_task_id,
                     type=task.type,
                     inputs=inputs,
                     output_keys=outputs_to_keys(task.outputs),
@@ -926,6 +1049,7 @@ class Orchestrator:
                     execution_mode=execution_mode,
                 )
                 self.task_start_publisher.publish(message)
+                self._redispatch_poller.track(fqn_task_id, message)
                 self._notify_task_state_change(blueprint_id, task.id, task.state.value)
                 LOG.debug("Published TaskAssignmentMessage...")
             except Exception as e:
@@ -958,6 +1082,14 @@ class Orchestrator:
     def on_task_completed(self, message: TaskCompletionMessage) -> None:
         """Handles incoming task completion messages."""
         LOG.info(f"task completion received : {message}")
+
+        # Drop messages that arrive after the session has already terminated.
+        # This can happen when the re-dispatch poller injects a failure for a
+        # task that actually succeeded, or when stale agent messages arrive
+        # after stop().
+        if self.state in (BlueprintSessionState.COMPLETED, BlueprintSessionState.FAILED):
+            LOG.debug(f"Dropping completion for {message.id}: session already in terminal state {self.state}.")
+            return
 
         self.scheduler.queue_message(message)
         processed_tasks = self.scheduler.process_queue()
@@ -1016,12 +1148,13 @@ class Orchestrator:
 
         if can_allocate:
             task.state = TaskState.RUNNING
-            blueprint_id = self.graph.node_attribute(task_id, "blueprint_id")
-
+            self._redispatch_poller.untrack(task_id)
+            
             allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
             self.task_allocation_publisher.publish(allocation)
             LOG.info(f"Allocated task {task_id} to agent {message.agent_id} (Mode: {execution_mode})")
 
+            blueprint_id = self.graph.node_attribute(task_id, "blueprint_id")
             self._notify_task_state_change(blueprint_id, task.id, task.state.value)
 
             # Persist the updated session state

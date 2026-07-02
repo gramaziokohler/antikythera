@@ -1,0 +1,40 @@
+01-core-implementation.md  [x] done (2026-06-23)
+02-tests.md                [x] done (2026-06-24)
+
+## 2026-06-23 — Issue 01 complete
+
+Implemented orchestrator-side re-dispatch polling loop.
+
+Changes:
+- src/antikythera/config.py: added REDISPATCH_BASE_DELAY (2s), REDISPATCH_MAX_DELAY (90s), MAX_REDISPATCHES (5), all env-var overridable
+- src/antikythera_orchestrator/orchestrator.py:
+  - Added _dispatch_times, _dispatch_counts, _dispatch_lock instance dicts
+  - Added _poll_thread / _poll_stop for background polling
+  - _poll_for_stale_tasks(): wakes every 1s, re-publishes unclaimed READY tasks with exponential backoff (min(base*2^attempts, max)); fails with NO_AGENT_CLAIMED after MAX_REDISPATCHES
+  - _schedule_tasks(): stores TaskAssignmentMessage on graph node, populates dispatch dicts, removed TODO comment
+  - on_task_claim(): clears dispatch dicts on READY→RUNNING allocation
+  - _reset_failed_tasks() / reset_task_state(): clears dispatch dicts for reset tasks
+  - start() / stop(): starts / joins poll thread
+
+All 102 existing tests pass.
+
+## 2026-06-24 — Issue 02 complete
+
+Added test coverage for the re-dispatch polling loop.
+
+Changes:
+- tests/orchestrator/test_orchestrator_redispatch.py (new file, 3 tests):
+  - test_dispatch_tracking_lifecycle: integration test verifying RedispatchPoller._entries
+    is populated on dispatch and cleared by on_task_claim, _reset_failed_tasks, and reset_task_state
+  - test_redispatch_publishes_with_backoff: unit test of RedispatchPoller directly; uses
+    backdated _entries to assert publish fires after backoff window and not before
+  - test_no_agent_claimed_session_fails: integration test with REDISPATCH_BASE_DELAY=0 and
+    MAX_REDISPATCHES=2 (patched via config); asserts session.state == FAILED and task
+    state == FAILED after the poller exhausts all re-dispatch attempts
+
+- src/antikythera_orchestrator/orchestrator.py:
+  - Fixed RedispatchPoller.stop() to skip Thread.join() when called from within the polling
+    thread itself (the _fail callback triggered orchestrator.stop() which called stop()
+    re-entrantly, raising RuntimeError: cannot join current thread)
+
+All 61 tests pass (58 pre-existing + 3 new).
