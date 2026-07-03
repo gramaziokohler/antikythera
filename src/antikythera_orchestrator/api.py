@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import re
 import tempfile
@@ -1282,7 +1281,7 @@ async def stream_session_events(session_id: str):
                 event = await queue.get()
                 if event is None:
                     break
-                yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
+                yield f"event: {event['event']}\ndata: {json_dumps(event['data'])}\n\n"
         finally:
             with _sse_listeners_lock:
                 listeners = _sse_listeners.get(session_id)
