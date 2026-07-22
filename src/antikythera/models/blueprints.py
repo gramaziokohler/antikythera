@@ -525,16 +525,20 @@ class Blueprint(Data):
         name that no task declares raises ``NameError`` at runtime, long after the
         blueprint was accepted.
 
-        Unlike :meth:`validate` this never raises, because an unresolved name is
-        suspicious rather than provably wrong: agents may return outputs the
-        blueprint never declared (see :meth:`Task.set_output_value`), and an inner
-        blueprint additionally receives context from the composite task that
-        invokes it.  Treat the result as authoring-time warnings.
+        Unlike :meth:`validate` this never raises; the caller decides how severe a
+        problem is.  ``POST /blueprints/upload`` rejects a blueprint that reports
+        any, while loading one from file only logs them, so that blueprints already
+        in storage stay loadable and repairable.
+
+        Note that an unresolved name is not *provably* wrong: agents may return
+        outputs the blueprint never declared (see :meth:`Task.set_output_value`),
+        and an inner blueprint additionally receives context from the composite
+        task that invokes it.  Both cases are reported here.
 
         Returns
         -------
         List[str]
-            Human-readable warnings, one per problematic expression.
+            Human-readable problems, one per problematic expression.
         """
         warnings = []
         produced = {out.set_to or out.name for task in self.tasks for out in task.outputs}

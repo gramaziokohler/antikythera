@@ -170,7 +170,6 @@ class BlueprintInfo(BaseModel):
 class UploadBlueprintResponse(BaseModel):
     blueprint_id: str
     message: str
-    warnings: List[str] = []
 
 
 class DeleteBlueprintResponse(BaseModel):
@@ -487,7 +486,8 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
     Raises
     ------
     HTTPException
-        If the file is not a JSON file or cannot be parsed.
+        400 if the file is not JSON, cannot be parsed, or fails the dataflow
+        check (the detail then carries a ``problems`` list).
     """
     if not file.filename or not file.filename.endswith(".json"):
         raise HTTPException(status_code=400, detail="Only JSON files are accepted.")
@@ -510,6 +510,18 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
         LOG.exception("Failed to parse uploaded blueprint file. Make sure it's a valid JSON blueprint.")
         raise HTTPException(status_code=400, detail=f"Failed to parse blueprint file: {exc}")
 
+    # Reject before storing: a condition reading a name no task produces fails the
+    # session at runtime, so there is no point accepting the blueprint. Checked here
+    # rather than in Blueprint.validate() so that blueprints already in storage
+    # (uploaded before this check existed) can still be loaded and repaired.
+    problems = blueprint.check_dataflow()
+    if problems:
+        LOG.warning(f"Rejected blueprint '{blueprint.id}': {len(problems)} dataflow problem(s).")
+        raise HTTPException(
+            status_code=400,
+            detail={"message": f"Blueprint '{blueprint.id}' has {len(problems)} dataflow problem(s).", "problems": problems},
+        )
+
     try:
         with BlueprintStorage() as storage:
             storage.add_blueprint(blueprint)
@@ -517,11 +529,7 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
         LOG.exception("Failed to save blueprint to database")
         raise HTTPException(status_code=500, detail=f"Failed to save blueprint: {exc}")
 
-    # Dataflow warnings never block an upload: they flag names that look unresolvable
-    # but may still be written by an agent at runtime. See Blueprint.check_dataflow.
-    warnings = blueprint.check_dataflow()
-
-    return UploadBlueprintResponse(blueprint_id=blueprint.id, message="Blueprint uploaded successfully.", warnings=warnings)
+    return UploadBlueprintResponse(blueprint_id=blueprint.id, message="Blueprint uploaded successfully.")
 
 
 @app.delete("/blueprints/{blueprint_id}", response_model=DeleteBlueprintResponse)
