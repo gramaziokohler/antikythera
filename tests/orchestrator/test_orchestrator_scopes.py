@@ -331,6 +331,34 @@ def test_scope_while_policy_max_iterations(mock_immudb, mock_transport_orchestra
     launcher.stop()
 
 
+def test_scope_while_unevaluable_condition_fails_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+    """A while condition that cannot be evaluated fails the session.
+
+    Silently treating it as False would skip the loop entirely and let the
+    session run to completion looking like a success.
+    """
+    # No task writes 'elements_remaining' to session storage → NameError at eval time.
+    blueprint = _make_scope_while_blueprint(condition="elements_remaining > 0")
+
+    session = BlueprintSession(bsid="test_scope_while_bad_condition", blueprint=blueprint)
+    orchestrator = cleanup_manager.register(Orchestrator(session))
+    launcher = cleanup_manager.register(AgentLauncher())
+    launcher.start()
+
+    orchestrator.start()
+    completed = orchestrator.await_completion(timeout=20)
+
+    assert completed, "Session did not terminate in time"
+    assert orchestrator.state == BlueprintSessionState.FAILED
+
+    # The scope body ran exactly once, and nothing downstream of the scope ran.
+    assert ScopeTestAgent.call_counts.get("global_counter") == 1
+    assert orchestrator.graph.node[f"{blueprint.id}.end"]["task"].state != TaskState.SUCCEEDED
+
+    orchestrator.stop()
+    launcher.stop()
+
+
 # ---------------------------------------------------------------------------
 # Tests: user-initiated scope reset (Orchestrator.reset_scope)
 # ---------------------------------------------------------------------------

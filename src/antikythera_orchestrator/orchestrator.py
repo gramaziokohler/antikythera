@@ -41,6 +41,7 @@ from antikythera.models.conversions import outputs_to_keys
 from antikythera.models.conversions import params_to_dict
 
 from .conditionals import safe_eval_condition
+from .scopes import ScopeConditionError
 from .scopes import ScopeRegistry
 from .sequencers import SequencerRegistry
 from .storage import BlueprintStorage
@@ -969,6 +970,12 @@ class Orchestrator:
         """Evaluate the scope loop policy when a scope_end task completes.
 
         Returns True if scope tasks were reset for another iteration, False otherwise.
+
+        Raises
+        ------
+        ScopeConditionError
+            If the scope declares a while-condition that cannot be evaluated
+            against the current session data.
         """
         task = processed_task.task
         if not task.scope_end:
@@ -1116,7 +1123,14 @@ class Orchestrator:
 
             # Handle scope loop policy (only for successfully completed tasks)
             if processed_task.task.state == TaskState.SUCCEEDED and self.state == BlueprintSessionState.RUNNING:
-                self._handle_scope_completion(processed_task)
+                try:
+                    self._handle_scope_completion(processed_task)
+                except ScopeConditionError as e:
+                    # A loop whose condition cannot be evaluated has no defined
+                    # number of iterations, so the session cannot continue.
+                    LOG.error(f"Task {processed_task.task_id}: {e} Aborting session.")
+                    self._end_session_with_state(BlueprintSessionState.FAILED)
+                    return
 
         # Send ACK
         ack = TaskCompletionAckMessage(id=message.id, state=TaskState(message.state), accepted_agent_id=message.agent_id)

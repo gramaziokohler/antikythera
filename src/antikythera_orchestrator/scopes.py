@@ -35,6 +35,15 @@ from .conditionals import safe_eval_condition
 LOG = logging.getLogger(__name__)
 
 
+class ScopeConditionError(RuntimeError):
+    """Raised when a scope's loop condition cannot be evaluated.
+
+    Most commonly the condition reads a name that no task wrote to session
+    data — see :meth:`antikythera.models.Blueprint.check_dataflow`, which flags
+    this at authoring time.
+    """
+
+
 @dataclass
 class RuntimeScope:
     """Runtime representation of a scope within the flattened execution graph.
@@ -91,6 +100,11 @@ class RuntimeScope:
         Returns
         -------
         bool
+
+        Raises
+        ------
+        ScopeConditionError
+            If a while-condition cannot be evaluated against *eval_context*.
         """
         # TODO: make a small class for each policy type and move evaluation logic there so that it's easier to add new policies and keep this method clean
         if self.retry_policy:
@@ -120,11 +134,15 @@ class RuntimeScope:
 
         try:
             result = safe_eval_condition(condition, eval_context)
-            LOG.info(f"Scope '{self.name}': while condition '{condition}' evaluated to {result}.")
-            return result
         except Exception as e:
-            LOG.error(f"Error evaluating while condition for scope '{self.name}': {e}")
-            return False
+            # Do not fall through to False: that would silently skip the loop and
+            # let the session run to completion looking like a success.
+            raise ScopeConditionError(
+                f"Scope '{self.name}': cannot evaluate while condition '{condition}' ({e}). Names available in session data: {sorted(eval_context)}."
+            ) from e
+
+        LOG.info(f"Scope '{self.name}': while condition '{condition}' evaluated to {result}.")
+        return result
 
     # -- Task reset ----------------------------------------------------------
 
