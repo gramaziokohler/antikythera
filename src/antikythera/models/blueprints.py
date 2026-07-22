@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import builtins
 from copy import deepcopy
 from enum import auto
 from typing import Any
@@ -515,6 +517,71 @@ class Blueprint(Data):
                 if overlap and not (a <= b or b <= a):
                     raise ValueError(f"Scopes '{id_a}' and '{id_b}' are interlaced. Scopes must be either nested or disjoint.")
 
+    def check_dataflow(self) -> List[str]:
+        """Report condition expressions that read names no task in this blueprint produces.
+
+        Conditions are evaluated at runtime against session data, which is
+        populated exclusively from declared task outputs.  A condition reading a
+        name that no task declares raises ``NameError`` at runtime, long after the
+        blueprint was accepted.
+
+        Unlike :meth:`validate` this never raises, because an unresolved name is
+        suspicious rather than provably wrong: agents may return outputs the
+        blueprint never declared (see :meth:`Task.set_output_value`), and an inner
+        blueprint additionally receives context from the composite task that
+        invokes it.  Treat the result as authoring-time warnings.
+
+        Returns
+        -------
+        List[str]
+            Human-readable warnings, one per problematic expression.
+        """
+        warnings = []
+        produced = {out.set_to or out.name for task in self.tasks for out in task.outputs}
+
+        for task in self.tasks:
+            for description, expression, available in self._condition_expressions(task, produced):
+                try:
+                    names = _free_names(expression)
+                except SyntaxError as e:
+                    warnings.append(f"Task '{task.id}': {description} '{expression}' is not a valid expression ({e.msg}).")
+                    continue
+
+                for name in sorted(names - available):
+                    warnings.append(
+                        f"Task '{task.id}': {description} '{expression}' reads '{name}', "
+                        f"which no task in this blueprint declares as an output. "
+                        f"It will raise NameError at runtime unless an agent writes it."
+                    )
+
+        return warnings
+
+    def _condition_expressions(self, task: Task, produced: set) -> List[tuple]:
+        """Yield ``(description, expression, available_names)`` for each condition on *task*.
+
+        The available names differ per condition kind because the orchestrator
+        builds a different evaluation context for each: skip conditions also see
+        the task's own params and inputs, while-conditions see session data only.
+        """
+        expressions = []
+
+        condition = task.condition
+        if not condition:
+            # Backward compatibility: conditions used to be declared as a param.
+            condition_param = task.get_param("condition")
+            condition = condition_param.value if condition_param else None
+
+        if isinstance(condition, str):
+            local_names = {io.name for io in list(task.params) + list(task.inputs)}
+            expressions.append(("condition", condition, produced | local_names))
+
+        while_policy = (task.scope_start or {}).get("while_policy") or {}
+        while_condition = while_policy.get("condition")
+        if isinstance(while_condition, str):
+            expressions.append(("while condition", while_condition, produced))
+
+        return expressions
+
     def _build_scopes(self) -> List[Scope]:
         """Discover and build Scope objects from scope_start/scope_end task pairs."""
         starts = {}  # task_id -> Task
@@ -573,6 +640,30 @@ class Blueprint(Data):
                 )
             )
         return scopes
+
+
+def _free_names(expression: str) -> set:
+    """Return the names *expression* reads without binding them itself.
+
+    Names bound inside the expression (comprehension targets, lambda arguments)
+    and Python builtins are excluded, since neither has to come from session data.
+
+    Raises
+    ------
+    SyntaxError
+        If the expression cannot be parsed.
+    """
+    tree = ast.parse(expression, mode="eval")
+
+    read: set = set()
+    bound: set = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            (read if isinstance(node.ctx, ast.Load) else bound).add(node.id)
+        elif isinstance(node, ast.arg):
+            bound.add(node.arg)
+
+    return {name for name in read - bound if not hasattr(builtins, name)}
 
 
 class BlueprintSessionState(StrEnum):

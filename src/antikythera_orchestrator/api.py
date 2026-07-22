@@ -170,6 +170,7 @@ class BlueprintInfo(BaseModel):
 class UploadBlueprintResponse(BaseModel):
     blueprint_id: str
     message: str
+    warnings: List[str] = []
 
 
 class DeleteBlueprintResponse(BaseModel):
@@ -516,7 +517,11 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
         LOG.exception("Failed to save blueprint to database")
         raise HTTPException(status_code=500, detail=f"Failed to save blueprint: {exc}")
 
-    return UploadBlueprintResponse(blueprint_id=blueprint.id, message="Blueprint uploaded successfully.")
+    # Dataflow warnings never block an upload: they flag names that look unresolvable
+    # but may still be written by an agent at runtime. See Blueprint.check_dataflow.
+    warnings = blueprint.check_dataflow()
+
+    return UploadBlueprintResponse(blueprint_id=blueprint.id, message="Blueprint uploaded successfully.", warnings=warnings)
 
 
 @app.delete("/blueprints/{blueprint_id}", response_model=DeleteBlueprintResponse)
