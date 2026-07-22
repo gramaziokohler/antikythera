@@ -355,6 +355,12 @@ def test_scope_while_unevaluable_condition_fails_session(mock_immudb, mock_trans
     assert ScopeTestAgent.call_counts.get("global_counter") == 1
     assert orchestrator.graph.node[f"{blueprint.id}.end"]["task"].state != TaskState.SUCCEEDED
 
+    # The reason is recorded on the session so clients can display it.
+    error = orchestrator.session.last_task_error
+    assert error is not None
+    assert error.code == "SCOPE_CONDITION_ERROR"
+    assert "elements_remaining" in error.message
+
     orchestrator.stop()
     launcher.stop()
 

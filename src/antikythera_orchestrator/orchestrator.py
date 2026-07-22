@@ -692,6 +692,8 @@ class Orchestrator:
             return
 
         self._reset_failed_tasks()
+        # Drop the reason a previous run failed, so clients never show a stale error.
+        self.session.last_task_error = None
         self._completion_event.clear()
 
         # Ensure subscriptions are active (in case we are restarting after stop)
@@ -1062,7 +1064,8 @@ class Orchestrator:
             except Exception as e:
                 LOG.exception(f"Failed to start task [{task.id}]: {e}")
                 task.state = TaskState.FAILED
-                self._end_session_with_state(BlueprintSessionState.FAILED)
+                error = TaskError(code="TASK_DISPATCH_FAILED", message=str(e), details=pending_task.task.id)
+                self._end_session_with_state(BlueprintSessionState.FAILED, error=error)
 
         # Persist the updated session state
         self.session_storage.save_session(self.session)
@@ -1080,8 +1083,12 @@ class Orchestrator:
         fqn_task_id = _create_global_id(processed_task.blueprint_id, processed_task.task)
         return last_task_fqn_id == fqn_task_id
 
-    def _end_session_with_state(self, ending_state: BlueprintSessionState) -> None:
+    def _end_session_with_state(self, ending_state: BlueprintSessionState, error: Optional[TaskError] = None) -> None:
         # ending session pattern: set the terminal state, notify interested parties, clean up
+        # NOTE: last_task_error is recorded *before* the state setter, which persists the
+        # session — otherwise clients fetching the session on the state change see no reason.
+        if error is not None:
+            self.session.last_task_error = error
         self.state = ending_state
         self._completion_event.set()
         self.stop()
@@ -1109,7 +1116,8 @@ class Orchestrator:
             self._notify_task_state_change(blueprint_id, processed_task.task.id, processed_task.task.state.value)
             if processed_task.task.state == TaskState.FAILED:
                 LOG.error(f"Task {processed_task.task_id} failed with error: {message.error}, aborting session.")
-                self._end_session_with_state(BlueprintSessionState.FAILED)
+                error = message.error or TaskError(code="TASK_FAILED", message=f"Task '{processed_task.task.id}' failed without reporting an error.")
+                self._end_session_with_state(BlueprintSessionState.FAILED, error=error)
                 return
 
             # Handle outputs from finished task
@@ -1129,7 +1137,8 @@ class Orchestrator:
                     # A loop whose condition cannot be evaluated has no defined
                     # number of iterations, so the session cannot continue.
                     LOG.error(f"Task {processed_task.task_id}: {e} Aborting session.")
-                    self._end_session_with_state(BlueprintSessionState.FAILED)
+                    error = TaskError(code="SCOPE_CONDITION_ERROR", message=str(e), details=processed_task.task_id)
+                    self._end_session_with_state(BlueprintSessionState.FAILED, error=error)
                     return
 
         # Send ACK

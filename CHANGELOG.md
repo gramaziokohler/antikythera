@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Fixed `TaskError` not calling `Data.__init__`, which made any session carrying an error fail to serialize with `AttributeError: '_name'`. The orchestrator swallows save failures, so a failed session silently stopped persisting its state and stayed `running` in storage.
+* Session failures now record the reason in `BlueprintSession.last_task_error` (task failures, dispatch failures and scope condition errors). The field existed and was read by the frontend but was never written.
 * Fixed a scope `while_policy` condition that cannot be evaluated (e.g. it reads a name no task wrote to session data) being silently treated as False, which skipped the loop and ran the session to completion as if it had succeeded. The session now fails with `ScopeConditionError`, listing the names actually available in session data.
 
 ### Removed
