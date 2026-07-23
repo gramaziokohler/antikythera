@@ -673,13 +673,15 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
 
 
 def _revive_session(session_id: str, broker_host: str, broker_port: int) -> ActiveSession:
-    """Revive a session from storage if it is not currently active in memory."""
+    """Revive a session from storage if it is not currently active in memory.
+
+    The revived session keeps the state it was stored with. Note that any
+    change made to ``session`` here would not survive the ``Orchestrator``
+    constructor, which loads the session from storage again and replaces the
+    object it was handed.
+    """
 
     session = _get_bp_session_from_storage(session_id)
-
-    if session.state == BlueprintSessionState.COMPLETED:
-        # Reset to STOPPED so the orchestrator can be started again
-        session.state = BlueprintSessionState.STOPPED
 
     orchestrator = Orchestrator(session, broker_host=broker_host, broker_port=broker_port)
 
@@ -743,8 +745,9 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
 
     LOG.debug(f"Starting session {session_id} with broker {request.broker_host}:{request.broker_port}")
 
-    if session and session.orchestrator.state in (BlueprintSessionState.COMPLETED, BlueprintSessionState.FAILED):
-        # Finished in-memory session: stop and evict so it can be re-revived from storage
+    if session and session.orchestrator.state == BlueprintSessionState.FAILED:
+        # Failed in-memory session: stop and evict so it can be re-revived from
+        # storage, after which start() resets the failed tasks and carries on.
         try:
             session.orchestrator.stop()
         except Exception:
@@ -758,7 +761,19 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
         # Always use the server-side MQTT config — the client-supplied broker_host
         # reflects the agent-facing address (e.g. localhost for browser agents) and
         # is not usable for the orchestrator's own connection inside Docker.
-        session = _revive_session(session_id, config.MQTT_BROKER_HOST, config.MQTT_BROKER_PORT)
+        try:
+            session = _revive_session(session_id, config.MQTT_BROKER_HOST, config.MQTT_BROKER_PORT)
+        except RequestedSessionNotFound as snf:
+            raise HTTPException(status_code=404, detail=f"Session not found: {snf}")
+
+    # Every task in a completed session has already succeeded, so there is
+    # nothing left to schedule and start() would report success while doing
+    # nothing at all. Running the blueprint again means a new session.
+    if session.orchestrator.state == BlueprintSessionState.COMPLETED:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Session '{session_id}' has already completed. POST /sessions/{session_id}/restart to run its blueprint again.",
+        )
 
     try:
         session.orchestrator.start()
@@ -769,6 +784,54 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
         raise HTTPException(status_code=500, detail=f"Failed to start session: {exc}")
 
     return SessionActionResponse(session_id=session_id, message="Session started.")
+
+
+@app.post("/sessions/{session_id}/restart", response_model=StartBlueprintResponse, status_code=202)
+def restart_session(session_id: str) -> StartBlueprintResponse:
+    """Run a finished session's blueprint again as a brand new session.
+
+    A finished session is the record of a run, so restarting never rewinds it:
+    the original keeps its task states and data store, and the re-run gets a
+    fresh session ID which the caller is expected to follow.
+
+    The blueprint is re-read from blueprint storage rather than copied off the
+    old session, whose own copy carries the finished task states and the
+    dynamic tasks expanded during the run that just ended.
+    """
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if session and session.orchestrator.state == BlueprintSessionState.RUNNING:
+        raise HTTPException(status_code=409, detail="Session is running. Pause it before restarting.")
+
+    try:
+        previous = _get_bp_session_from_storage(session_id)
+    except RequestedSessionNotFound as snf:
+        raise HTTPException(status_code=404, detail=f"Session not found: {snf}")
+
+    # As in start_session, the orchestrator's own broker connection uses the
+    # server-side config rather than the agent-facing address sent by the client.
+    new_session_id = _start_blueprint_session(
+        StartBlueprintRequest(
+            blueprint_id=previous.blueprint.id,
+            broker_host=config.MQTT_BROKER_HOST,
+            broker_port=config.MQTT_BROKER_PORT,
+            params=previous.params or {},
+            session_name=None,
+        )
+    )
+
+    with _sessions_lock:
+        new_session = _sessions[new_session_id]
+
+    try:
+        new_session.orchestrator.start()
+    except Exception as exc:
+        LOG.exception(f"Failed to start session {new_session_id} restarted from {session_id}")
+        raise HTTPException(status_code=500, detail=f"Failed to start restarted session: {exc}")
+
+    LOG.info(f"Restarted session {session_id} as {new_session_id}.")
+    return StartBlueprintResponse(session_id=new_session_id, message=f"Restarted as session {new_session_id}.")
 
 
 @app.post("/sessions/{session_id}/tasks/reset", response_model=SessionActionResponse)
