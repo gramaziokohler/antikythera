@@ -331,6 +331,40 @@ def test_scope_while_policy_max_iterations(mock_immudb, mock_transport_orchestra
     launcher.stop()
 
 
+def test_scope_loop_announces_the_reset_of_scope_tasks(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+    """Looping a scope reports its tasks back to PENDING.
+
+    The reset happens inside the orchestrator, with no completion message
+    behind it. Left unannounced, the last thing a client hears about a scope
+    task is that it SUCCEEDED, so the previous iteration's results stay on
+    screen while the scope runs again.
+    """
+    blueprint = _make_scope_while_blueprint(condition="counter < 3")
+
+    session = BlueprintSession(bsid="test_scope_reset_notify", blueprint=blueprint)
+    orchestrator = cleanup_manager.register(Orchestrator(session))
+
+    observed = []
+    orchestrator.register_task_state_callback(lambda bp_id, task_id, state: observed.append((task_id, state)))
+
+    launcher = cleanup_manager.register(AgentLauncher())
+    launcher.start()
+
+    orchestrator.start()
+    assert orchestrator.await_completion(timeout=20), "Session did not complete in time"
+
+    body_states = [state for task_id, state in observed if task_id == "scope_body"]
+
+    # Three runs of the body, each announced as SUCCEEDED, and a reset to
+    # PENDING after the two that were followed by another iteration.
+    assert body_states.count(TaskState.SUCCEEDED.value) == 3
+    assert body_states.count(TaskState.PENDING.value) == 2
+    assert body_states.index(TaskState.SUCCEEDED.value) < body_states.index(TaskState.PENDING.value)
+
+    orchestrator.stop()
+    launcher.stop()
+
+
 def test_scope_while_unevaluable_condition_fails_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """A while condition that cannot be evaluated fails the session.
 

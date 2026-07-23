@@ -10,6 +10,7 @@ from queue import Queue
 from typing import Any
 from typing import Callable
 from typing import Dict
+from typing import Iterable
 from typing import Optional
 from typing import Tuple
 from typing import cast
@@ -540,6 +541,22 @@ class Orchestrator:
             except Exception:
                 LOG.exception("Error in task state SSE callback")
 
+    def _notify_tasks_reset(self, fqn_task_ids: Iterable[str]) -> None:
+        """Announce tasks whose state changed without a completion message behind it.
+
+        Every other state change reaches clients as a side effect of dispatching
+        or completing a task. A reset has neither, so without this a scope that
+        loops leaves the previous iteration's results on screen: the tasks are
+        PENDING again in the graph, but the last thing anyone was told about
+        them is that they succeeded.
+        """
+        for fqn_task_id in fqn_task_ids:
+            node_data = self.graph.node.get(fqn_task_id)
+            if not node_data:
+                continue
+            task: Task = node_data["task"]
+            self._notify_task_state_change(node_data["blueprint_id"], task.id, task.state.value)
+
     def _reset_failed_tasks(self) -> None:
         """Resets tasks that are in a non-resumable state to PENDING.
 
@@ -603,6 +620,8 @@ class Orchestrator:
                     output.value = None
                     mapped_key = output.set_to or output.name
                     self.session_storage.set(task_blueprint_id, mapped_key, None)
+
+        self._notify_tasks_reset(to_reset)
 
         # If the session was in a terminal state (FAILED/COMPLETED), move it
         # back to STOPPED so that it can be resumed.
@@ -953,7 +972,7 @@ class Orchestrator:
         if scope is None:
             raise KeyError(f"Scope not found: {scope_name}")
 
-        scope.reset_tasks(self.graph)
+        self._notify_tasks_reset(scope.reset_tasks(self.graph))
         self.session.scope_iterations.pop(scope_name, None)
         for nested in self._scopes.nested_within(scope):
             self.session.scope_iterations.pop(nested.name, None)
@@ -997,7 +1016,7 @@ class Orchestrator:
             return False
 
         self.session.scope_iterations[scope.name] = iterations + 1
-        scope.reset_tasks(self.graph)
+        self._notify_tasks_reset(scope.reset_tasks(self.graph))
         for nested in self._scopes.nested_within(scope):
             self.session.scope_iterations.pop(nested.name, None)
         LOG.info(f"Scope '{scope.name}': reset {len(scope.task_fqns)} tasks to PENDING for iteration {iterations + 2}.")

@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 
 from compas.datastructures import Graph
@@ -146,8 +147,17 @@ class RuntimeScope:
 
     # -- Task reset ----------------------------------------------------------
 
-    def reset_tasks(self, graph: Graph) -> None:
-        """Reset all tasks in this scope back to PENDING and clear their outputs."""
+    def reset_tasks(self, graph: Graph) -> List[str]:
+        """Reset all tasks in this scope back to PENDING and clear their outputs.
+
+        Returns
+        -------
+        List[str]
+            The fully-qualified IDs of the tasks that were reset, so the caller
+            can announce the change; nothing else reports a state that moves
+            without a task completion message behind it.
+        """
+        reset_fqns = []
         for fqn_task_id in self.task_fqns:
             node_data = graph.node.get(fqn_task_id)
             if not node_data:
@@ -156,6 +166,8 @@ class RuntimeScope:
             task.state = TaskState.PENDING
             for output in task.outputs:
                 output.value = None
+            reset_fqns.append(fqn_task_id)
+        return reset_fqns
 
     def skip_tasks(self, graph: Graph, excluded_fqn: str) -> None:
         """Mark all scope tasks (except *excluded_fqn*) as SKIPPED."""
