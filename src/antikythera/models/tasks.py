@@ -56,6 +56,7 @@ class TaskError(Data):
         return {"code": self.code, "message": self.message, "details": self.details}
 
     def __init__(self, code: str, message: str, details: Optional[Any] = None) -> None:
+        super().__init__()
         self.code = code
         self.message = message
         self.details = details

@@ -441,12 +441,12 @@ This feature allows a blueprint author to define a task as a start/open scope ta
 {
   "id": "scope_start_task",
   "type": "some.task",
-  "condition": "fabrication_status = 'not_finished'",  // this is the skip condition, whatever the policy is, this condition evaluating to True means the entrire scope is skipped.
+  "condition": "fabrication_status == 'not_finished'",  // this is the skip condition, whatever the policy is, this condition evaluating to True means the entrire scope is skipped.
   "scope_start":  {
     "name": "scope name",
     "while_policy": {
       "max_iterations": 5, // optional
-      "condition": "fabrication_status = 'not_finished'"
+      "condition": "fabrication_status == 'not_finished'"
     },
   },
   "inputs": [
@@ -456,7 +456,14 @@ This feature allows a blueprint author to define a task as a start/open scope ta
 }
 
 ```
-  
+
+The while condition is evaluated against the blueprint's session data, which is
+populated **exclusively from declared task outputs** (`set_to` or `name`). A task
+inside the scope must therefore declare an output that produces
+`fabrication_status`, otherwise the condition raises `NameError` and the session
+fails. `Blueprint.check_dataflow()` reports such names at authoring time.
+
+
 
 ### COG Archive
 
