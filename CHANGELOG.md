@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Renamed `type` to `type_hint` on task inputs, outputs and params (`TaskIO` and subclasses) to disambiguate it from a task's `type` (agent.tool). Blueprint JSON accepts either key on load and always emits `type_hint`; `type` is a deprecated alias and a `type` property is kept for in-process readers. See ADR-0003.
+
 ### Removed
 
 

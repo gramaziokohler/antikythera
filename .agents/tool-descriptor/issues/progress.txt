@@ -1,0 +1,8 @@
+2026-07-30T19:12:50Z issue-td-01-type-hint-replaces-type: DONE
+- TaskIO/TaskInput/TaskOutput/TaskParam now take `type_hint`, still accept deprecated `type` kwarg on construction, and expose a `type` property that returns `type_hint`.
+- Serialisation (TaskIOSerializer.to_dict) always emits `type_hint`, never `type`.
+- blueprint.v1.schema.json: TaskIO gained a `type_hint` property; `type` documented as deprecated alias. Neither was ever in TaskIO's `required` list, so no schema change was needed there.
+- Rewrote all `examples/*.json` task input/output `type` keys to `type_hint` (56 occurrences across 14 files), preserving original formatting.
+- Added tests in tests/models/test_io.py covering: accepting type_hint, accepting deprecated type, serialisation always emitting type_hint, loading with either key producing equivalent objects, and a legacy blueprint using `type` loading/round-tripping.
+- CHANGELOG.md Unreleased/Changed updated.
+- Full test suite (129 tests) and ruff check/format pass.

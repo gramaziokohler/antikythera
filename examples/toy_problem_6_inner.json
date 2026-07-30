@@ -10,7 +10,7 @@
             "outputs": [
                 {
                     "name": "process_start_time",
-                    "type": "timestamp"
+                    "type_hint": "timestamp"
                 }
             ]
         },
@@ -21,13 +21,13 @@
             "inputs": [
                 {
                     "name": "element",
-                    "type": "dict"
+                    "type_hint": "dict"
                 }
             ],
             "outputs": [
                 {
                     "name": "result",
-                    "type": "str"
+                    "type_hint": "str"
                 }
             ],
             "depends_on": [
@@ -42,7 +42,7 @@
             "outputs": [
                 {
                     "name": "process_end_time",
-                    "type": "timestamp"
+                    "type_hint": "timestamp"
                 }
             ],
             "depends_on": [

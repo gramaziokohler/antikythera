@@ -10,7 +10,7 @@
       "outputs": [
         {
           "name": "process_start_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ]
     },
@@ -21,7 +21,7 @@
       "outputs": [
         {
           "name": "result1",
-          "type": "str"
+          "type_hint": "str"
         }
       ],
       "depends_on": [
@@ -53,7 +53,7 @@
       "inputs": [
         {
           "name": "bananas",
-          "type": "str",
+          "type_hint": "str",
           "get_from": "result1"
         }
       ],
@@ -74,7 +74,7 @@
       "outputs": [
         {
           "name": "process_end_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ],
       "depends_on": [

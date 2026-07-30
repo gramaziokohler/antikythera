@@ -10,7 +10,7 @@
       "outputs": [
         {
           "name": "process_start_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ]
     },
@@ -21,7 +21,7 @@
       "outputs": [
         {
           "name": "frames",
-          "type": "list[compas.geometry.Frame]"
+          "type_hint": "list[compas.geometry.Frame]"
         }
       ],
       "depends_on": [
@@ -37,13 +37,13 @@
       "inputs": [
         {
           "name": "frames",
-          "type": "list[compas.geometry.Frame]"
+          "type_hint": "list[compas.geometry.Frame]"
         }
       ],
       "outputs": [
         {
           "name": "trajectory",
-          "type": "compas_fab.robots.Trajectory"
+          "type_hint": "compas_fab.robots.Trajectory"
         }
       ],
       "depends_on": [
@@ -58,7 +58,7 @@
       "outputs": [
         {
           "name": "process_end_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ],
       "depends_on": [

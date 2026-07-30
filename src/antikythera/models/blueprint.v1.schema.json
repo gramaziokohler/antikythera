@@ -140,9 +140,13 @@
                 "value": {
                     "description": "Value of the IO item (can be any type)"
                 },
+                "type_hint": {
+                    "type": "string",
+                    "description": "Python type hint of the IO item"
+                },
                 "type": {
                     "type": "string",
-                    "description": "Type of the IO item"
+                    "description": "Deprecated alias for 'type_hint'. Use 'type_hint' instead."
                 },
                 "description": {
                     "type": "string",
