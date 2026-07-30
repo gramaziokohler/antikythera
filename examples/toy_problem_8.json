@@ -10,7 +10,7 @@
             "outputs": [
                 {
                     "name": "process_start_time",
-                    "type": "timestamp"
+                    "type_hint": "timestamp"
                 }
             ]
         },
@@ -33,7 +33,7 @@
             "outputs": [
                 {
                     "name": "result",
-                    "type": "str"
+                    "type_hint": "str"
                 }
             ],
             "depends_on": [
@@ -63,14 +63,14 @@
             "inputs": [
                 {
                     "name": "decision",
-                    "type": "str",
+                    "type_hint": "str",
                     "get_from": "result"
                 }
             ],
             "outputs": [
                 {
                     "name": "result",
-                    "type": "str",
+                    "type_hint": "str",
                     "set_to": "result_extra"
                 }
             ],
@@ -103,11 +103,11 @@
             "inputs": [
                 {
                     "name": "result",
-                    "type": "str"
+                    "type_hint": "str"
                 },
                 {
                     "name": "extra_info",
-                    "type": "str",
+                    "type_hint": "str",
                     "get_from": "result_extra",
                     "value": "N/A"
                 },
@@ -153,7 +153,7 @@
             "outputs": [
                 {
                     "name": "process_end_time",
-                    "type": "timestamp"
+                    "type_hint": "timestamp"
                 }
             ],
             "depends_on": [

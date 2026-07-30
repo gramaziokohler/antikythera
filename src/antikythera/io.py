@@ -25,7 +25,7 @@ class BaseSerializerV1:
             data = {
                 "name": obj.name,
                 "value": obj.value,
-                "type": obj.type,
+                "type_hint": obj.type_hint,
                 "description": obj.description,
             }
             return {k: v for k, v in data.items() if v is not None}

@@ -10,7 +10,7 @@
       "outputs": [
         {
           "name": "process_start_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ]
     },
@@ -37,7 +37,7 @@
       "inputs": [
         {
           "name": "process_start_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ],
       "depends_on": [
@@ -52,7 +52,7 @@
       "outputs": [
         {
           "name": "process_end_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ],
       "depends_on": [
