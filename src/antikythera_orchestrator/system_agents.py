@@ -6,6 +6,7 @@ import compas
 from compas.datastructures import Mesh
 
 from antikythera.models import Task
+from antikythera_agents.annotations import Param
 from antikythera_agents.base_agent import Agent
 from antikythera_agents.cli import Colors
 from antikythera_agents.decorators import agent
@@ -37,8 +38,7 @@ class SystemAgent(Agent):
         return {"process_end_time": time.time()}
 
     @tool(name="sleep")
-    def sleep_process(self, task: Task) -> Dict[str, Any]:
-        duration = task.get_param_value("duration", 1)
+    def sleep_process(self, task: Task, duration: Param[float] = 1) -> Dict[str, Any]:
         print(f"{Colors.OKBLUE}😴 [{task.id}][{task.type}] Sleeping for {duration}s...{Colors.ENDC}")
         time.sleep(duration)
         print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Finished sleeping.{Colors.ENDC}")

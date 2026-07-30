@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from antikythera_agents import cli
@@ -44,3 +46,25 @@ def test_main_dispatches_to_run(monkeypatch):
 
     assert len(calls) == 1
     assert calls[0].broker_host == "10.0.0.1"
+
+
+def test_describe_parses_default_format():
+    parser = cli.build_parser()
+
+    args = parser.parse_args(["describe"])
+
+    assert args.format == "json"
+    assert args.func is cli._describe
+
+
+def test_describe_writes_json_catalog_to_stdout(capsys):
+    cli.main(["describe"])
+
+    catalog = json.loads(capsys.readouterr().out)
+
+    agents = {entry["agent"]: entry for entry in catalog}
+    assert "system" in agents
+
+    tools = {tool["name"]: tool for tool in agents["system"]["tools"]}
+    assert tools["start"] == {"name": "start", "type": "system.start"}
+    assert tools["sleep"]["params"] == [{"name": "duration", "type_hint": "float", "optional": True}]
