@@ -157,56 +157,72 @@ Initially, only very simple agents will be implemented to execute toy problems.
 
 ### Agent/Tool Descriptor
 
-Blueprint authors — whether human or LLM — need to know which task types are available and what inputs, outputs, and parameters each one accepts. Agents do not announce themselves over the protocol by design, so this information must be available as a static artifact, independent of whether any agent is currently running.
-
-#### Recommended approach: MCP tool schema + `describe` CLI command
-
-Rather than inventing a custom format, the recommendation is to reuse the [MCP tool schema](https://spec.modelcontextprotocol.io/specification/server/tools/) (which is identical to OpenAI/Anthropic function-calling schema). LLMs already understand this format natively, and it maps naturally onto the existing `@agent` / `@tool` decorator model.
+Blueprint authors — whether human or LLM — need to know which task types are available and what inputs, outputs, and parameters each one accepts. Agents shall provide a static artifact, independent of whether any agent is currently running.
 
 **Schema annotation on `@tool`**
 
-The `@tool` decorator is extended with optional `description`, `params_schema`, `inputs_schema`, and `outputs_schema` keyword arguments. This keeps schema co-located with the implementation, so it does not drift:
+Python tools created using the provided Antikythera agent mechanisms, will automatically generate a descriptor based on their signature, triggered by the`@tool` tecorator.
+
+If not provided, the tool's name is the function name. Arguments are by default `TaskInput` and otherwise are annotated to say where their value comes from `Context[...]` for values resolved from dynamic expansion and `TaskParam[...]` for values wired in as parameters, and the return type is a `TypedDict`:
 
 ```python
-@tool(
-    name="user_input",
-    description="Prompts the user to provide one or more values.",
-    outputs_schema={"user_value": {"type": "string", "description": "Value entered by the user"}},
-)
-def get_user_input(self, task: Task) -> Dict[str, Any]:
-    ...
+class StockPnP(TypedDict):
+    stock_trajectories: list[JointTrajectory]
+    flipping_trajectories: NotRequired[list[JointTrajectory]]
+
+@tool()
+def plan_stock_pnp(
+    self,
+    nesting: NestingResult,
+    element_id: Context[str],
+) -> StockPnP:
+    """Plan pick-and-place trajectories for one stock, from pickup station to CNC bed."""
 ```
 
-Fields are optional — undescribed tools simply emit `"description": ""` in the output.
+Everything in the descriptor — names, types, optionality, description — comes from the signature, the return type, and `__doc__`.
 
-**`antikythera-agents describe` CLI command**
+**Agent descriptor format**
 
-A new CLI subcommand imports all registered agents and emits a static JSON file — a list of MCP-shaped tool descriptors, one per `{agent_type}.{tool_name}`:
+Inspired by the MCP tools descriptor, a json object of the following format will be used for agents and their tools to self describe.
+
+Example output:
+```json
+[
+  {
+    "agent": "trajectory_planner",
+    "tools": [
+        {
+            "name": "plan_stock_pnp",
+            "description": "Plan pick-and-place trajectories for one stock, from pickup station to CNC bed.",
+            "requires_context": ["element_id"],
+            "outputs": [
+                { "name": "stock_trajectories", "type_hint": "list[compas_robots.robots.JointTrajectory]" },
+                { "name": "flipping_trajectories", "type_hint": "list[compas_robots.robots.JointTrajectory]", "optional": true }
+            ]
+        },
+        {
+            "name": "plan_element_pnp",
+            "description": "Plan pick-and-place trajectories for one element, from CNC bed to assembly table.",
+            "requires_context": ["element_id"],
+            "outputs": [
+                { "name": "element_trajectories", "type_hint": "list[compas_robots.robots.JointTrajectory]" }
+            ]
+        }
+    ]
+  }
+]
+```
+
+The descriptor will be used in the following two ways:
+
+1. A new CLI subcommand imports all registered agents and emits a static JSON file — a list of the above MCP-like agent descriptors, with a list of their tools:
 
 ```bash
 antikythera-agents describe > tools.json
 antikythera-agents describe --format json   # same
 ```
 
-Example output:
-```json
-[
-  {
-    "name": "user_interaction.user_input",
-    "description": "Prompts the user to provide one or more values.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "user_value": {"type": "string", "description": "Value entered by the user"}
-      }
-    }
-  }
-]
-```
+2. Each agentn launcher will periodically emit the same descriptor on an MQTT topic that shall be determined later. This allows the orchestrator to discover agents and their capabilities at runtime, and to provide a live view of available tools to blueprint authors.
 
 #### Distribution
 
