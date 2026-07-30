@@ -62,6 +62,24 @@ def _run(args: argparse.Namespace) -> None:
     print("Bye!")
 
 
+def _describe(args: argparse.Namespace) -> None:
+    import json
+
+    from antikythera.plugin import PLUGIN_MANAGER
+    from antikythera_agents.decorators import get_agent_tools
+    from antikythera_agents.decorators import get_tool_descriptor
+    from antikythera_agents.decorators import list_registered_agents
+
+    PLUGIN_MANAGER.discover_plugins()
+
+    catalog = []
+    for agent_type, agent_class in sorted(list_registered_agents().items()):
+        tools = [get_tool_descriptor(agent_class, tool_name).to_dict(agent_type) for tool_name in sorted(get_agent_tools(agent_class))]
+        catalog.append({"agent": agent_type, "tools": tools})
+
+    print(json.dumps(catalog, indent=2))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="antikythera-agents", description="Antikythera Agents")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -72,6 +90,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--dev", action="store_true", help="Enable hot reloading of agents.")
     run_parser.add_argument("--sys-only", action="store_true", help="Only start system agents (agent type 'system').")
     run_parser.set_defaults(func=_run)
+
+    describe_parser = subparsers.add_parser("describe", help="Emit the tool catalog as JSON.")
+    describe_parser.add_argument("--format", choices=["json"], default="json", help="Output format (only 'json' is supported).")
+    describe_parser.set_defaults(func=_describe)
 
     return parser
 
