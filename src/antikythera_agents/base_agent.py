@@ -120,10 +120,15 @@ class Agent(ABC):
             # Execute the tool
             try:
                 result = tool_method(self, **kwargs)
-                return result or {}
             except Exception as e:
                 self.logger.exception(f"Tool '{tool_name}' execution failed")
                 raise RuntimeError(f"Tool '{tool_name}' execution failed: {str(e)}") from e
+
+            result = result or {}
+            # Outside the try/except above: validate_output raises ToolBindingError
+            # (issue-td-06), which must reach the launcher unwrapped, not as a RuntimeError.
+            descriptor.validate_output(result)
+            return result
 
     def _get_tool_for_task(self, task: Task) -> str:
         """Determine which tool should handle a given task.

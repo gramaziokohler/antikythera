@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import typing
+from typing import NotRequired
 from typing import Optional
+from typing import TypedDict
 
 import pytest
 
@@ -350,3 +352,89 @@ def test_requires_context_reported_in_catalog():
         "type": "test_dynamic.process_element",
         "requires_context": ["element_id"],
     }
+
+
+CopyResult = TypedDict("CopyResult", {"copied_files": list, "destination": NotRequired[str]})
+
+
+def test_typeddict_return_type_is_derived_into_outputs():
+    @tool(name="copy")
+    def copy_file(self, source: str) -> CopyResult:
+        return {"copied_files": []}
+
+    descriptor = copy_file._descriptor
+
+    assert {f.name: (f.type_hint, f.optional) for f in descriptor.outputs} == {
+        "copied_files": ("list", False),
+        "destination": ("str", True),
+    }
+
+
+def test_to_dict_marks_notrequired_outputs_optional_and_others_not():
+    @tool(name="copy")
+    def copy_file(self, source: str) -> CopyResult:
+        return {"copied_files": []}
+
+    entry = copy_file._descriptor.to_dict(agent_type="io")
+
+    assert entry["outputs"] == [
+        {"name": "copied_files", "type_hint": "list", "optional": False},
+        {"name": "destination", "type_hint": "str", "optional": True},
+    ]
+
+
+def test_validate_output_raises_when_required_key_missing():
+    @tool(name="copy")
+    def copy_file(self, source: str) -> CopyResult:
+        return {}
+
+    descriptor = copy_file._descriptor
+
+    with pytest.raises(ToolBindingError, match="copied_files"):
+        descriptor.validate_output({})
+
+
+def test_validate_output_accepts_missing_notrequired_key():
+    @tool(name="copy")
+    def copy_file(self, source: str) -> CopyResult:
+        return {"copied_files": []}
+
+    descriptor = copy_file._descriptor
+
+    descriptor.validate_output({"copied_files": ["a.txt"]})
+
+
+def test_validate_output_passes_when_all_required_keys_present():
+    @tool(name="copy")
+    def copy_file(self, source: str) -> CopyResult:
+        return {"copied_files": []}
+
+    descriptor = copy_file._descriptor
+
+    descriptor.validate_output({"copied_files": ["a.txt"], "destination": "/tmp"})
+
+
+def test_plain_dict_return_type_is_exempt_from_output_detail_and_validation():
+    @tool(name="transparent_tool")
+    def transparent_tool(self, count: Param[int] = 1) -> dict:
+        return {}
+
+    descriptor = transparent_tool._descriptor
+
+    assert descriptor.outputs == []
+    entry = descriptor.to_dict(agent_type="test")
+    assert "outputs" not in entry
+
+    # A key nobody declared, or a missing key: nothing to check against, so no error.
+    descriptor.validate_output({"whatever": "unchecked"})
+
+
+def test_task_annotated_tool_with_typeddict_return_is_still_opaque_and_exempt():
+    @tool(name="opaque_tool")
+    def opaque_tool(self, task: Task) -> CopyResult:
+        return {}
+
+    descriptor = opaque_tool._descriptor
+
+    assert descriptor.opaque is True
+    descriptor.validate_output({})

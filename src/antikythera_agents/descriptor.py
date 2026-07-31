@@ -47,6 +47,17 @@ def _is_optional_type(tp: Any) -> bool:
     return typing.get_origin(tp) is typing.Union and type(None) in typing.get_args(tp)
 
 
+def _is_typeddict(tp: Any) -> bool:
+    """True for a `TypedDict` class, as opposed to a plain `dict`/`Dict[str, Any]`.
+
+    `__required_keys__`/`__optional_keys__` are set by the `TypedDict` metaclass on the
+    class itself (not on instances), so checking for them distinguishes a real `TypedDict`
+    from a bare `dict` without depending on `typing.is_typeddict`, which isn't available
+    before Python 3.10.
+    """
+    return isinstance(tp, type) and hasattr(tp, "__required_keys__") and hasattr(tp, "__optional_keys__")
+
+
 def _type_hint_name(tp: Any) -> str:
     if tp is type(None):
         return "None"
@@ -139,9 +150,23 @@ class ToolDescriptor:
         return [name for name, hint in self._hints.items() if name != "return" and _is_context(hint)]
 
     @cached_property
-    def outputs(self) -> List[Any]:
-        # Output derivation from a TypedDict return type is issue-td-06.
-        return []
+    def _output_typeddict(self) -> Optional[type]:
+        """The tool's return type, if it's a `TypedDict`; `None` otherwise (issue-td-06).
+
+        A bare `dict`/`Dict[str, Any]` return type, or no return annotation at all, yields
+        `None` here — such a tool has nothing to check its output against and is exempt from
+        output enforcement, same as an opaque (`Task`-typed) tool.
+        """
+        hint = self._hints.get("return")
+        return hint if _is_typeddict(hint) else None
+
+    @cached_property
+    def outputs(self) -> List[ToolField]:
+        typed_dict = self._output_typeddict
+        if typed_dict is None:
+            return []
+        hints = typing.get_type_hints(typed_dict)
+        return [ToolField(name=name, type_hint=_type_hint_name(hint), optional=name in typed_dict.__optional_keys__) for name, hint in hints.items()]
 
     def bind(self, task: Task, context: Optional[ExecutionContext]) -> Dict[str, Any]:
         """Build the keyword arguments for invoking the tool from a task and context.
@@ -203,6 +228,27 @@ class ToolDescriptor:
 
         return value
 
+    def validate_output(self, result: Dict[str, Any]) -> None:
+        """Check a tool's returned dict against its declared `TypedDict` return type.
+
+        The other half of strict binding (ADR-0002, issue-td-06): a key the `TypedDict`
+        declares required but the tool didn't return currently gets persisted into session
+        data as `None` as though it were a real result. Raises `ToolBindingError`, naming the
+        key, before that can happen.
+
+        Exempt, same as strict input binding: opaque (`Task`-typed) tools, and any tool whose
+        return type isn't a `TypedDict` (a bare `dict`/`Dict[str, Any]`, or no annotation) —
+        `system.composite` returns whatever outputs the blueprint declares and can never have
+        a fixed return type, and stays opaque permanently.
+        """
+        if self.opaque or self._output_typeddict is None:
+            return
+        for field in self.outputs:
+            if field.optional:
+                continue
+            if field.name not in result:
+                raise ToolBindingError(f"Tool '{self.name}' output '{field.name}' is declared but missing from the returned dict.")
+
     def to_dict(self, agent_type: str) -> Dict[str, Any]:
         entry: Dict[str, Any] = {
             "name": self.name,
@@ -215,7 +261,7 @@ class ToolDescriptor:
         if self.params:
             entry["params"] = [p.to_dict() for p in self.params]
         if self.outputs:
-            entry["outputs"] = self.outputs
+            entry["outputs"] = [o.to_dict() for o in self.outputs]
         if self.requires_context:
             entry["requires_context"] = self.requires_context
         return entry
