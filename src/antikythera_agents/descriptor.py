@@ -11,6 +11,7 @@ from typing import List
 from typing import Optional
 
 from antikythera.models import Task
+from antikythera_agents.annotations import _ContextMarker
 from antikythera_agents.annotations import _ParamMarker
 from antikythera_agents.context import ExecutionContext
 
@@ -35,6 +36,11 @@ def _unwrap(hint: Any) -> Any:
 def _is_param(hint: Any) -> bool:
     metadata = getattr(hint, "__metadata__", None)
     return bool(metadata) and any(isinstance(m, _ParamMarker) for m in metadata)
+
+
+def _is_context(hint: Any) -> bool:
+    metadata = getattr(hint, "__metadata__", None)
+    return bool(metadata) and any(isinstance(m, _ContextMarker) for m in metadata)
 
 
 def _is_optional_type(tp: Any) -> bool:
@@ -109,7 +115,8 @@ class ToolDescriptor:
 
     @cached_property
     def inputs(self) -> List[ToolField]:
-        """Task inputs: every parameter that isn't `Task`, `ExecutionContext` or `Param[T]`.
+        """Task inputs: every parameter that isn't `Task`, `ExecutionContext`, `Param[T]` or
+        `Context[T]`.
 
         Covers both an unannotated parameter and one explicitly marked `Input[T]` — the two
         bind identically, per ADR-0002.
@@ -119,12 +126,17 @@ class ToolDescriptor:
             if name == "return":
                 continue
             unwrapped = _unwrap(hint)
-            if unwrapped is Task or unwrapped is ExecutionContext or _is_param(hint):
+            if unwrapped is Task or unwrapped is ExecutionContext or _is_param(hint) or _is_context(hint):
                 continue
             sig_param = self._signature.parameters[name]
             has_default = sig_param.default is not inspect.Parameter.empty
             fields.append(ToolField(name=name, type_hint=_type_hint_name(unwrapped), optional=has_default or _is_optional_type(unwrapped)))
         return fields
+
+    @cached_property
+    def requires_context(self) -> List[str]:
+        """Names of the expansion-context keys this tool's `Context[T]` parameters need."""
+        return [name for name, hint in self._hints.items() if name != "return" and _is_context(hint)]
 
     @cached_property
     def outputs(self) -> List[Any]:
@@ -159,9 +171,21 @@ class ToolDescriptor:
                 sig_param = self._signature.parameters[name]
                 default = None if sig_param.default is inspect.Parameter.empty else sig_param.default
                 kwargs[name] = task.get_param_value(name, default)
+            elif _is_context(hint):
+                kwargs[name] = self._bind_context(name, task)
             else:
                 kwargs[name] = self._bind_input(name, unwrapped, task)
         return kwargs
+
+    def _bind_context(self, name: str, task: Task) -> Any:
+        sig_param = self._signature.parameters[name]
+        has_default = sig_param.default is not inspect.Parameter.empty
+
+        if name in task.context:
+            return task.context[name]
+        if has_default:
+            return sig_param.default
+        raise ToolBindingError(f"Tool '{self.name}' requires context key '{name}', which is absent from the task's context.")
 
     def _bind_input(self, name: str, unwrapped: Any, task: Task) -> Any:
         sig_param = self._signature.parameters[name]
@@ -192,4 +216,6 @@ class ToolDescriptor:
             entry["params"] = [p.to_dict() for p in self.params]
         if self.outputs:
             entry["outputs"] = self.outputs
+        if self.requires_context:
+            entry["requires_context"] = self.requires_context
         return entry

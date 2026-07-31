@@ -7,6 +7,7 @@ import pytest
 
 from antikythera.models import Task
 from antikythera.models import TaskInput
+from antikythera_agents.annotations import Context
 from antikythera_agents.annotations import Input
 from antikythera_agents.annotations import Param
 from antikythera_agents.context import ExecutionContext
@@ -275,4 +276,77 @@ def test_inputs_listed_with_type_hint_and_optionality():
     assert {f.name: (f.type_hint, f.optional) for f in descriptor.inputs} == {
         "thing": ("str", False),
         "extra": ("Optional[int]", True),
+    }
+
+
+def test_context_binds_matching_key_from_task_context():
+    @tool(name="process_element")
+    def process_element(self, element_id: Context[str]) -> dict:
+        return {}
+
+    descriptor = process_element._descriptor
+    task = Task(id="t1", type="test.process_element", context={"element_id": "guid-123"})
+
+    assert descriptor.bind(task=task, context=None) == {"element_id": "guid-123"}
+
+
+def test_context_not_listed_as_task_input():
+    @tool(name="process_element")
+    def process_element(self, element_id: Context[str]) -> dict:
+        return {}
+
+    descriptor = process_element._descriptor
+    assert descriptor.inputs == []
+
+
+def test_context_missing_key_raises_tool_binding_error_naming_key():
+    @tool(name="process_element")
+    def process_element(self, element_id: Context[str]) -> dict:
+        return {}
+
+    descriptor = process_element._descriptor
+    task = Task(id="t1", type="test.process_element", context={})
+
+    with pytest.raises(ToolBindingError, match="element_id"):
+        descriptor.bind(task=task, context=None)
+
+
+def test_context_with_default_falls_back_when_key_absent():
+    @tool(name="process_element")
+    def process_element(self, element_id: Context[str] = "fallback") -> dict:
+        return {}
+
+    descriptor = process_element._descriptor
+    task = Task(id="t1", type="test.process_element", context={})
+
+    assert descriptor.bind(task=task, context=None) == {"element_id": "fallback"}
+
+
+def test_context_and_execution_context_coexist_and_bind_correctly():
+    @tool(name="process_element")
+    def process_element(self, task: Task, element_id: Context[str], context: ExecutionContext) -> dict:
+        return {}
+
+    descriptor = process_element._descriptor
+    task = Task(id="t1", type="test.process_element", context={"element_id": "guid-456"})
+    exec_context = ExecutionContext()
+
+    assert descriptor.bind(task=task, context=exec_context) == {
+        "task": task,
+        "element_id": "guid-456",
+        "context": exec_context,
+    }
+
+
+def test_requires_context_reported_in_catalog():
+    @tool(name="process_element")
+    def process_element(self, element_id: Context[str]) -> dict:
+        return {}
+
+    entry = process_element._descriptor.to_dict(agent_type="test_dynamic")
+
+    assert entry == {
+        "name": "process_element",
+        "type": "test_dynamic.process_element",
+        "requires_context": ["element_id"],
     }
