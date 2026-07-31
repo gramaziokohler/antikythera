@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from antikythera.plugin import PLUGIN_MANAGER
 from antikythera_agents import cli
 
 
@@ -68,3 +69,53 @@ def test_describe_writes_json_catalog_to_stdout(capsys):
     tools = {tool["name"]: tool for tool in agents["system"]["tools"]}
     assert tools["start"] == {"name": "start", "type": "system.start"}
     assert tools["sleep"]["params"] == [{"name": "duration", "type_hint": "float", "optional": True}]
+
+
+def test_describe_parses_allow_partial_default_false():
+    parser = cli.build_parser()
+
+    args = parser.parse_args(["describe"])
+
+    assert args.allow_partial is False
+
+
+def test_describe_parses_allow_partial_flag():
+    parser = cli.build_parser()
+
+    args = parser.parse_args(["describe", "--allow-partial"])
+
+    assert args.allow_partial is True
+
+
+def test_describe_exits_nonzero_and_writes_nothing_to_stdout_on_plugin_failure(monkeypatch, capsys):
+    monkeypatch.setattr(PLUGIN_MANAGER, "discover_plugins_strict", lambda: [("broken", RuntimeError("boom"))])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["describe"])
+
+    assert exc_info.value.code != 0
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert "broken" in err
+    assert "boom" in err
+
+
+def test_describe_allow_partial_writes_catalog_and_failed_section(monkeypatch, capsys):
+    monkeypatch.setattr(PLUGIN_MANAGER, "discover_plugins_strict", lambda: [("broken", RuntimeError("boom"))])
+
+    cli.main(["describe", "--allow-partial"])
+
+    result = json.loads(capsys.readouterr().out)
+
+    assert "system" in {entry["agent"] for entry in result["agents"]}
+    assert result["failed"] == [{"name": "broken", "error": "RuntimeError: boom"}]
+
+
+def test_describe_exits_zero_when_every_plugin_imports(monkeypatch, capsys):
+    monkeypatch.setattr(PLUGIN_MANAGER, "discover_plugins_strict", lambda: [])
+
+    cli.main(["describe"])
+
+    catalog = json.loads(capsys.readouterr().out)
+    assert isinstance(catalog, list)
+    assert "system" in {entry["agent"] for entry in catalog}
