@@ -95,6 +95,94 @@ def _type_hint_name(tp: Any) -> str:
     return str(tp).replace("typing.", "")
 
 
+def _docstring_section_spans(lines: List[str]) -> Dict[str, "tuple[int, int]"]:
+    """Locate each NumPydoc section's header name -> (content_start, content_end) line range.
+
+    A section header is a line with no leading whitespace immediately followed by a line made
+    up entirely of dashes. This is detected structurally, without a hardcoded list of NumPydoc
+    section names, so it degrades to an empty dict rather than raising for anything that
+    doesn't look like this shape (issue-td-08: a malformed docstring must still produce a
+    usable, if description-less, catalog entry).
+    """
+    headers: List[Any] = []
+    for i in range(len(lines) - 1):
+        header = lines[i]
+        if not header or header[0].isspace():
+            continue
+        name = header.strip()
+        if not name:
+            continue
+        underline = lines[i + 1].strip()
+        if underline and set(underline) == {"-"}:
+            headers.append((name, i))
+
+    spans: Dict[str, "tuple[int, int]"] = {}
+    for idx, (name, header_idx) in enumerate(headers):
+        content_start = header_idx + 2
+        content_end = headers[idx + 1][1] if idx + 1 < len(headers) else len(lines)
+        spans[name] = (content_start, content_end)
+    return spans
+
+
+def _parse_field_list(lines: List[str], start: int, end: int) -> Dict[str, str]:
+    """Parse a NumPydoc field list — the body of a `Parameters`/`Returns` section — by hand.
+
+    Each field starts at a line with no leading whitespace (`name` or `name : type`);
+    subsequent indented lines are its (possibly multi-line) description, joined on a single
+    space. Anything that doesn't fit this shape (a stray blank line, a description-only block
+    with no field header) is silently skipped rather than raising.
+    """
+    fields: Dict[str, str] = {}
+    current_names: List[str] = []
+    current_desc: List[str] = []
+
+    def flush() -> None:
+        if current_names and current_desc:
+            text = " ".join(" ".join(current_desc).split())
+            for field_name in current_names:
+                fields[field_name] = text
+
+    for i in range(start, end):
+        line = lines[i]
+        if not line.strip():
+            continue
+        if not line[0].isspace():
+            flush()
+            current_desc = []
+            name_part = line.split(":", 1)[0].strip()
+            current_names = [n.strip() for n in name_part.split(",") if n.strip()]
+        else:
+            current_desc.append(line.strip())
+    flush()
+    return fields
+
+
+def _parse_numpy_docstring(doc: Optional[str]) -> "tuple[Dict[str, str], Dict[str, str]]":
+    """Parameter and return descriptions parsed from a NumPy-style docstring (issue-td-08).
+
+    Returns `(param_descriptions, return_descriptions)`, both `{name: description}`. Written
+    by hand rather than adding a dependency, per the issue — the sections are simple. Must
+    degrade rather than fail: no docstring, no `Parameters`/`Returns` section, or a malformed
+    block all yield an empty dict for the affected side, never an exception.
+    """
+    if not doc:
+        return {}, {}
+    lines = doc.splitlines()
+    spans = _docstring_section_spans(lines)
+
+    params: Dict[str, str] = {}
+    if "Parameters" in spans:
+        start, end = spans["Parameters"]
+        params = _parse_field_list(lines, start, end)
+
+    returns: Dict[str, str] = {}
+    if "Returns" in spans:
+        start, end = spans["Returns"]
+        returns = _parse_field_list(lines, start, end)
+
+    return params, returns
+
+
 @dataclass(frozen=True)
 class ToolField:
     """A single named, typed, optionally-optional field — shape shared by inputs and params."""
@@ -102,9 +190,13 @@ class ToolField:
     name: str
     type_hint: str
     optional: bool
+    description: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"name": self.name, "type_hint": self.type_hint, "optional": self.optional}
+        entry: Dict[str, Any] = {"name": self.name, "type_hint": self.type_hint, "optional": self.optional}
+        if self.description:
+            entry["description"] = self.description
+        return entry
 
 
 class ToolDescriptor:
@@ -142,7 +234,13 @@ class ToolDescriptor:
         return " ".join(summary.split())
 
     @cached_property
+    def _field_descriptions(self) -> "tuple[Dict[str, str], Dict[str, str]]":
+        """`(param_descriptions, return_descriptions)` parsed from the tool's docstring."""
+        return _parse_numpy_docstring(inspect.getdoc(self.func))
+
+    @cached_property
     def params(self) -> List[ToolField]:
+        param_docs, _ = self._field_descriptions
         fields = []
         for name, hint in self._hints.items():
             if name == "return" or not _is_param(hint):
@@ -150,7 +248,14 @@ class ToolDescriptor:
             inner = _unwrap(hint)
             sig_param = self._signature.parameters[name]
             has_default = sig_param.default is not inspect.Parameter.empty
-            fields.append(ToolField(name=name, type_hint=_type_hint_name(inner), optional=has_default or _is_optional_type(inner)))
+            fields.append(
+                ToolField(
+                    name=name,
+                    type_hint=_type_hint_name(inner),
+                    optional=has_default or _is_optional_type(inner),
+                    description=param_docs.get(name),
+                )
+            )
         return fields
 
     @cached_property
@@ -161,6 +266,7 @@ class ToolDescriptor:
         Covers both an unannotated parameter and one explicitly marked `Input[T]` — the two
         bind identically, per ADR-0002.
         """
+        param_docs, _ = self._field_descriptions
         fields = []
         for name, hint in self._hints.items():
             if name == "return":
@@ -170,7 +276,14 @@ class ToolDescriptor:
                 continue
             sig_param = self._signature.parameters[name]
             has_default = sig_param.default is not inspect.Parameter.empty
-            fields.append(ToolField(name=name, type_hint=_type_hint_name(unwrapped), optional=has_default or _is_optional_type(unwrapped)))
+            fields.append(
+                ToolField(
+                    name=name,
+                    type_hint=_type_hint_name(unwrapped),
+                    optional=has_default or _is_optional_type(unwrapped),
+                    description=param_docs.get(name),
+                )
+            )
         return fields
 
     @cached_property
@@ -194,8 +307,17 @@ class ToolDescriptor:
         typed_dict = self._output_typeddict
         if typed_dict is None:
             return []
+        _, return_docs = self._field_descriptions
         hints = typing.get_type_hints(typed_dict)
-        return [ToolField(name=name, type_hint=_type_hint_name(hint), optional=name in typed_dict.__optional_keys__) for name, hint in hints.items()]
+        return [
+            ToolField(
+                name=name,
+                type_hint=_type_hint_name(hint),
+                optional=name in typed_dict.__optional_keys__,
+                description=return_docs.get(name),
+            )
+            for name, hint in hints.items()
+        ]
 
     def bind(self, task: Task, context: Optional[ExecutionContext]) -> Dict[str, Any]:
         """Build the keyword arguments for invoking the tool from a task and context.

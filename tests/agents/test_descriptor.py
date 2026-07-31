@@ -598,6 +598,199 @@ def test_protobuf_round_trip_of_each_supported_value_kind_binds_without_error():
     assert isinstance(kwargs["a_frame"], Frame)
 
 
+# --- issue-td-08: per-field descriptions parsed from NumPy docstrings ---
+
+DescribedResult = TypedDict("DescribedResult", {"value": int, "extra": NotRequired[str]})
+
+
+def test_param_and_input_descriptions_parsed_from_numpy_docstring():
+    @tool(name="described")
+    def described(self, count: Param[int] = 1, name: str = "x") -> dict:
+        """Do something.
+
+        Parameters
+        ----------
+        count : int
+            How many times to do it.
+        name : str
+            What to call it.
+        """
+        return {}
+
+    descriptor = described._descriptor
+
+    assert descriptor.params[0].description == "How many times to do it."
+    assert descriptor.inputs[0].description == "What to call it."
+
+
+def test_tool_level_description_stays_the_docstring_summary():
+    @tool(name="described")
+    def described(self, count: Param[int] = 1) -> dict:
+        """Do something.
+
+        Longer explanation that is not part of the summary.
+
+        Parameters
+        ----------
+        count : int
+            How many times to do it.
+        """
+        return {}
+
+    descriptor = described._descriptor
+
+    assert descriptor.description == "Do something."
+    assert descriptor.params[0].description == "How many times to do it."
+
+
+def test_return_values_documented_in_returns_section_populate_output_descriptions():
+    @tool(name="described")
+    def described(self, count: Param[int] = 1) -> DescribedResult:
+        """Do something.
+
+        Returns
+        -------
+        value : int
+            The computed value.
+        extra : str
+            Some extra detail.
+        """
+        return {"value": 1}
+
+    descriptor = described._descriptor
+
+    assert {f.name: f.description for f in descriptor.outputs} == {
+        "value": "The computed value.",
+        "extra": "Some extra detail.",
+    }
+
+
+def test_no_docstring_yields_no_field_descriptions_without_error():
+    @tool(name="undocumented")
+    def undocumented(self, count: Param[int] = 1, thing: str = "x") -> DescribedResult:
+        return {"value": 1}
+
+    descriptor = undocumented._descriptor
+
+    assert descriptor.params[0].description is None
+    assert descriptor.inputs[0].description is None
+    assert all(f.description is None for f in descriptor.outputs)
+
+    entry = descriptor.to_dict(agent_type="test")
+    assert "description" not in entry["params"][0]
+    assert "description" not in entry["inputs"][0]
+    assert all("description" not in o for o in entry["outputs"])
+
+
+def test_docstring_with_no_parameters_section_yields_no_descriptions():
+    @tool(name="described")
+    def described(self, count: Param[int] = 1) -> dict:
+        """Just a summary, no sections at all."""
+        return {}
+
+    descriptor = described._descriptor
+    assert descriptor.params[0].description is None
+
+
+def test_malformed_docstring_produces_catalog_entry_with_no_descriptions_and_no_error():
+    @tool(name="described")
+    def described(self, count: Param[int] = 1) -> dict:
+        """Summary.
+
+        Parameters
+        --
+        this is not a properly formatted field header
+        count weird formatting no colon no indentation
+        """
+        return {}
+
+    descriptor = described._descriptor
+
+    entry = descriptor.to_dict(agent_type="test")
+    assert entry["name"] == "described"
+    assert descriptor.params[0].description is None
+
+
+def test_documented_parameter_not_in_signature_is_ignored():
+    @tool(name="described")
+    def described(self, count: Param[int] = 1) -> dict:
+        """Do something.
+
+        Parameters
+        ----------
+        count : int
+            How many times to do it.
+        ghost : str
+            Not a real parameter.
+        """
+        return {}
+
+    descriptor = described._descriptor
+
+    assert [f.name for f in descriptor.params] == ["count"]
+    assert descriptor.params[0].description == "How many times to do it."
+
+
+def test_parameter_absent_from_docstring_has_no_description_siblings_keep_theirs():
+    @tool(name="described")
+    def described(self, count: Param[int] = 1, name: str = "x") -> dict:
+        """Do something.
+
+        Parameters
+        ----------
+        count : int
+            How many times to do it.
+        """
+        return {}
+
+    descriptor = described._descriptor
+
+    assert descriptor.params[0].description == "How many times to do it."
+    assert descriptor.inputs[0].description is None
+
+
+def test_multiline_description_is_captured():
+    @tool(name="described")
+    def described(self, count: Param[int] = 1) -> dict:
+        """Do something.
+
+        Parameters
+        ----------
+        count : int
+            How many times to do it, spanning
+            multiple lines of prose that should
+            all be joined together.
+        """
+        return {}
+
+    descriptor = described._descriptor
+
+    assert descriptor.params[0].description == "How many times to do it, spanning multiple lines of prose that should all be joined together."
+
+
+def test_to_dict_includes_field_descriptions():
+    @tool(name="copy_like")
+    def copy_like(self, source: str) -> DescribedResult:
+        """Copy things.
+
+        Parameters
+        ----------
+        source : str
+            Glob pattern for the files to copy.
+
+        Returns
+        -------
+        value : int
+            The computed value.
+        """
+        return {"value": 1}
+
+    entry = copy_like._descriptor.to_dict(agent_type="io")
+
+    assert entry["inputs"] == [{"name": "source", "type_hint": "str", "optional": False, "description": "Glob pattern for the files to copy."}]
+    assert entry["outputs"][0]["description"] == "The computed value."
+
+
 def test_protobuf_round_trip_of_params_binds_without_error():
     @tool(name="round_trip_params_tool")
     def round_trip_params_tool(self, an_int: Param[int] = 0, a_float: Param[float] = 0.0) -> dict:
