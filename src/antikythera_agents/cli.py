@@ -64,20 +64,34 @@ def _run(args: argparse.Namespace) -> None:
 
 def _describe(args: argparse.Namespace) -> None:
     import json
+    import sys
 
     from antikythera.plugin import PLUGIN_MANAGER
     from antikythera_agents.decorators import get_agent_tools
     from antikythera_agents.decorators import get_tool_descriptor
     from antikythera_agents.decorators import list_registered_agents
 
-    PLUGIN_MANAGER.discover_plugins()
+    failures = PLUGIN_MANAGER.discover_plugins_strict()
+
+    if failures and not args.allow_partial:
+        for name, error in failures:
+            print(f"Failed to load plugin {name}: {type(error).__name__}: {error}", file=sys.stderr)
+        sys.exit(1)
 
     catalog = []
     for agent_type, agent_class in sorted(list_registered_agents().items()):
         tools = [get_tool_descriptor(agent_class, tool_name).to_dict(agent_type) for tool_name in sorted(get_agent_tools(agent_class))]
         catalog.append({"agent": agent_type, "tools": tools})
 
-    print(json.dumps(catalog, indent=2))
+    if failures:
+        result = {
+            "agents": catalog,
+            "failed": [{"name": name, "error": f"{type(error).__name__}: {error}"} for name, error in failures],
+        }
+    else:
+        result = catalog
+
+    print(json.dumps(result, indent=2))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -93,6 +107,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     describe_parser = subparsers.add_parser("describe", help="Emit the tool catalog as JSON.")
     describe_parser.add_argument("--format", choices=["json"], default="json", help="Output format (only 'json' is supported).")
+    describe_parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Emit the catalog even if some plugins failed to import, recording the gaps in a 'failed' section.",
+    )
     describe_parser.set_defaults(func=_describe)
 
     return parser

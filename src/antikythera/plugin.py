@@ -5,7 +5,9 @@ import threading
 import time
 import warnings
 from typing import Callable
+from typing import List
 from typing import Set
+from typing import Tuple
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -101,6 +103,30 @@ class _PluginManager:
 
         LOG("PluginManager initialized")
 
+    def _load_plugin(self, plugin) -> None:
+        """Import one entry point's module and record it for reload/watch bookkeeping.
+
+        Raises whatever `plugin.load()` raises; callers decide whether to warn or
+        propagate the failure.
+        """
+        obj = plugin.load()  # side-effect import
+
+        # If the entry point points to a module, obj is the module
+        if hasattr(obj, "__file__"):
+            module = obj
+            module_name = obj.__name__
+        else:
+            # If the entry point points to a class/function, get its module
+            module_name = getattr(obj, "__module__", None)
+            module = sys.modules.get(module_name) if module_name else None
+
+        if module_name:
+            self._loaded_modules.add(module_name)
+
+        if module and hasattr(module, "__file__") and module.__file__:
+            file_path = os.path.realpath(module.__file__)
+            self._module_files.add(file_path)
+
     def discover_plugins(self) -> None:
         if self._auto_discovery_done:
             LOG("Plugin discovery already done, skipping")
@@ -114,29 +140,45 @@ class _PluginManager:
             LOG(f"Loading plugin: {plugin.name}")
 
             try:
-                obj = plugin.load()  # side-effect import
-
-                # If the entry point points to a module, obj is the module
-                if hasattr(obj, "__file__"):
-                    module = obj
-                    module_name = obj.__name__
-                else:
-                    # If the entry point points to a class/function, get its module
-                    module_name = getattr(obj, "__module__", None)
-                    module = sys.modules.get(module_name) if module_name else None
-
-                if module_name:
-                    self._loaded_modules.add(module_name)
-
-                if module and hasattr(module, "__file__") and module.__file__:
-                    file_path = os.path.realpath(module.__file__)
-                    self._module_files.add(file_path)
+                self._load_plugin(plugin)
             except Exception as e:
                 warnings.warn(f"Failed to load plugin {plugin.name}: {e}", RuntimeWarning)
 
         self._auto_discovery_done = True
 
         LOG("Plugin discovery complete.")
+
+    def discover_plugins_strict(self) -> List[Tuple[str, Exception]]:
+        """Discover plugins, reporting import failures instead of warning and continuing.
+
+        Unlike `discover_plugins`, every call re-attempts every entry point: it neither
+        consults nor sets the "already discovered" cache `discover_plugins` uses for the
+        launcher's hot-reload bookkeeping, since a strict caller (`describe`) needs a
+        trustworthy answer every time it asks, not a cached one from whichever discovery
+        ran first in the process.
+
+        Returns
+        -------
+        list of (str, Exception)
+            The name and exception for each entry point that failed to import, in
+            discovery order. Empty if every plugin imported successfully.
+        """
+        discovered_plugins = entry_points(group=_PLUGINS_GROUP)
+
+        LOG(f"Found {len(discovered_plugins)} plugins in group '{_PLUGINS_GROUP}' (strict)")
+
+        failures: List[Tuple[str, Exception]] = []
+        for plugin in discovered_plugins:
+            LOG(f"Loading plugin: {plugin.name}")
+
+            try:
+                self._load_plugin(plugin)
+            except Exception as e:
+                failures.append((plugin.name, e))
+
+        LOG("Strict plugin discovery complete.")
+
+        return failures
 
     def reload_plugins(self) -> None:
         LOG("Reloading plugins...")
