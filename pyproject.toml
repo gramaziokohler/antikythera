@@ -35,6 +35,7 @@ classifiers = [
 system = 'antikythera_orchestrator.system_agents'
 interaction = 'antikythera_agents.user_interaction'
 io = 'antikythera_agents.io_agent'
+reference = 'antikythera_agents.reference_agent'
 
 [project.scripts]
 antikythera = "antikythera_orchestrator.__main__:main"

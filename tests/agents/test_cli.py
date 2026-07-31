@@ -71,6 +71,31 @@ def test_describe_writes_json_catalog_to_stdout(capsys):
     assert tools["sleep"]["params"] == [{"name": "duration", "type_hint": "float", "optional": True}]
 
 
+def test_describe_catalog_includes_reference_agent(capsys):
+    """The reference agent (issue-td-10) is a real, plugin-discovered agent — `describe`
+    surfaces its inputs, params, context requirements, outputs and descriptions like any
+    other, proving the worked example is actually wired into the catalog.
+    """
+    cli.main(["describe"])
+
+    catalog = json.loads(capsys.readouterr().out)
+    agents = {entry["agent"]: entry for entry in catalog}
+    assert "reference" in agents
+
+    tools = {tool["name"]: tool for tool in agents["reference"]["tools"]}
+    assemble = tools["assemble"]
+    assert {i["name"] for i in assemble["inputs"]} == {"title", "subtitle", "note"}
+    assert {p["name"] for p in assemble["params"]} == {"tag", "repeat"}
+    assert assemble["requires_context"] == ["element_id"]
+    assert {o["name"] for o in assemble["outputs"]} == {"message", "detail"}
+    assert all("description" in i for i in assemble["inputs"])
+
+    assert "wait" in tools
+    assert "passthrough" in tools
+    assert "params" not in tools["passthrough"]
+    assert "inputs" not in tools["passthrough"]
+
+
 def test_describe_parses_allow_partial_default_false():
     parser = cli.build_parser()
 
