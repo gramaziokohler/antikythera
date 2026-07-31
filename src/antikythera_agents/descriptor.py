@@ -47,6 +47,35 @@ def _is_optional_type(tp: Any) -> bool:
     return typing.get_origin(tp) is typing.Union and type(None) in typing.get_args(tp)
 
 
+def _checkable_type(hint: Any) -> Optional[type]:
+    """The plain class `hint` can be type-checked against, or `None` to skip checking.
+
+    Only a plain class (`Frame`, `str`, ...) is checked (issue-td-07); a parameterised
+    generic (`list[JointTrajectory]`, a `Union` of more than one non-`None` type, ...) is
+    left alone. `Optional[X]` unwraps to `X` when `X` itself is a plain class — whether
+    `None` is an acceptable value is decided elsewhere, by the existing None-handling rules;
+    this only picks the type to check non-`None` values against.
+    """
+    if isinstance(hint, type):
+        return hint
+    if _is_optional_type(hint):
+        args = [a for a in typing.get_args(hint) if a is not type(None)]
+        if len(args) == 1 and isinstance(args[0], type):
+            return args[0]
+    return None
+
+
+def _type_matches(expected: type, value: Any) -> bool:
+    """Whether `value` satisfies `expected`, lenient about the int/float widening that
+    protobuf and `compas_pb` deserialisation can introduce.
+    """
+    if expected is float and isinstance(value, int):
+        return True
+    if expected is int and isinstance(value, float):
+        return value.is_integer()
+    return isinstance(value, expected)
+
+
 def _is_typeddict(tp: Any) -> bool:
     """True for a `TypedDict` class, as opposed to a plain `dict`/`Dict[str, Any]`.
 
@@ -195,22 +224,43 @@ class ToolDescriptor:
             elif _is_param(hint):
                 sig_param = self._signature.parameters[name]
                 default = None if sig_param.default is inspect.Parameter.empty else sig_param.default
-                kwargs[name] = task.get_param_value(name, default)
+                value = task.get_param_value(name, default)
+                self._check_type(name, unwrapped, value)
+                kwargs[name] = value
             elif _is_context(hint):
-                kwargs[name] = self._bind_context(name, task)
+                kwargs[name] = self._bind_context(name, unwrapped, task)
             else:
                 kwargs[name] = self._bind_input(name, unwrapped, task)
         return kwargs
 
-    def _bind_context(self, name: str, task: Task) -> Any:
+    def _check_type(self, name: str, hint: Any, value: Any) -> None:
+        """Check a bound value against a plain-class annotation (issue-td-07).
+
+        A no-op for opaque tools, for `None` (whether `None` is acceptable here was already
+        decided by the caller's own None-handling), and for any hint that isn't a plain class
+        (`_checkable_type` returns `None`).
+        """
+        if self.opaque or value is None:
+            return
+        expected = _checkable_type(hint)
+        if expected is None:
+            return
+        if not _type_matches(expected, value):
+            raise ToolBindingError(f"Tool '{self.name}' argument '{name}' expected {_type_hint_name(expected)}, got {_type_hint_name(type(value))}.")
+
+    def _bind_context(self, name: str, hint: Any, task: Task) -> Any:
         sig_param = self._signature.parameters[name]
         has_default = sig_param.default is not inspect.Parameter.empty
 
         if name in task.context:
-            return task.context[name]
-        if has_default:
+            value = task.context[name]
+        elif has_default:
             return sig_param.default
-        raise ToolBindingError(f"Tool '{self.name}' requires context key '{name}', which is absent from the task's context.")
+        else:
+            raise ToolBindingError(f"Tool '{self.name}' requires context key '{name}', which is absent from the task's context.")
+
+        self._check_type(name, hint, value)
+        return value
 
     def _bind_input(self, name: str, unwrapped: Any, task: Task) -> Any:
         sig_param = self._signature.parameters[name]
@@ -226,6 +276,7 @@ class ToolDescriptor:
             mapping = f" (get_from='{get_from}')" if get_from else ""
             raise ToolBindingError(f"Tool '{self.name}' input '{name}' resolved to None{mapping}; a value is required.")
 
+        self._check_type(name, unwrapped, value)
         return value
 
     def validate_output(self, result: Dict[str, Any]) -> None:
