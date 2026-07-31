@@ -736,6 +736,7 @@ The Antikythera project is organized as follows:
 
 - **`antikythera_agents/`**: Built-in agent implementations
   - **`launcher.py`**: Agent launcher
+  - **`reference_agent.py`**: Worked example agent — see "Reference Agent" below
 
 ### Extension Points
 
@@ -797,6 +798,17 @@ A `Context[T]` parameter for a key absent from `task.context` raises `ToolBindin
 parameters may coexist on the same signature. The catalog reports a tool's `Context[T]`
 parameters under `requires_context` — a list of names, since the value comes from the runtime
 rather than from anything a blueprint author writes.
+
+### Reference Agent
+
+`antikythera_agents/reference_agent.py` (`ReferenceAgent`, agent type `reference`) is the
+worked example for the tool convention above — copy from it when authoring a new agent.
+Between its three tools (`assemble`, `wait`, `passthrough`) it exercises every annotation
+kind the binder understands: a plain task input and one declared explicitly with `Input[T]`,
+a required and a defaulted `Param[T]`, a `Context[T]` value, an `Optional[T]` input, a
+`TypedDict` return with both a required and a `NotRequired` key, the `Task` escape hatch, and
+`ExecutionContext` cancellation. It has no dependency beyond this package, so it runs in CI.
+`examples/reference_agent_demo.json` drives it end to end through a real orchestrator run.
 
 ## Roadmap
 
