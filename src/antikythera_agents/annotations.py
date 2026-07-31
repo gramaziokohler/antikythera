@@ -23,3 +23,25 @@ Examples
 ...     time.sleep(duration)
 ...     return {}
 """
+
+
+class _InputMarker:
+    """Marks a tool parameter as bound from `task.inputs`, by name."""
+
+    def __repr__(self) -> str:
+        return "Input"
+
+
+Input = Annotated[T, _InputMarker()]
+"""Marks a tool parameter as a task input, bound by name from `task.inputs`.
+
+An unannotated parameter is already treated as a task input (ADR-0002); `Input[T]` exists
+for authors who want to say so explicitly rather than by omission.
+
+Examples
+--------
+>>> @tool()
+... def copy_file(self, source: Input[str], destination: Input[str]) -> dict:
+...     shutil.copy(source, destination)
+...     return {}
+"""

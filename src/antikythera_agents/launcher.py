@@ -24,6 +24,7 @@ from antikythera.models.conversions import dict_to_params
 from antikythera.models.conversions import keys_to_outputs
 from antikythera_agents.cli import Colors
 from antikythera_agents.context import ExecutionContext
+from antikythera_agents.descriptor import ToolBindingError
 
 THREAD_JOIN_TIMEOUT = 10
 
@@ -214,6 +215,10 @@ class AgentLauncher:
             if not isinstance(outputs, dict):
                 raise ValueError(f"Agent tools must return a dict of outputs. Got {type(outputs)} instead.")
             state = TaskState.SUCCEEDED
+        except ToolBindingError as e:
+            LOG.debug(f"{Colors.FAIL}❌ [{task.id}][{task.type}] Binding Error: {e}{Colors.ENDC}")
+            state = TaskState.FAILED
+            error = TaskError(code="TOOL_BINDING_ERROR", message=str(e), details=str(e))
         except Exception as e:
             if context.is_cancelled:
                 # If cancelled, we log and return, without trying to set state, or outputs
