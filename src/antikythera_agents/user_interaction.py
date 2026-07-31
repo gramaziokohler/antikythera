@@ -14,6 +14,12 @@ from antikythera_agents.decorators import tool
 class UserInteractionAgent(Agent):
     @tool(name="user_input")
     def get_user_input(self, task: Task) -> Dict[str, Any]:
+        """Prompt for one value per declared output, via stdin.
+
+        Stays opaque (`task: Task`) permanently: it builds its result by iterating
+        `task.outputs`, whose names and count are declared by the blueprint that uses
+        this tool, not by this tool's own signature (ADR-0002, issue-td-11).
+        """
         print(f"{Colors.HEADER}✍️ [{task.id}][{task.type}] Awaiting user input...{Colors.ENDC}")
         result = {}
         for task_output in task.outputs:
@@ -25,6 +31,12 @@ class UserInteractionAgent(Agent):
     # Deprecated in favor of `notify`
     @tool(name="user_output")
     def show_user_output(self, task: Task) -> Dict[str, Any]:
+        """Print every declared input's value.
+
+        Stays opaque (`task: Task`) permanently: it iterates `task.inputs` and accepts
+        whatever the blueprint wires in, not a fixed set of arguments this tool could
+        declare on its own signature (ADR-0002, issue-td-11).
+        """
         print(f"{Colors.OKCYAN}💬 [{task.id}][{task.type}] Displaying output:{Colors.ENDC}")
         for task_input in task.inputs:
             print(f"    [{task.id}][{task.type}] > {task_input.name}: {task_input.value}")
@@ -33,6 +45,21 @@ class UserInteractionAgent(Agent):
 
     @tool(name="notify")
     def notify(self, task: Task) -> Dict[str, Any]:
+        """Display a formatted notification.
+
+        Deliberately kept opaque (`task: Task`), not migrated (ADR-0002, issue-td-11):
+        `title`/`message`/`level` are each read input-or-param-whichever-is-present, a
+        shape the new binder can't express as a single argument, since under the new
+        scheme a parameter is either a task input or a `Param[T]`, never both depending
+        on what the blueprint happens to wire. And `title`/`message` are
+        `.format()`-interpolated against whatever keys the blueprint's own template
+        string references out of `task.context` and the resolved inputs combined —
+        an arbitrary, blueprint-chosen key set, not a fixed one this tool could declare
+        with `Context[T]`. Narrowing either behaviour to fit the new binder would change
+        what already-deployed blueprints using `notify` do, for no benefit; this is the
+        "shape genuinely determined by the blueprint" case the opaque escape hatch exists
+        for, same as `system.composite` and `user_input`/`user_output` above.
+        """
         inputs = {i.name: i.value for i in task.inputs}
         params = {p.name: p.value for p in task.params}
 
