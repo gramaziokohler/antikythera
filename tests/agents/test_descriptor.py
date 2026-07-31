@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 import typing
+from datetime import datetime
+from typing import List
 from typing import NotRequired
 from typing import Optional
 from typing import TypedDict
 
 import pytest
+from compas.geometry import Frame
+from compas_pb import pb_dump_bts
+from compas_pb import pb_load_bts
 
 from antikythera.models import Task
+from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskInput
+from antikythera.models import TaskParam
+from antikythera.models.conversions import dict_to_inputs
+from antikythera.models.conversions import dict_to_params
 from antikythera_agents.annotations import Context
 from antikythera_agents.annotations import Input
 from antikythera_agents.annotations import Param
@@ -438,3 +447,167 @@ def test_task_annotated_tool_with_typeddict_return_is_still_opaque_and_exempt():
 
     assert descriptor.opaque is True
     descriptor.validate_output({})
+
+
+# --- issue-td-07: type checking at bind time for plain-class annotations ---
+
+
+def test_bind_fails_when_input_type_mismatches_plain_class_annotation():
+    @tool(name="needs_frame")
+    def needs_frame(self, frame: Frame) -> dict:
+        return {}
+
+    descriptor = needs_frame._descriptor
+    task = Task(id="t1", type="test.needs_frame", inputs=[TaskInput(name="frame", value="not a frame")])
+
+    with pytest.raises(ToolBindingError, match="frame") as exc_info:
+        descriptor.bind(task=task, context=None)
+    message = str(exc_info.value)
+    assert "Frame" in message
+    assert "str" in message
+
+
+def test_bind_skips_check_for_parameterised_generic_annotation():
+    @tool(name="needs_list")
+    def needs_list(self, items: List[int]) -> dict:
+        return {}
+
+    descriptor = needs_list._descriptor
+    # Element types are not checked - the annotation is a generic, so the mismatch is ignored.
+    task = Task(id="t1", type="test.needs_list", inputs=[TaskInput(name="items", value=["not", "ints"])])
+
+    assert descriptor.bind(task=task, context=None) == {"items": ["not", "ints"]}
+
+
+def test_bind_accepts_int_for_float_input_and_integral_float_for_int_input():
+    @tool(name="needs_numbers")
+    def needs_numbers(self, as_float: float, as_int: int) -> dict:
+        return {}
+
+    descriptor = needs_numbers._descriptor
+    task = Task(id="t1", type="test.needs_numbers", inputs=[TaskInput(name="as_float", value=5), TaskInput(name="as_int", value=5.0)])
+
+    assert descriptor.bind(task=task, context=None) == {"as_float": 5, "as_int": 5.0}
+
+
+def test_bind_fails_on_non_integral_float_for_int_annotation():
+    @tool(name="needs_int")
+    def needs_int(self, count: int) -> dict:
+        return {}
+
+    descriptor = needs_int._descriptor
+    task = Task(id="t1", type="test.needs_int", inputs=[TaskInput(name="count", value=5.5)])
+
+    with pytest.raises(ToolBindingError, match="count"):
+        descriptor.bind(task=task, context=None)
+
+
+def test_bind_accepts_int_for_float_param_and_integral_float_for_int_param():
+    @tool(name="needs_number_params")
+    def needs_number_params(self, as_float: Param[float] = 1.0, as_int: Param[int] = 1) -> dict:
+        return {}
+
+    descriptor = needs_number_params._descriptor
+    task = Task(
+        id="t1",
+        type="test.needs_number_params",
+        params=[TaskParam(name="as_float", value=5), TaskParam(name="as_int", value=5.0)],
+    )
+
+    assert descriptor.bind(task=task, context=None) == {"as_float": 5, "as_int": 5.0}
+
+
+def test_bind_fails_when_param_type_mismatches_plain_class_annotation():
+    @tool(name="needs_str_param")
+    def needs_str_param(self, name: Param[str] = "x") -> dict:
+        return {}
+
+    descriptor = needs_str_param._descriptor
+    task = Task(id="t1", type="test.needs_str_param", params=[TaskParam(name="name", value=42)])
+
+    with pytest.raises(ToolBindingError, match="name"):
+        descriptor.bind(task=task, context=None)
+
+
+def test_bind_fails_when_context_type_mismatches_plain_class_annotation():
+    @tool(name="needs_context")
+    def needs_context(self, element_id: Context[int]) -> dict:
+        return {}
+
+    descriptor = needs_context._descriptor
+    task = Task(id="t1", type="test.needs_context", context={"element_id": "not-an-int"})
+
+    with pytest.raises(ToolBindingError, match="element_id"):
+        descriptor.bind(task=task, context=None)
+
+
+def test_bind_none_handling_unchanged_by_type_check():
+    @tool(name="optional_frame")
+    def optional_frame(self, frame: Optional[Frame] = None) -> dict:
+        return {}
+
+    descriptor = optional_frame._descriptor
+    task = Task(id="t1", type="test.optional_frame")
+
+    # No value supplied for an optional input - still resolves to None, not a type error.
+    assert descriptor.bind(task=task, context=None) == {"frame": None}
+
+
+def test_task_annotated_tool_exempt_from_type_check():
+    @tool(name="opaque_tool")
+    def opaque_tool(self, task: Task, count: Param[int] = 1) -> dict:
+        return {}
+
+    descriptor = opaque_tool._descriptor
+    task = Task(id="t1", type="test.opaque_tool", params=[TaskParam(name="count", value="not an int")])
+
+    assert descriptor.bind(task=task, context=None) == {"task": task, "count": "not an int"}
+
+
+def test_protobuf_round_trip_of_each_supported_value_kind_binds_without_error():
+    """A round trip through the wire format (issue-td-07's last acceptance criterion).
+
+    `compas_pb.core.primitive_to_pb`/`primitive_from_pb` widen every Python `int` to a
+    protobuf double on the wire, then narrow any integral double back to `int` on the way
+    back - so both an originally-int and an originally-float numeric value can come back as
+    either Python type. A tool's plain `int`/`float` annotations must accept both.
+    """
+
+    @tool(name="round_trip_tool")
+    def round_trip_tool(self, an_int: int, an_integral_float: float, a_float: float, a_str: str, a_bool: bool, a_frame: Frame) -> dict:
+        return {}
+
+    inputs = {
+        "an_int": 5,
+        "an_integral_float": 3.0,
+        "a_float": 3.14,
+        "a_str": "hello",
+        "a_bool": True,
+        "a_frame": Frame.worldXY(),
+    }
+    message = TaskAssignmentMessage(id="t1", type="test.round_trip_tool", inputs=inputs, timestamp=datetime.now())
+    pb2 = pb_load_bts(pb_dump_bts(message))
+    round_tripped = dict(pb2.inputs)
+
+    descriptor = round_trip_tool._descriptor
+    task = Task(id="t1", type="test.round_trip_tool", inputs=dict_to_inputs(round_tripped))
+
+    kwargs = descriptor.bind(task=task, context=None)
+    assert kwargs["a_str"] == "hello"
+    assert kwargs["a_bool"] is True
+    assert isinstance(kwargs["a_frame"], Frame)
+
+
+def test_protobuf_round_trip_of_params_binds_without_error():
+    @tool(name="round_trip_params_tool")
+    def round_trip_params_tool(self, an_int: Param[int] = 0, a_float: Param[float] = 0.0) -> dict:
+        return {}
+
+    message = TaskAssignmentMessage(id="t1", type="test.round_trip_params_tool", params={"an_int": 5, "a_float": 3.0}, timestamp=datetime.now())
+    pb2 = pb_load_bts(pb_dump_bts(message))
+    round_tripped = dict(pb2.params)
+
+    descriptor = round_trip_params_tool._descriptor
+    task = Task(id="t1", type="test.round_trip_params_tool", params=dict_to_params(round_tripped))
+
+    descriptor.bind(task=task, context=None)
