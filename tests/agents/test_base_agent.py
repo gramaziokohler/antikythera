@@ -1,12 +1,20 @@
+from typing import NotRequired
+from typing import TypedDict
 from unittest.mock import patch
 
+import pytest
+
 from antikythera.models import Task
+from antikythera.models import TaskInput
 from antikythera.models import TaskParam
 from antikythera_agents.annotations import Param
 from antikythera_agents.base_agent import Agent
 from antikythera_agents.context import ExecutionContext
 from antikythera_agents.decorators import agent
 from antikythera_agents.decorators import tool
+from antikythera_agents.descriptor import ToolBindingError
+
+FetchResult = TypedDict("FetchResult", {"value": str, "cached": NotRequired[bool]})
 
 
 @agent(type="test_binder")
@@ -26,6 +34,10 @@ class _BinderTestAgent(Agent):
     @tool(name="pnp.calculate_ik")
     def calculate_ik(self, task: Task):
         return {"tool": "calculate_ik"}
+
+    @tool(name="fetch")
+    def fetch(self, key: str) -> FetchResult:
+        return {}
 
 
 def test_task_only_tool_receives_task():
@@ -91,6 +103,19 @@ def test_execute_task_survives_monkeypatched_tool_method():
 
         assert result == {"duration": "mocked"}
         mock_sleepy.assert_called_once_with(a, task=task, duration=9)
+
+
+def test_execute_task_raises_tool_binding_error_when_declared_output_missing():
+    """A tool that under-returns its declared `TypedDict` output must fail loudly with
+    `ToolBindingError`, not silently succeed with the key persisted as `None` (issue-td-06) —
+    and the error must reach the caller unwrapped, not as the generic `RuntimeError` used for
+    exceptions raised by the tool body itself.
+    """
+    a = _BinderTestAgent()
+    task = Task(id="t8", type="test_binder.fetch", inputs=[TaskInput(name="key", value="k")])
+
+    with pytest.raises(ToolBindingError, match="value"):
+        a.execute_task(task)
 
 
 def test_context_binds_even_when_none():
