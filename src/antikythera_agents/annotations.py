@@ -45,3 +45,25 @@ Examples
 ...     shutil.copy(source, destination)
 ...     return {}
 """
+
+
+class _ContextMarker:
+    """Marks a tool parameter as bound from the task's expansion context, by name."""
+
+    def __repr__(self) -> str:
+        return "Context"
+
+
+Context = Annotated[T, _ContextMarker()]
+"""Marks a tool parameter as bound from the task's expansion context, by name.
+
+The expansion context is the identity of the item a dynamically expanded inner blueprint is
+working on — `element_id`, and whatever else the `Sequencer` attaches. It lives on
+`task.context` and is distinct from `ExecutionContext`, the cancellation/lifecycle handle.
+
+Examples
+--------
+>>> @tool()
+... def process_element(self, element_id: Context[str]) -> dict:
+...     return {"element_id": element_id}
+"""
