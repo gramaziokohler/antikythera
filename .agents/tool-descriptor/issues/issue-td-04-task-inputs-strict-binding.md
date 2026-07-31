@@ -53,7 +53,7 @@ there visible. Report what you find rather than working around it.
 - [x] Binding failures report `TOOL_BINDING_ERROR`, distinct from `TOOL_FAILURE`, with a
       message naming the offending argument.
 - [x] Tools taking `Task` remain exempt from all of the above.
-- [ ] `io.copy` declares `source` and `destination` as inputs and works with both literal
+- [x] `io.copy` declares `source` and `destination` as inputs and works with both literal
       values and wired-up upstream outputs.
 - [x] The catalog lists inputs with their `type_hint` and optionality.
 
