@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import typing
+from typing import Optional
 
 import pytest
 
 from antikythera.models import Task
+from antikythera.models import TaskInput
+from antikythera_agents.annotations import Input
 from antikythera_agents.annotations import Param
 from antikythera_agents.context import ExecutionContext
 from antikythera_agents.decorators import tool
+from antikythera_agents.descriptor import ToolBindingError
 
 
 def test_param_importable_and_subscriptable():
@@ -164,13 +168,111 @@ def test_bind_supplies_param_value_with_fallback_default():
     assert descriptor.bind(task=task_without_param, context=None) == {"task": task_without_param, "duration": 1}
 
 
-def test_bind_rejects_unsupported_plain_parameter():
+def test_unannotated_parameter_binds_to_task_input():
     @tool(name="needs_input")
-    def needs_input(self, task: Task, thing: str) -> dict:
+    def needs_input(self, thing: str) -> dict:
+        return {}
+
+    descriptor = needs_input._descriptor
+    task = Task(id="t1", type="test.needs_input", inputs=[TaskInput(name="thing", value="a value")])
+
+    assert descriptor.bind(task=task, context=None) == {"thing": "a value"}
+
+
+def test_input_marker_binds_identically_to_unannotated():
+    @tool(name="needs_input")
+    def needs_input(self, thing: Input[str]) -> dict:
+        return {}
+
+    descriptor = needs_input._descriptor
+    assert [f.name for f in descriptor.inputs] == ["thing"]
+
+    task = Task(id="t1", type="test.needs_input", inputs=[TaskInput(name="thing", value="a value")])
+    assert descriptor.bind(task=task, context=None) == {"thing": "a value"}
+
+
+def test_bind_fails_when_required_input_missing():
+    @tool(name="needs_input")
+    def needs_input(self, thing: str) -> dict:
         return {}
 
     descriptor = needs_input._descriptor
     task = Task(id="t1", type="test.needs_input")
 
-    with pytest.raises(TypeError):
+    with pytest.raises(ToolBindingError, match="thing"):
         descriptor.bind(task=task, context=None)
+
+
+def test_bind_fails_on_input_the_tool_does_not_accept():
+    @tool(name="needs_input")
+    def needs_input(self, thing: str) -> dict:
+        return {}
+
+    descriptor = needs_input._descriptor
+    task = Task(id="t1", type="test.needs_input", inputs=[TaskInput(name="thing", value="ok"), TaskInput(name="extra", value="surprise")])
+
+    with pytest.raises(ToolBindingError, match="extra"):
+        descriptor.bind(task=task, context=None)
+
+
+def test_bind_fails_when_non_optional_input_resolves_to_none_and_names_get_from():
+    @tool(name="needs_input")
+    def needs_input(self, thing: str) -> dict:
+        return {}
+
+    descriptor = needs_input._descriptor
+    task = Task(id="t1", type="test.needs_input", inputs=[TaskInput(name="thing", value=None, get_from="upstream_key")])
+
+    with pytest.raises(ToolBindingError, match="thing") as exc_info:
+        descriptor.bind(task=task, context=None)
+    assert "upstream_key" in str(exc_info.value)
+
+
+def test_bind_accepts_none_for_optional_or_defaulted_input():
+    @tool(name="needs_input")
+    def needs_input(self, thing: Optional[str] = None, other: str = "fallback") -> dict:
+        return {}
+
+    descriptor = needs_input._descriptor
+    task = Task(id="t1", type="test.needs_input", inputs=[TaskInput(name="thing", value=None), TaskInput(name="other", value=None)])
+
+    assert descriptor.bind(task=task, context=None) == {"thing": None, "other": None}
+
+    task_without_inputs = Task(id="t2", type="test.needs_input")
+    assert descriptor.bind(task=task_without_inputs, context=None) == {"thing": None, "other": "fallback"}
+
+
+def test_bind_uses_static_literal_input_value():
+    @tool(name="needs_input")
+    def needs_input(self, thing: str) -> dict:
+        return {}
+
+    descriptor = needs_input._descriptor
+    task = Task(id="t1", type="test.needs_input", inputs=[TaskInput(name="thing", value="a literal")])
+
+    assert descriptor.bind(task=task, context=None) == {"thing": "a literal"}
+
+
+def test_task_annotated_tool_exempt_from_strict_input_binding():
+    @tool(name="opaque_tool")
+    def opaque_tool(self, task: Task) -> dict:
+        return {}
+
+    descriptor = opaque_tool._descriptor
+    # An input the (opaque) tool never declares does not trip the strict binder.
+    task = Task(id="t1", type="test.opaque_tool", inputs=[TaskInput(name="anything", value="ignored")])
+
+    assert descriptor.bind(task=task, context=None) == {"task": task}
+
+
+def test_inputs_listed_with_type_hint_and_optionality():
+    @tool(name="needs_input")
+    def needs_input(self, thing: str, extra: Optional[int] = None) -> dict:
+        return {}
+
+    descriptor = needs_input._descriptor
+
+    assert {f.name: (f.type_hint, f.optional) for f in descriptor.inputs} == {
+        "thing": ("str", False),
+        "extra": ("Optional[int]", True),
+    }
