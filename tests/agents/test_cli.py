@@ -67,8 +67,14 @@ def test_describe_writes_json_catalog_to_stdout(capsys):
     assert "system" in agents
 
     tools = {tool["name"]: tool for tool in agents["system"]["tools"]}
-    assert tools["start"] == {"name": "start", "type": "system.start"}
-    assert tools["sleep"]["params"] == [{"name": "duration", "type_hint": "float", "optional": True}]
+    assert tools["start"]["name"] == "start"
+    assert tools["start"]["type"] == "system.start"
+    assert tools["start"]["outputs"] == [
+        {"name": "process_start_time", "type_hint": "float", "optional": False, "description": "Unix timestamp, in seconds, taken when the process started."}
+    ]
+    assert "inputs" not in tools["start"]
+    assert "params" not in tools["start"]
+    assert tools["sleep"]["params"] == [{"name": "duration", "type_hint": "float", "optional": True, "description": "How long to sleep, in seconds. Defaults to 1."}]
 
 
 def test_describe_catalog_includes_reference_agent(capsys):
