@@ -53,7 +53,6 @@ class SystemAgent(Agent):
             Unix timestamp, in seconds, taken when the process started.
         """
         print(f"{Colors.OKBLUE}🏃 [system.start] Starting...{Colors.ENDC}")
-        time.sleep(1)
         print(f"{Colors.OKGREEN}✅ [system.start] Finished.{Colors.ENDC}")
         return {"process_start_time": time.time()}
 
@@ -67,7 +66,6 @@ class SystemAgent(Agent):
             Unix timestamp, in seconds, taken when the process ended.
         """
         print(f"{Colors.OKBLUE}🏃 [system.end] Starting...{Colors.ENDC}")
-        time.sleep(1)
         print(f"{Colors.OKGREEN}✅ [system.end] Finished.{Colors.ENDC}")
         return {"process_end_time": time.time()}
 
