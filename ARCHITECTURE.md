@@ -177,6 +177,7 @@ If not provided, the tool's name is the function name. Arguments are task inputs
 
 ```python
 from antikythera_agents.annotations import Context, Param
+from antikythera_agents.typing_compat import NotRequired, TypedDict  # 3.9-safe re-exports
 
 class StockPnP(TypedDict):
     stock_trajectories: list[JointTrajectory]

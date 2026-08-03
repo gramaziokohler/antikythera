@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import sys
 import typing
 from datetime import datetime
 from typing import List
-from typing import NotRequired
 from typing import Optional
-from typing import TypedDict
 
 import pytest
 from compas.geometry import Frame
@@ -24,6 +23,8 @@ from antikythera_agents.annotations import Param
 from antikythera_agents.context import ExecutionContext
 from antikythera_agents.decorators import tool
 from antikythera_agents.descriptor import ToolBindingError
+from antikythera_agents.typing_compat import NotRequired
+from antikythera_agents.typing_compat import TypedDict
 
 
 def test_param_importable_and_subscriptable():
@@ -290,11 +291,12 @@ def test_inputs_listed_with_type_hint_and_optionality():
     }
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="`X | None` annotations need Python 3.10+")
 def test_pep604_union_named_and_detected_like_its_typing_spelling():
     # `X | None` and `Optional[X]` are distinct objects before Python 3.14 and the same object
     # from 3.14 on; either way the catalog spells them identically.
     @tool(name="unions")
-    def unions(self, extra: int | None = None, either: int | str = 0) -> dict:
+    def unions(self, extra: "int | None" = None, either: "int | str" = 0) -> dict:
         return {}
 
     descriptor = unions._descriptor

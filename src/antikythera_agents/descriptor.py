@@ -15,7 +15,7 @@ from antikythera.models import Task
 from antikythera_agents.annotations import _ContextMarker
 from antikythera_agents.annotations import _ParamMarker
 from antikythera_agents.context import ExecutionContext
-
+from antikythera_agents.typing_compat import get_type_hints as _typeddict_hints
 
 # `types.UnionType` is the `A | B` union, new in Python 3.10; `None` on 3.9.
 _UNION_TYPE = getattr(types, "UnionType", None)
@@ -338,7 +338,9 @@ class ToolDescriptor:
         if typed_dict is None:
             return []
         _, return_docs = self._field_descriptions
-        hints = typing.get_type_hints(typed_dict)
+        # Not `typing.get_type_hints`: before 3.11 only the `typing_extensions` version
+        # strips a backported `NotRequired[...]` off the annotation (see `typing_compat`).
+        hints = _typeddict_hints(typed_dict)
         return [
             ToolField(
                 name=name,
