@@ -52,6 +52,6 @@ class IOAgent(Agent):
                 elif os.path.isdir(matched_source):
                     self.logger.info(f"Skipping directory {matched_source}")
         except Exception as e:
-            raise RuntimeError(f"Failed to copy files: {e}")
+            raise RuntimeError(f"Failed to copy files: {e}") from e
 
         return {"copied_files": copied_files, "destination": destination}
