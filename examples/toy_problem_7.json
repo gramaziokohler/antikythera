@@ -10,7 +10,7 @@
       "outputs": [
         {
           "name": "process_start_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ]
     },
@@ -33,7 +33,7 @@
       "outputs": [
         {
           "name": "result",
-          "type": "str"
+          "type_hint": "str"
         }
       ],
       "depends_on": [
@@ -65,7 +65,7 @@
       "inputs": [
         {
           "name": "result",
-          "type": "str"
+          "type_hint": "str"
         },
         {
           "name": "frame_world_xy",
@@ -109,7 +109,7 @@
       "outputs": [
         {
           "name": "process_end_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ],
       "depends_on": [

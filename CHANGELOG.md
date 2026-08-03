@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Renamed `type` to `type_hint` on task inputs, outputs and params (`TaskIO` and subclasses) to disambiguate it from a task's `type` (agent.tool). Blueprint JSON accepts either key on load and always emits `type_hint`; `type` is a deprecated alias and a `type` property is kept for in-process readers. See ADR-0003.
+* **Breaking:** `antikythera-agents` now requires an explicit subcommand. `antikythera-agents run` starts the launcher with the same flags the bare command used to accept (`--broker-host`, `--broker-port`, `--dev`, `--sys-only`); invoking `antikythera-agents` with no subcommand exits non-zero with usage text instead of starting the launcher. Argument parsing moved into the `cli` module, leaving `__main__` as a thin entry point.
 * Fixed `TaskError` not calling `Data.__init__`, which made any session carrying an error fail to serialize with `AttributeError: '_name'`. The orchestrator swallows save failures, so a failed session silently stopped persisting its state and stayed `running` in storage.
 * Session failures now record the reason in `BlueprintSession.last_task_error` (task failures, dispatch failures and scope condition errors). The field existed and was read by the frontend but was never written.
 * Fixed a scope `while_policy` condition that cannot be evaluated (e.g. it reads a name no task wrote to session data) being silently treated as False, which skipped the loop and ran the session to completion as if it had succeeded. The session now fails with `ScopeConditionError`, listing the names actually available in session data.

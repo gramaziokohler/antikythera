@@ -48,27 +48,47 @@ class Dependency(Data):
 class TaskIO(Data):
     """Base class for task inputs, outputs, and parameters."""
 
-    def __init__(self, name: str, value: Any = None, type: Optional[str] = None, description: Optional[str] = None):
+    def __init__(
+        self,
+        name: str,
+        value: Any = None,
+        type_hint: Optional[str] = None,
+        description: Optional[str] = None,
+        type: Optional[str] = None,
+    ):
         super().__init__()
         self.name = name
         self.value = value
-        self.type = type
+        self.type_hint = type_hint if type_hint is not None else type
         self.description = description
+
+    @property
+    def type(self) -> Optional[str]:
+        """Deprecated alias for `type_hint`, kept for in-process readers."""
+        return self.type_hint
 
     @property
     def __data__(self) -> Dict[str, Any]:
         data = {
             "name": self.name,
             "value": self.value,
-            "type": self.type,
+            "type_hint": self.type_hint,
             "description": self.description,
         }
         return data
 
 
 class TaskInput(TaskIO):
-    def __init__(self, name: str, value: Any = None, type: Optional[str] = None, get_from: Optional[str] = None, description: Optional[str] = None):
-        super().__init__(name, value, type, description)
+    def __init__(
+        self,
+        name: str,
+        value: Any = None,
+        type_hint: Optional[str] = None,
+        get_from: Optional[str] = None,
+        description: Optional[str] = None,
+        type: Optional[str] = None,
+    ):
+        super().__init__(name, value, type_hint, description, type=type)
         self.get_from = get_from
 
     @property
@@ -79,8 +99,16 @@ class TaskInput(TaskIO):
 
 
 class TaskOutput(TaskIO):
-    def __init__(self, name: str, value: Any = None, type: Optional[str] = None, set_to: Optional[str] = None, description: Optional[str] = None):
-        super().__init__(name, value, type, description)
+    def __init__(
+        self,
+        name: str,
+        value: Any = None,
+        type_hint: Optional[str] = None,
+        set_to: Optional[str] = None,
+        description: Optional[str] = None,
+        type: Optional[str] = None,
+    ):
+        super().__init__(name, value, type_hint, description, type=type)
         self.set_to = set_to
 
     @property

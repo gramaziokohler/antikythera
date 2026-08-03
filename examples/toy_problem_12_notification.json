@@ -161,7 +161,7 @@
             "outputs": [
                 {
                     "name": "result",
-                    "type": "str"
+                    "type_hint": "str"
                 }
             ],
             "depends_on": [

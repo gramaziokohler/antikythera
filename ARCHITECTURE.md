@@ -801,7 +801,7 @@ def run_long_process(self, task: Task, context: ExecutionContext) -> dict:
     demo:
       python: git+https://github.com/gramaziokohler/some_pip_package.git
         --> uv pip install git+https://github.com/gramaziokohler/some_pip_package.git
-            uv run python -m antikythera_agents
+            uv run python -m antikythera_agents run
   ```
 
 - [ ] BT: Explore if we can/should use BTs for control logic (BT inside a blueprint | Blueprint inside a BT)
