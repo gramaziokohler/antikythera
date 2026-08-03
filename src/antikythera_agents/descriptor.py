@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import types
 import typing
 from dataclasses import dataclass
 from functools import cached_property
@@ -14,6 +15,10 @@ from antikythera.models import Task
 from antikythera_agents.annotations import _ContextMarker
 from antikythera_agents.annotations import _ParamMarker
 from antikythera_agents.context import ExecutionContext
+
+
+# `types.UnionType` is the `A | B` union, new in Python 3.10; `None` on 3.9.
+_UNION_TYPE = getattr(types, "UnionType", None)
 
 
 class ToolBindingError(Exception):
@@ -43,8 +48,18 @@ def _is_context(hint: Any) -> bool:
     return bool(metadata) and any(isinstance(m, _ContextMarker) for m in metadata)
 
 
+def _is_union_type(tp: Any) -> bool:
+    """True for both spellings of a union: `Union[A, B]`/`Optional[A]` and `A | B`.
+
+    They are distinct objects before Python 3.14 (`typing.Union` vs `types.UnionType`) and
+    the same object from 3.14 on, so both origins have to be accepted.
+    """
+    origin = typing.get_origin(tp)
+    return origin is typing.Union or (_UNION_TYPE is not None and origin is _UNION_TYPE)
+
+
 def _is_optional_type(tp: Any) -> bool:
-    return typing.get_origin(tp) is typing.Union and type(None) in typing.get_args(tp)
+    return _is_union_type(tp) and type(None) in typing.get_args(tp)
 
 
 def _checkable_type(hint: Any) -> Optional[type]:
@@ -88,9 +103,24 @@ def _is_typeddict(tp: Any) -> bool:
 
 
 def _type_hint_name(tp: Any) -> str:
+    """A display name for `tp`, spelled the same way on every supported interpreter.
+
+    Unions are rendered explicitly rather than via `repr`: Python 3.14 merged `typing.Union`
+    into `types.UnionType`, so `str(Optional[int])` changed from `typing.Optional[int]` to
+    `int | None`. These names reach the tool catalog and serialised blueprints, so they are
+    pinned to the `Optional[...]`/`Union[...]` spelling regardless of how the annotation was
+    written or which interpreter reads it.
+    """
     if tp is type(None):
         return "None"
-    if isinstance(tp, type):
+    if _is_union_type(tp):
+        args = typing.get_args(tp)
+        present = [a for a in args if a is not type(None)]
+        rendered = ", ".join(_type_hint_name(a) for a in present)
+        if len(present) > 1:
+            rendered = f"Union[{rendered}]"
+        return f"Optional[{rendered}]" if len(present) != len(args) else rendered
+    if isinstance(tp, type) and not typing.get_args(tp):
         return tp.__name__ if tp.__module__ == "builtins" else f"{tp.__module__}.{tp.__qualname__}"
     return str(tp).replace("typing.", "")
 

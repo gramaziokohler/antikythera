@@ -290,6 +290,21 @@ def test_inputs_listed_with_type_hint_and_optionality():
     }
 
 
+def test_pep604_union_named_and_detected_like_its_typing_spelling():
+    # `X | None` and `Optional[X]` are distinct objects before Python 3.14 and the same object
+    # from 3.14 on; either way the catalog spells them identically.
+    @tool(name="unions")
+    def unions(self, extra: int | None = None, either: int | str = 0) -> dict:
+        return {}
+
+    descriptor = unions._descriptor
+
+    assert {f.name: (f.type_hint, f.optional) for f in descriptor.inputs} == {
+        "extra": ("Optional[int]", True),
+        "either": ("Union[int, str]", True),
+    }
+
+
 def test_context_binds_matching_key_from_task_context():
     @tool(name="process_element")
     def process_element(self, element_id: Context[str]) -> dict:
