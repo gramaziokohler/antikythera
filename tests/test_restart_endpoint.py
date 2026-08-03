@@ -1,5 +1,7 @@
 """Tests for re-running a session that already reached a terminal state."""
 
+from __future__ import annotations
+
 from unittest.mock import patch
 
 import fakeredis
