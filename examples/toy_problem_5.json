@@ -10,7 +10,7 @@
       "outputs": [
         {
           "name": "process_start_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ]
     },
@@ -21,13 +21,13 @@
       "inputs": [
         {
           "name": "something",
-          "type": "str"
+          "type_hint": "str"
         }
       ],
       "outputs": [
         {
           "name": "result1",
-          "type": "str"
+          "type_hint": "str"
         }
       ],
       "params": [
@@ -50,7 +50,7 @@
       "outputs": [
         {
           "name": "process_end_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ],
       "depends_on": [

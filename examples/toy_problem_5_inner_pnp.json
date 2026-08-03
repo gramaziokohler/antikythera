@@ -10,7 +10,7 @@
       "outputs": [
         {
           "name": "process_start_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ]
     },
@@ -20,7 +20,7 @@
       "outputs": [
         {
           "name": "pickup_location_frame",
-          "type": "compas.geometry.Frame"
+          "type_hint": "compas.geometry.Frame"
         }
       ],
       "depends_on": [
@@ -45,13 +45,13 @@
       "inputs": [
         {
           "name": "pickup_location_frame",
-          "type": "compas.geometry.Frame"
+          "type_hint": "compas.geometry.Frame"
         }
       ],
       "outputs": [
         {
           "name": "trajectories",
-          "type": "list[compas_fab.robots.Trajectory]"
+          "type_hint": "list[compas_fab.robots.Trajectory]"
         }
       ],
       "depends_on": [
@@ -66,7 +66,7 @@
       "outputs": [
         {
           "name": "process_start_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ],
       "depends_on": [
@@ -81,7 +81,7 @@
       "outputs": [
         {
           "name": "process_end_time",
-          "type": "timestamp"
+          "type_hint": "timestamp"
         }
       ],
       "depends_on": [

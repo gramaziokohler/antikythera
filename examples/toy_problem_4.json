@@ -10,7 +10,7 @@
             "outputs": [
                 {
                     "name": "process_start_time",
-                    "type": "timestamp"
+                    "type_hint": "timestamp"
                 }
             ]
         },
@@ -21,7 +21,7 @@
             "outputs": [
                 {
                     "name": "something",
-                    "type": "str"
+                    "type_hint": "str"
                 }
             ],
             "depends_on": [
@@ -37,13 +37,13 @@
             "inputs": [
                 {
                     "name": "something",
-                    "type": "str"
+                    "type_hint": "str"
                 }
             ],
             "outputs": [
                 {
                     "name": "result1",
-                    "type": "str",
+                    "type_hint": "str",
                     "set_to": "something_else"
                 }
             ],
@@ -69,7 +69,7 @@
             "inputs": [
                 {
                     "name": "something_else",
-                    "type": "str"
+                    "type_hint": "str"
                 }
             ],
             "depends_on": [
@@ -84,7 +84,7 @@
             "outputs": [
                 {
                     "name": "process_end_time",
-                    "type": "timestamp"
+                    "type_hint": "timestamp"
                 }
             ],
             "depends_on": [
