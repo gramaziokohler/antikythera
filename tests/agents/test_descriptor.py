@@ -181,7 +181,7 @@ def test_bind_supplies_param_value_with_fallback_default():
     assert descriptor.bind(task=task_without_param, context=None) == {"task": task_without_param, "duration": 1}
 
 
-def test_unannotated_parameter_binds_to_task_input():
+def test_plain_annotated_parameter_binds_to_task_input():
     @tool(name="needs_input")
     def needs_input(self, thing: str) -> dict:
         return {}
@@ -806,6 +806,127 @@ def test_to_dict_includes_field_descriptions():
 
     assert entry["inputs"] == [{"name": "source", "type_hint": "str", "optional": False, "description": "Glob pattern for the files to copy."}]
     assert entry["outputs"][0]["description"] == "The computed value."
+
+
+# --- an unannotated parameter is a task input, not an invisible one ---
+
+
+def test_unannotated_parameter_is_listed_as_a_required_input_typed_any():
+    @tool(name="summarize")
+    def summarize(self, text, max_words: Param[int] = 50) -> dict:
+        return {}
+
+    descriptor = summarize._descriptor
+
+    assert {f.name: (f.type_hint, f.optional) for f in descriptor.inputs} == {"text": ("Any", False)}
+    assert [f.name for f in descriptor.params] == ["max_words"]
+
+
+def test_unannotated_parameter_binds_from_the_task_input_the_task_declares():
+    @tool(name="summarize")
+    def summarize(self, text, max_words: Param[int] = 50) -> dict:
+        return {}
+
+    descriptor = summarize._descriptor
+    task = Task(id="t1", type="test.summarize", inputs=[TaskInput(name="text", value="hello world")])
+
+    # Strict binding must not reject an input the task declares and the tool really does take.
+    assert descriptor.bind(task=task, context=None) == {"text": "hello world", "max_words": 50}
+
+
+def test_missing_unannotated_input_raises_binding_error_rather_than_a_call_time_type_error():
+    @tool(name="summarize")
+    def summarize(self, text, max_words: Param[int] = 50) -> dict:
+        return {}
+
+    descriptor = summarize._descriptor
+    task = Task(id="t1", type="test.summarize")
+
+    with pytest.raises(ToolBindingError, match="text"):
+        descriptor.bind(task=task, context=None)
+
+
+def test_unannotated_parameter_with_default_is_optional_and_falls_back_to_it():
+    @tool(name="summarize")
+    def summarize(self, text="fallback") -> dict:
+        return {}
+
+    descriptor = summarize._descriptor
+
+    assert descriptor.inputs[0].optional is True
+    assert descriptor.bind(task=Task(id="t1", type="test.summarize"), context=None) == {"text": "fallback"}
+
+
+def test_unannotated_parameter_accepts_any_value_without_type_check():
+    @tool(name="summarize")
+    def summarize(self, text) -> dict:
+        return {}
+
+    descriptor = summarize._descriptor
+    task = Task(id="t1", type="test.summarize", inputs=[TaskInput(name="text", value=Frame.worldXY())])
+
+    # `Any` is not a checkable type - anything the task supplies binds.
+    assert isinstance(descriptor.bind(task=task, context=None)["text"], Frame)
+
+
+def test_unannotated_input_appears_in_the_catalog():
+    @tool(name="summarize")
+    def summarize(self, text, max_words: Param[int] = 50) -> dict:
+        """Summarize some text.
+
+        Parameters
+        ----------
+        text : str
+            The text to summarize.
+        """
+        return {}
+
+    entry = summarize._descriptor.to_dict(agent_type="test")
+
+    assert entry["inputs"] == [{"name": "text", "type_hint": "Any", "optional": False, "description": "The text to summarize."}]
+
+
+def test_inputs_follow_signature_order_when_annotations_are_mixed():
+    @tool(name="mixed")
+    def mixed(self, first, second: str, third=None) -> dict:
+        return {}
+
+    assert [f.name for f in mixed._descriptor.inputs] == ["first", "second", "third"]
+
+
+def test_self_is_not_treated_as_an_input():
+    @tool(name="no_args")
+    def no_args(self) -> dict:
+        return {}
+
+    descriptor = no_args._descriptor
+
+    assert descriptor.inputs == []
+    assert descriptor.bind(task=Task(id="t1", type="test.no_args"), context=None) == {}
+
+
+def test_var_args_and_kwargs_are_not_bindable_inputs():
+    @tool(name="variadic")
+    def variadic(self, thing: str, *args, **kwargs) -> dict:
+        return {}
+
+    descriptor = variadic._descriptor
+    task = Task(id="t1", type="test.variadic", inputs=[TaskInput(name="thing", value="ok")])
+
+    assert [f.name for f in descriptor.inputs] == ["thing"]
+    assert descriptor.bind(task=task, context=None) == {"thing": "ok"}
+
+
+def test_unannotated_parameter_on_an_opaque_tool_stays_exempt():
+    @tool(name="opaque_tool")
+    def opaque_tool(self, task: Task, extra=None) -> dict:
+        return {}
+
+    descriptor = opaque_tool._descriptor
+    task = Task(id="t1", type="test.opaque_tool", inputs=[TaskInput(name="anything", value="ignored")])
+
+    assert descriptor.opaque is True
+    assert descriptor.bind(task=task, context=None) == {"task": task, "extra": None}
 
 
 def test_protobuf_round_trip_of_params_binds_without_error():

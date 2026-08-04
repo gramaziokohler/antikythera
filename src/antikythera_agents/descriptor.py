@@ -71,6 +71,11 @@ def _checkable_type(hint: Any) -> Optional[type]:
     `None` is an acceptable value is decided elsewhere, by the existing None-handling rules;
     this only picks the type to check non-`None` values against.
     """
+    # `Any` is the hint an unannotated parameter gets, and it accepts everything. It has to
+    # be rejected explicitly: from Python 3.11 on it is a class, so `isinstance(hint, type)`
+    # admits it, but `isinstance(value, Any)` then raises `TypeError`.
+    if hint is Any:
+        return None
     if isinstance(hint, type):
         return hint
     if _is_optional_type(hint):
@@ -113,6 +118,10 @@ def _type_hint_name(tp: Any) -> str:
     """
     if tp is type(None):
         return "None"
+    # Pinned for the same reason: `typing.Any` became a class in 3.11, so the plain-class
+    # branch below would render it as `typing.Any` there and `Any` on older interpreters.
+    if tp is Any:
+        return "Any"
     if _is_union_type(tp):
         args = typing.get_args(tp)
         present = [a for a in args if a is not type(None)]
@@ -251,9 +260,32 @@ class ToolDescriptor:
         return typing.get_type_hints(self.func, include_extras=True)
 
     @cached_property
+    def _parameters(self) -> Dict[str, Any]:
+        """The tool's bindable parameters, in signature order, each mapped to its type hint.
+
+        Driven by the signature rather than by `_hints`, which reports only the *annotated*
+        names: an unannotated parameter is a task input (ADR-0002, and see `inputs`), so
+        taking `_hints` as the parameter list would drop it from the catalog and from `bind`
+        — the task would then be told the tool "does not accept" an input it in fact
+        requires, or the tool would be called without it. Such a parameter gets `Any`, which
+        binds like any other input but is exempt from type checking.
+
+        `self` and any `*args`/`**kwargs` are not bindable from a task and are excluded.
+        """
+        hints = self._hints
+        parameters: Dict[str, Any] = {}
+        for index, (name, sig_param) in enumerate(self._signature.parameters.items()):
+            if index == 0 and name in ("self", "cls"):
+                continue
+            if sig_param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                continue
+            parameters[name] = hints.get(name, Any)
+        return parameters
+
+    @cached_property
     def opaque(self) -> bool:
         """True for a tool that takes `Task` directly — no derivable inputs or outputs."""
-        return any(_unwrap(hint) is Task for name, hint in self._hints.items() if name != "return")
+        return any(_unwrap(hint) is Task for hint in self._parameters.values())
 
     @cached_property
     def description(self) -> Optional[str]:
@@ -272,8 +304,8 @@ class ToolDescriptor:
     def params(self) -> List[ToolField]:
         param_docs, _ = self._field_descriptions
         fields = []
-        for name, hint in self._hints.items():
-            if name == "return" or not _is_param(hint):
+        for name, hint in self._parameters.items():
+            if not _is_param(hint):
                 continue
             inner = _unwrap(hint)
             sig_param = self._signature.parameters[name]
@@ -294,13 +326,12 @@ class ToolDescriptor:
         `Context[T]`.
 
         Covers both an unannotated parameter and one explicitly marked `Input[T]` — the two
-        bind identically, per ADR-0002.
+        bind identically, per ADR-0002. An unannotated one is listed with the type hint
+        `Any` (see `_parameters`).
         """
         param_docs, _ = self._field_descriptions
         fields = []
-        for name, hint in self._hints.items():
-            if name == "return":
-                continue
+        for name, hint in self._parameters.items():
             unwrapped = _unwrap(hint)
             if unwrapped is Task or unwrapped is ExecutionContext or _is_param(hint) or _is_context(hint):
                 continue
@@ -319,7 +350,7 @@ class ToolDescriptor:
     @cached_property
     def requires_context(self) -> List[str]:
         """Names of the expansion-context keys this tool's `Context[T]` parameters need."""
-        return [name for name, hint in self._hints.items() if name != "return" and _is_context(hint)]
+        return [name for name, hint in self._parameters.items() if _is_context(hint)]
 
     @cached_property
     def _output_typeddict(self) -> Optional[type]:
@@ -367,9 +398,7 @@ class ToolDescriptor:
                     raise ToolBindingError(f"Tool '{self.name}' does not accept input '{task_input.name}', which the task declares.")
 
         kwargs: Dict[str, Any] = {}
-        for name, hint in self._hints.items():
-            if name == "return":
-                continue
+        for name, hint in self._parameters.items():
             unwrapped = _unwrap(hint)
             if unwrapped is Task:
                 kwargs[name] = task
