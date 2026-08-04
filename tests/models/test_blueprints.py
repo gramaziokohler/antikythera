@@ -1,12 +1,16 @@
 import json
 
 import pytest
+from compas.data import json_dumps
+from compas.data import json_loads
 
 from antikythera.io import BlueprintJsonSerializer
 from antikythera.models import Blueprint
+from antikythera.models import BlueprintSession
 from antikythera.models import Dependency
 from antikythera.models import DependencyType
 from antikythera.models import Task
+from antikythera.models import TaskError
 from antikythera.models import TaskState
 
 
@@ -71,3 +75,24 @@ def test_task_parsing(tmp_path, sample_blueprint_json):
     assert task_c.type == "system.end"
     assert task_c.state == TaskState.PENDING
     assert task_c.depends_on[0].id == "TASK_B"
+
+
+def test_session_with_task_error_round_trips(sample_blueprint_json):
+    """A session carrying last_task_error must survive serialization.
+
+    TaskError used to skip Data.__init__, so serializing a session that
+    recorded one raised AttributeError. The orchestrator swallows save
+    failures, so the session state silently stopped being persisted.
+    """
+    blueprint = BlueprintJsonSerializer.BlueprintSerializer.from_dict(sample_blueprint_json)
+    session = BlueprintSession(
+        bsid="session-with-error",
+        blueprint=blueprint,
+        last_task_error=TaskError(code="TOOL_FAILURE", message="Bad tool.", details="stack trace"),
+    )
+
+    restored = json_loads(json_dumps(session))
+
+    assert restored.last_task_error.code == "TOOL_FAILURE"
+    assert restored.last_task_error.message == "Bad tool."
+    assert restored.last_task_error.details == "stack trace"

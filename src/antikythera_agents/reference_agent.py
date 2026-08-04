@@ -12,9 +12,7 @@ blueprint that drives it end to end, and ARCHITECTURE.md's "Reference Agent" sec
 import time
 from typing import Any
 from typing import Dict
-from typing import NotRequired
 from typing import Optional
-from typing import TypedDict
 
 from antikythera.models import Task
 from antikythera_agents.annotations import Context
@@ -24,6 +22,8 @@ from antikythera_agents.base_agent import Agent
 from antikythera_agents.context import ExecutionContext
 from antikythera_agents.decorators import agent
 from antikythera_agents.decorators import tool
+from antikythera_agents.typing_compat import NotRequired
+from antikythera_agents.typing_compat import TypedDict
 
 AssembleResult = TypedDict("AssembleResult", {"message": str, "detail": NotRequired[str]})
 

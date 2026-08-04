@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import Any
 from typing import Dict
@@ -16,6 +17,8 @@ from antikythera.models.blueprints import TaskInput
 from antikythera.models.blueprints import TaskOutput
 from antikythera.models.blueprints import TaskParam
 from antikythera.models.blueprints import TaskState
+
+LOG = logging.getLogger(__name__)
 
 
 class BaseSerializerV1:
@@ -265,6 +268,8 @@ class BlueprintJsonSerializeV1(BaseSerializerV1):
 
         blueprint = cls.BlueprintSerializer.from_dict(data)
         blueprint.validate()
+        for warning in blueprint.check_dataflow():
+            LOG.warning(f"Blueprint '{blueprint.id}': {warning}")
         return blueprint
 
     @classmethod

@@ -1,5 +1,3 @@
-from typing import NotRequired
-from typing import TypedDict
 from unittest.mock import patch
 
 import pytest
@@ -13,6 +11,8 @@ from antikythera_agents.context import ExecutionContext
 from antikythera_agents.decorators import agent
 from antikythera_agents.decorators import tool
 from antikythera_agents.descriptor import ToolBindingError
+from antikythera_agents.typing_compat import NotRequired
+from antikythera_agents.typing_compat import TypedDict
 
 FetchResult = TypedDict("FetchResult", {"value": str, "cached": NotRequired[bool]})
 

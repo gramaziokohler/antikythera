@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Blueprint.check_dataflow()` reports condition expressions (task `condition` and `while_policy.condition`) that read session names no task in the blueprint declares as an output. `POST /blueprints/upload` rejects such a blueprint with `400` and a `detail.problems` list, and does not store it. Loading a blueprint from file only logs them, so blueprints already in storage stay loadable.
+
 ### Changed
 
 * Renamed `type` to `type_hint` on task inputs, outputs and params (`TaskIO` and subclasses) to disambiguate it from a task's `type` (agent.tool). Blueprint JSON accepts either key on load and always emits `type_hint`; `type` is a deprecated alias and a `type` property is kept for in-process readers. See ADR-0003.
@@ -22,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Added `ReferenceAgent` (agent type `reference`), a dependency-free worked example exercising every part of the tool convention — a plain task input, an explicit `Input[T]`, a required and a defaulted `Param[T]`, a `Context[T]` value, an `Optional[T]` input, a `TypedDict` return with both a required and a `NotRequired` key, the `Task` escape hatch, and `ExecutionContext` cancellation. `examples/reference_agent_demo.json` drives it end to end. See ADR-0002, issue-td-10.
 * **Breaking:** `io.copy` now declares `source` and `destination` as task inputs instead of reading them from either input or param; blueprints must wire them as inputs (literal value or `get_from`). See ADR-0002, issue-td-04.
 * `system.start`, `system.end` and `system.demo_mesh` no longer take `Task` — they take no arguments at all and each declares a `TypedDict` return (`process_start_time`, `process_end_time`, `mesh` respectively), so their outputs now appear in the catalog. `system.sleep` and `system.composite` keep taking `Task` deliberately (to log the task id/type alongside `duration`, and because a composite task's output shape is decided by the blueprint) and document why in their docstrings. `user_interaction.notify` was evaluated for migration and deliberately kept opaque rather than narrowed: it resolves `title`/`message`/`level` from either an input or a param depending on what the blueprint wires, and interpolates them against arbitrary keys from the expansion context and inputs — neither has a fixed shape the new binder can express, and narrowing either would change already-deployed blueprints' behaviour for no benefit. `user_interaction.user_input` and `user_interaction.user_output` were already opaque and now document why in their docstrings. See ADR-0002, issue-td-11.
+* Fixed `TaskError` not calling `Data.__init__`, which made any session carrying an error fail to serialize with `AttributeError: '_name'`. The orchestrator swallows save failures, so a failed session silently stopped persisting its state and stayed `running` in storage.
+* Session failures now record the reason in `BlueprintSession.last_task_error` (task failures, dispatch failures and scope condition errors). The field existed and was read by the frontend but was never written.
+* Fixed a scope `while_policy` condition that cannot be evaluated (e.g. it reads a name no task wrote to session data) being silently treated as False, which skipped the loop and ran the session to completion as if it had succeeded. The session now fails with `ScopeConditionError`, listing the names actually available in session data.
 
 ### Removed
 
