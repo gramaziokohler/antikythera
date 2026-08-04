@@ -19,15 +19,14 @@ class IOAgent(Agent):
 
         Parameters
         ----------
-        source : str
+        source
             Glob pattern for the files to copy.
-        destination : str
+        destination
             Destination path to copy the matched files to.
 
         Returns
         -------
-        dict
-            Dictionary containing 'copied_files' and 'destination'.
+        Dictionary containing 'copied_files' and 'destination'.
         """
         sources = glob.glob(source, recursive=True)
 

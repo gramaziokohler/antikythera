@@ -49,7 +49,7 @@ class SystemAgent(Agent):
 
         Returns
         -------
-        process_start_time : float
+        process_start_time
             Unix timestamp, in seconds, taken when the process started.
         """
         print(f"{Colors.OKBLUE}🏃 [system.start] Starting...{Colors.ENDC}")
@@ -62,7 +62,7 @@ class SystemAgent(Agent):
 
         Returns
         -------
-        process_end_time : float
+        process_end_time
             Unix timestamp, in seconds, taken when the process ended.
         """
         print(f"{Colors.OKBLUE}🏃 [system.end] Starting...{Colors.ENDC}")
@@ -79,8 +79,8 @@ class SystemAgent(Agent):
 
         Parameters
         ----------
-        duration : float, optional
-            How long to sleep, in seconds. Defaults to 1.
+        duration
+            How long to sleep, in seconds.
         """
         print(f"{Colors.OKBLUE}😴 [{task.id}][{task.type}] Sleeping for {duration}s...{Colors.ENDC}")
         time.sleep(duration)
@@ -93,7 +93,7 @@ class SystemAgent(Agent):
 
         Returns
         -------
-        mesh : compas.datastructures.Mesh
+        mesh
             The demo mesh.
         """
         return {"mesh": Mesh.from_ply(compas.get_bunny())}
