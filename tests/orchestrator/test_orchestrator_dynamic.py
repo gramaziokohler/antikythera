@@ -12,6 +12,7 @@ from antikythera.models import TaskInput
 from antikythera.models import TaskOutput
 from antikythera.models import TaskParam
 from antikythera.models.blueprints import BlueprintSessionState
+from antikythera_agents.annotations import Context
 from antikythera_agents.base_agent import Agent
 from antikythera_agents.decorators import agent
 from antikythera_agents.decorators import tool
@@ -228,6 +229,90 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
 
     assert orchestrator.await_completion(timeout=30)
     assert session.state == BlueprintSessionState.COMPLETED
+
+
+def test_dynamic_expansion_context_annotation_binds_per_element(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+    """Each inner blueprint instance's `Context[str]`-annotated tool receives its own
+    element's expansion context, verified against a genuinely dynamic blueprint (a sequencer
+    expanding a composite task over a model's elements) rather than a hand-built task.
+
+    The agent class is defined locally, without `@agent`, and assigned directly to the
+    launcher — mirroring `BlockingTestAgent` above — because `@agent`-decorated classes join
+    a process-wide registry that every `AgentLauncher()` auto-instantiates, and
+    `can_claim_task` matches purely on tool name (the part after the first dot), not on
+    agent-type prefix. A globally-registered agent here with a tool also named `process`
+    would collide with `DynamicExpansionTestAgent`'s tool of the same name above.
+    """
+
+    class ContextBindingTestAgent(Agent):
+        @tool(name="report_context")
+        def process_element(self, element_id: Context[str]) -> Dict[str, Any]:
+            return {"seen_element_id": element_id}
+
+    model = Model()
+    element1 = Element()
+    element2 = Element()
+    model.add_element(element1)
+    model.add_element(element2)
+
+    model_id = "test_model_context_binding"
+
+    with ModelStorage() as storage:
+        storage.add_model(model_id, model)
+
+    inner_start = Task(id="inner_start", type="system.start")
+    inner_process = Task(id="mark_processed", type="test_dynamic_context.report_context", outputs=[TaskOutput(name="seen_element_id")])
+    inner_end = Task(id="inner_end", type="system.end")
+    inner_start >> inner_process >> inner_end
+
+    inner_blueprint = Blueprint(id="test_inner_bp_ctx", name="Test Inner Blueprint Context", tasks=[inner_start, inner_process, inner_end])
+
+    with BlueprintStorage() as bp_storage:
+        bp_storage.add_blueprint(inner_blueprint)
+
+    outer_start = Task(id="start", type="system.start")
+    dynamic_task = Task(
+        id="dynamic_process",
+        type="system.composite",
+        params=[
+            TaskParam(name="blueprint", value={"dynamic": {"blueprint_id": "test_inner_bp_ctx", "sequencer": "basic_sequencer"}}),
+        ],
+    )
+    outer_end = Task(id="end", type="system.end")
+    outer_start >> dynamic_task >> outer_end
+
+    outer_blueprint = Blueprint(id="test_outer_bp_ctx", name="Test Outer Dynamic Blueprint Context", tasks=[outer_start, dynamic_task, outer_end])
+
+    session = BlueprintSession(
+        bsid="test_session_dynamic_context",
+        blueprint=outer_blueprint,
+        params={"model_id": model_id},
+    )
+
+    orchestrator = cleanup_manager.register(Orchestrator(session))
+
+    launcher = cleanup_manager.register(AgentLauncher())
+    launcher.agents["test_dynamic_context"] = ContextBindingTestAgent()
+    launcher.start()
+
+    orchestrator.start()
+
+    assert orchestrator.await_completion(timeout=12)
+    assert session.state == BlueprintSessionState.COMPLETED
+
+    graph_tasks = [data["task"] for _, data in orchestrator.graph.nodes(data=True)]
+    task_0 = next(t for t in graph_tasks if t.id == "dynamic_process_0")
+    task_1 = next(t for t in graph_tasks if t.id == "dynamic_process_1")
+
+    task_0_element_id = task_0.get_param_value("blueprint")["dynamic"]["element"]["element_id"]
+    task_1_element_id = task_1.get_param_value("blueprint")["dynamic"]["element"]["element_id"]
+    assert task_0_element_id == str(element1.guid)
+    assert task_1_element_id == str(element2.guid)
+
+    subtasks = [t for t in graph_tasks if t.id == "mark_processed"]
+    assert len(subtasks) == 2
+    seen_element_ids = {subtask.get_output_value("seen_element_id") for subtask in subtasks}
+    assert seen_element_ids == {str(element1.guid), str(element2.guid)}
 
 
 def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:

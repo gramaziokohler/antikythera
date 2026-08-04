@@ -15,6 +15,12 @@
 * `Outer Blueprint`: A blueprint that contains other blueprints as sub-processes. Inner blueprints can be static (pre-defined blueprints) or dynamic (blueprints defined at runtime).
 * `Behavior Tree`: A robotics-oriented representation of a decision tree for implementing control logic in semi-autonomous robot operation.
 * `BSID`: Blueprint Session Identifier - a UUID that uniquely identifies a blueprint execution session. Sessions can have long running times (potentially multiple weeks).
+* `Tool`: A single capability of an `Agent`, declared with the `@tool` decorator. A `Task` names the tool that will execute it through its `type` field, in the form `{agent_type}.{tool_name}`.
+* `Tool Descriptor`: The machine-readable declaration of what a `Tool` accepts and produces, derived from its Python signature. Used to bind arguments at execution time and to publish a catalog for blueprint authors.
+* `Opaque Tool`: A `Tool` that takes the whole `Task` rather than declaring named arguments. Its inputs and outputs cannot be derived, so it has no descriptor detail and is exempt from strict binding. Used where outputs are genuinely determined by the blueprint rather than the tool.
+* `Expansion Context`: The identity of the item a dynamically expanded inner blueprint is working on — `element_id`, and whatever else the `Sequencer` attaches. Distinct from `ExecutionContext`, which is the cancellation and lifecycle handle given to a running tool.
+* `Task Input` vs `Task Param`: An input establishes a data dependency and is normally resolved from blueprint session data (optionally remapped via `get_from`); a param is wired directly into the task and never comes from session data. Both may carry a literal value.
+* `type_hint`: The Python type of a task input, output or param, as a string. Documentation for a reader, not a validated constraint — enforcement happens at bind time against the tool's annotation. Distinct from a task's `type`, which names the tool.
 
 ## Technology Stack
 
@@ -142,8 +148,10 @@ To enable development mode, start the services with the `--dev` flag:
 python -m antikythera_orchestrator --dev
 
 # Start agent launcher in dev mode
-python -m antikythera_agents --dev
+antikythera-agents run --dev
 ```
+
+Note that `antikythera-agents` takes an explicit subcommand: `run` starts the launcher, `describe` emits the tool catalog. There is no implicit default.
 
 When enabled, the system watches for changes in the source files and automatically reloads the services. The orchestrator also enables debug-level logging in development mode.
 
@@ -157,62 +165,100 @@ Initially, only very simple agents will be implemented to execute toy problems.
 
 ### Agent/Tool Descriptor
 
-Blueprint authors — whether human or LLM — need to know which task types are available and what inputs, outputs, and parameters each one accepts. Agents do not announce themselves over the protocol by design, so this information must be available as a static artifact, independent of whether any agent is currently running.
+Blueprint authors — whether human or LLM — need to know which task types are available and what inputs, outputs, and parameters each one accepts. Agents shall provide a static artifact, independent of whether any agent is currently running.
 
-#### Recommended approach: MCP tool schema + `describe` CLI command
-
-Rather than inventing a custom format, the recommendation is to reuse the [MCP tool schema](https://spec.modelcontextprotocol.io/specification/server/tools/) (which is identical to OpenAI/Anthropic function-calling schema). LLMs already understand this format natively, and it maps naturally onto the existing `@agent` / `@tool` decorator model.
+The tool's **signature is the source of truth**: the same introspected metadata both binds arguments at execution time and produces the published descriptor. A descriptor that is wrong is therefore also a tool that does not run. See [ADR-0002](docs/adr/0002-tool-signatures-are-the-source-of-truth.md).
 
 **Schema annotation on `@tool`**
 
-The `@tool` decorator is extended with optional `description`, `params_schema`, `inputs_schema`, and `outputs_schema` keyword arguments. This keeps schema co-located with the implementation, so it does not drift:
+Python tools created using the provided Antikythera agent mechanisms automatically generate a descriptor from their signature, triggered by the `@tool` decorator.
+
+If not provided, the tool's name is the function name. Arguments are task inputs by default, and are otherwise annotated to say where their value comes from: `Context[...]` for values resolved from dynamic expansion, and `Param[...]` for values wired in as task parameters. The return type is a `TypedDict`:
 
 ```python
-@tool(
-    name="user_input",
-    description="Prompts the user to provide one or more values.",
-    outputs_schema={"user_value": {"type": "string", "description": "Value entered by the user"}},
-)
-def get_user_input(self, task: Task) -> Dict[str, Any]:
-    ...
+from antikythera_agents.annotations import Context, Param
+from antikythera_agents.typing_compat import NotRequired, TypedDict  # 3.9-safe re-exports
+
+class StockPnP(TypedDict):
+    stock_trajectories: list[JointTrajectory]
+    flipping_trajectories: NotRequired[list[JointTrajectory]]
+
+@tool()
+def plan_stock_pnp(
+    self,
+    nesting: NestingResult,
+    element_id: Context[str],
+    clearance: Param[float] = 0.05,
+) -> StockPnP:
+    """Plan pick-and-place trajectories for one stock, from pickup station to CNC bed.
+
+    Parameters
+    ----------
+    nesting : NestingResult
+        Nesting result for the current stock.
+    element_id : str
+        Element currently being fabricated, supplied by dynamic expansion.
+    """
 ```
 
-Fields are optional — undescribed tools simply emit `"description": ""` in the output.
+The markers live in `antikythera_agents.annotations`. They are deliberately *not* named `TaskInput` / `TaskParam`, which are existing serialisable classes appearing in blueprint JSON.
 
-**`antikythera-agents describe` CLI command**
+Everything in the descriptor comes from the signature, the return type, and `__doc__` — names, type hints and optionality from the signature; per-field descriptions from the NumPy-style `Parameters` and `Returns` sections.
 
-A new CLI subcommand imports all registered agents and emits a static JSON file — a list of MCP-shaped tool descriptors, one per `{agent_type}.{tool_name}`:
+**Opaque tools.** A tool may still take `task: Task` and read values by key. This is bound by annotation like any other parameter, so existing tools keep working unchanged. Such a tool is *opaque*: its descriptor carries no input or output list, and strict binding does not apply to it. This is not merely a compatibility shim — some tools are genuinely dynamic. `system.composite` returns whatever outputs the blueprint declares; `user_interaction.user_input` builds its result by iterating `task.outputs`. These stay opaque permanently.
 
-```bash
-antikythera-agents describe > tools.json
-antikythera-agents describe --format json   # same
-```
+**Strict binding.** For tools that declare a signature, a mismatch between blueprint and signature fails the task at the boundary with a `TOOL_BINDING_ERROR` naming the offending key: a missing required argument, an input the tool does not accept, a non-optional input resolving to `None`, or a declared output absent from the returned dict. `isinstance` is checked where the annotation is a plain class and skipped for parameterised generics. Because opaque tools are exempt, existing blueprints come under scrutiny one migrated tool at a time.
+
+**Agent descriptor format**
+
+A flat JSON structure, mirroring the vocabulary of the blueprint file an author is about to write. It is *structurally similar* to the MCP tools descriptor but not MCP-compatible: MCP's `inputSchema` is JSON Schema, which has nothing meaningful to say about COMPAS types (see [ADR-0003](docs/adr/0003-type-hint-replaces-type-in-blueprint-io.md)).
 
 Example output:
 ```json
 [
   {
-    "name": "user_interaction.user_input",
-    "description": "Prompts the user to provide one or more values.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {}
-    },
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "user_value": {"type": "string", "description": "Value entered by the user"}
-      }
-    }
+    "agent": "trajectory_planner",
+    "tools": [
+        {
+            "name": "plan_stock_pnp",
+            "type": "trajectory_planner.plan_stock_pnp",
+            "description": "Plan pick-and-place trajectories for one stock, from pickup station to CNC bed.",
+            "inputs": [
+                { "name": "nesting", "type_hint": "NestingResult", "description": "Nesting result for the current stock." }
+            ],
+            "params": [
+                { "name": "clearance", "type_hint": "float", "optional": true }
+            ],
+            "requires_context": ["element_id"],
+            "outputs": [
+                { "name": "stock_trajectories", "type_hint": "list[compas_robots.robots.JointTrajectory]" },
+                { "name": "flipping_trajectories", "type_hint": "list[compas_robots.robots.JointTrajectory]", "optional": true }
+            ]
+        }
+    ]
   }
 ]
 ```
 
+`agent` is the `@agent(type=...)` value; `type` is `{agent_type}.{tool_name}` — the exact string a blueprint author writes in a task's `type` field.
+
+A CLI subcommand imports all registered agents and emits this as a static JSON file:
+
+```bash
+antikythera-agents describe > tools.json
+antikythera-agents describe --format json      # same
+antikythera-agents describe --allow-partial    # see below
+```
+
+Because this artifact is committed to a repository and read by LLMs — and because the usual invocation redirects stdout, discarding stderr — `describe` **fails loudly** when an agent module cannot be imported: non-zero exit, nothing written, an error naming each failed plugin. A consumer cannot otherwise distinguish "this tool does not exist" from "a dependency was missing on the machine that generated the file". `--allow-partial` emits anyway, recording the gaps in a `failed` section.
+
+**Runtime announcement (deferred).** The intent is for each agent launcher to also announce its descriptor over MQTT, so the orchestrator can discover agents at runtime and offer a live view of available tools. This is deferred until something consumes it. Note that it *does* require a protocol change: the launcher builds a single transport hardcoded to `ProtobufMessageCodec`, so a JSON descriptor cannot travel over it — announcing needs either a new protobuf message or a second transport with a second codec. `compas_eve` supports retained publishes, so a retained message on startup is preferable to a periodic heartbeat; it does not expose a Last Will and Testament, so presence detection would need the underlying paho client.
+
 #### Distribution
 
-Since agents are often project-specific, the natural distribution unit is the agent Python package itself. Projects commit a `tools.json` (generated via `antikythera-agents describe`) alongside their agent code. Blueprint authors — human or LLM — consume this file at authoring time. The MCP server can optionally expose it as a resource so that connected LLM clients receive it automatically.
+Since agents are often project-specific, the natural distribution unit is the agent Python package itself. Projects commit a `tools.json` (generated via `antikythera-agents describe`) alongside their agent code. Blueprint authors — human or LLM — consume this file at authoring time. The MCP server could later expose it as a resource so connected LLM clients receive it automatically, and validate blueprints against it; neither is implemented yet.
 
-No changes to the Agent Communication Protocol are required.
+No changes to the Agent Communication Protocol are required **for the static file**. The deferred runtime announcement is a separate matter, as noted above.
 
 ### Sequencers
 
@@ -270,7 +316,7 @@ The blueprint is defined in a structured JSON format. The schema is under develo
       "id": "start",
       "type": "system.start",
       "outputs": [
-        {"name": "start_time", "type": "timestamp"}
+        {"name": "start_time", "type_hint": "timestamp"}
       ]
     },
     {
@@ -308,7 +354,7 @@ The blueprint is defined in a structured JSON format. The schema is under develo
       "type": "user_interaction.user_output",
       "description": "Print result",
       "inputs": [
-        {"name": "result1", "type": "str"}
+        {"name": "result1", "type_hint": "str"}
       ],
       "depends_on": [
         {"id": "A1", "type": "FS"},
@@ -319,7 +365,7 @@ The blueprint is defined in a structured JSON format. The schema is under develo
       "id": "end",
       "type": "system.end",
       "outputs": [
-        {"name": "end_time", "type": "timestamp"}
+        {"name": "end_time", "type_hint": "timestamp"}
       ],
       "depends_on": [
         {"id": "B1"}
@@ -340,10 +386,10 @@ Tasks can optionally declare a `get_from` field within their `inputs` and a `set
   "id": "calculate_ik",
   "type": "moveit_planner.pnp_",
   "inputs": [
-    {"name": "start_state", "type": "compas_fab.robots.RobotCellState", "get_from": "some_blueprint_state_name"}
+    {"name": "start_state", "type_hint": "compas_fab.robots.RobotCellState", "get_from": "some_blueprint_state_name"}
   ],
   "outputs": [
-    {"name": "grasp_frame", "type": "compas.geometry.Frame", "set_to": "framecito"}
+    {"name": "grasp_frame", "type_hint": "compas.geometry.Frame", "set_to": "framecito"}
   ]
 }
 ```
@@ -698,6 +744,7 @@ The Antikythera project is organized as follows:
 
 - **`antikythera_agents/`**: Built-in agent implementations
   - **`launcher.py`**: Agent launcher
+  - **`reference_agent.py`**: Worked example agent — see "Reference Agent" below
 
 ### Extension Points
 
@@ -735,6 +782,41 @@ def run_long_process(self, task: Task, context: ExecutionContext) -> dict:
     
     return {"result": "done"}
 ```
+
+### Expansion Context
+
+Tools inside a dynamically expanded inner blueprint often need to know which item they are
+working on — the `element_id`, and whatever else the `Sequencer` attached. This is the
+**expansion context**, distinct from `ExecutionContext` above: it is data about the task's
+place in the dynamic expansion, not a lifecycle handle.
+
+The expansion context already flows end to end without any tool-level plumbing: the
+orchestrator stores it per inner blueprint, packs it into the task assignment message, the
+protocol carries it, and the launcher lands it on `task.context`. A tool declares which keys
+it needs by annotating a parameter `Context[T]`; binding is a lookup by name in that dict.
+
+```python
+@tool(name="process")
+def process_element(self, element_id: Context[str]) -> dict:
+    return {"element_id": element_id}
+```
+
+A `Context[T]` parameter for a key absent from `task.context` raises `ToolBindingError` (see
+`ADR-0002`), naming the key, before the tool body runs. `Context[T]` and `ExecutionContext`
+parameters may coexist on the same signature. The catalog reports a tool's `Context[T]`
+parameters under `requires_context` — a list of names, since the value comes from the runtime
+rather than from anything a blueprint author writes.
+
+### Reference Agent
+
+`antikythera_agents/reference_agent.py` (`ReferenceAgent`, agent type `reference`) is the
+worked example for the tool convention above — copy from it when authoring a new agent.
+Between its three tools (`assemble`, `wait`, `passthrough`) it exercises every annotation
+kind the binder understands: a plain task input and one declared explicitly with `Input[T]`,
+a required and a defaulted `Param[T]`, a `Context[T]` value, an `Optional[T]` input, a
+`TypedDict` return with both a required and a `NotRequired` key, the `Task` escape hatch, and
+`ExecutionContext` cancellation. It has no dependency beyond this package, so it runs in CI.
+`examples/reference_agent_demo.json` drives it end to end through a real orchestrator run.
 
 ## Roadmap
 

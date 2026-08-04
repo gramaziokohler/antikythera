@@ -1,4 +1,3 @@
-import inspect
 import logging
 from abc import ABC
 from contextlib import contextmanager
@@ -9,6 +8,8 @@ from typing import Optional
 from antikythera.models import Task
 from antikythera_agents.context import ExecutionContext
 from antikythera_agents.decorators import get_agent_tools
+from antikythera_agents.decorators import get_tool_descriptor
+from antikythera_agents.descriptor import ToolDescriptor
 
 
 class Agent(ABC):
@@ -105,27 +106,29 @@ class Agent(ABC):
 
             tool_method = self._tools[tool_name]
 
-            # Inspect tool signature to determine if it accepts context
-            # We support both (self, task) and (self, task, context)
-            # NOTE: This is kind of cute as it keeps simple agents, simple
-            # but if we should verify it's not an expensive check
-            args = [self, task]
-            sig = inspect.signature(tool_method)
-            params = list(sig.parameters.values())
-
-            # If the tool signature expects more than 2 arguments (self, task),
-            # and we have a context, we pass it.
-            # We check for >= 3 because params[0] is self, params[1] is task.
-            if len(params) >= 3 and context is not None:
-                args.append(context)
+            # `@tool` attaches the descriptor straight to the method, per ADR-0002. Fall back
+            # to the snapshot taken at `@agent` decoration time (see decorators.py) only when
+            # `tool_method` isn't a genuine descriptor-carrying tool — e.g. a test replaced it
+            # with a Mock, which auto-creates a `._descriptor` attribute that isn't one.
+            descriptor = getattr(tool_method, "_descriptor", None)
+            if not isinstance(descriptor, ToolDescriptor):
+                descriptor = get_tool_descriptor(self.__class__, tool_name)
+            if descriptor is None:
+                raise RuntimeError(f"No tool descriptor found for '{tool_name}' on {self.__class__.__name__}.")
+            kwargs = descriptor.bind(task=task, context=context)
 
             # Execute the tool
             try:
-                result = tool_method(*args)
-                return result or {}
+                result = tool_method(self, **kwargs)
             except Exception as e:
                 self.logger.exception(f"Tool '{tool_name}' execution failed")
                 raise RuntimeError(f"Tool '{tool_name}' execution failed: {str(e)}") from e
+
+            result = result or {}
+            # Outside the try/except above: validate_output raises ToolBindingError
+            # (issue-td-06), which must reach the launcher unwrapped, not as a RuntimeError.
+            descriptor.validate_output(result)
+            return result
 
     def _get_tool_for_task(self, task: Task) -> str:
         """Determine which tool should handle a given task.

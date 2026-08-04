@@ -73,6 +73,7 @@ services:
         condition: service_started
     command:
       - antikythera-agents
+      - run
       - --sys-only
       - --broker-host
       - mqtt-broker

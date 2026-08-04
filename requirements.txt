@@ -7,4 +7,5 @@ jsonschema
 mqtthandler
 packaging
 python-dotenv
+typing_extensions >= 4.6 ; python_version < "3.11"
 watchdog

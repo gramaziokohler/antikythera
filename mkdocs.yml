@@ -145,6 +145,7 @@ nav:
           - antikythera_agents.context: reference/antikythera_agents.context.md
           - antikythera_agents.io_agent: reference/antikythera_agents.io_agent.md
           - antikythera_agents.user_interaction: reference/antikythera_agents.user_interaction.md
+          - antikythera_agents.reference_agent: reference/antikythera_agents.reference_agent.md
       - antikythera_orchestrator:
           - antikythera_orchestrator: reference/antikythera_orchestrator.md
           - antikythera_orchestrator.orchestrator: reference/antikythera_orchestrator.orchestrator.md

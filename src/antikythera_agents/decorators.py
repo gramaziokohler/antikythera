@@ -3,9 +3,11 @@ from typing import Callable
 from typing import Dict
 from typing import Optional
 
+from antikythera_agents.descriptor import ToolDescriptor
+
 # Agent & Tool registries
 _AGENT_REGISTRY: Dict[str, type] = {}
-_TOOL_REGISTRY: Dict[type, Dict[str, Callable]] = {}
+_TOOL_REGISTRY: Dict[type, Dict[str, ToolDescriptor]] = {}
 
 
 def agent(type: str):
@@ -30,9 +32,11 @@ def agent(type: str):
         # Register the agent class
         _AGENT_REGISTRY[type] = cls
 
-        # Initialize tool registry for this class if not exists
-        if cls not in _TOOL_REGISTRY:
-            _TOOL_REGISTRY[cls] = {}
+        # Snapshot each tool's descriptor now, while the class attributes are still the
+        # genuine decorated methods. This is what `get_tool_descriptor` reads at execution
+        # time, so it stays correct even if a caller (e.g. a test) later monkeypatches the
+        # tool method on the class itself.
+        _TOOL_REGISTRY[cls] = {tool_name: method._descriptor for tool_name, method in get_agent_tools(cls).items()}
 
         return cls
 
@@ -64,6 +68,7 @@ def tool(name: Optional[str] = None):
         # Mark the function as a tool
         wrapper._is_tool = True
         wrapper._tool_name = tool_name
+        wrapper._descriptor = ToolDescriptor(func=func, name=tool_name)
 
         return wrapper
 
@@ -123,3 +128,21 @@ def list_registered_agents() -> Dict[str, type]:
         Dictionary mapping agent type strings to their classes
     """
     return _AGENT_REGISTRY.copy()
+
+
+def get_tool_descriptor(agent_class: type, tool_name: str) -> Optional[ToolDescriptor]:
+    """Get the `ToolDescriptor` for a tool, as captured when its agent class was decorated.
+
+    Parameters
+    ----------
+    agent_class : type
+        The agent class the tool belongs to
+    tool_name : str
+        Name of the tool
+
+    Returns
+    -------
+    ToolDescriptor or None
+        The descriptor if found, None otherwise
+    """
+    return _TOOL_REGISTRY.get(agent_class, {}).get(tool_name)
