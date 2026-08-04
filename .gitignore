@@ -147,3 +147,5 @@ docs/api/generated/
 *.pb.h
 *.pb.cc
 *.pyi
+
+.agents/

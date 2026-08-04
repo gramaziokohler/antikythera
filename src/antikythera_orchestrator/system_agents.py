@@ -26,14 +26,12 @@ class SystemAgent(Agent):
     @tool(name="start")
     def start_process(self, task: Task) -> Dict[str, Any]:
         print(f"{Colors.OKBLUE}🏃 [{task.id}][{task.type}] Starting...{Colors.ENDC}")
-        time.sleep(1)
         print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Finished.{Colors.ENDC}")
         return {"process_start_time": time.time()}
 
     @tool(name="end")
     def end_process(self, task: Task) -> Dict[str, Any]:
         print(f"{Colors.OKBLUE}🏃 [{task.id}][{task.type}] Starting...{Colors.ENDC}")
-        time.sleep(1)
         print(f"{Colors.OKGREEN}✅ [{task.id}][{task.type}] Finished.{Colors.ENDC}")
         return {"process_end_time": time.time()}
 

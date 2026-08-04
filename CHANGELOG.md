@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Blueprint.check_dataflow()` reports condition expressions (task `condition` and `while_policy.condition`) that read session names no task in the blueprint declares as an output. `POST /blueprints/upload` rejects such a blueprint with `400` and a `detail.problems` list, and does not store it. Loading a blueprint from file only logs them, so blueprints already in storage stay loadable.
+
 ### Changed
 
 * Renamed `type` to `type_hint` on task inputs, outputs and params (`TaskIO` and subclasses) to disambiguate it from a task's `type` (agent.tool). Blueprint JSON accepts either key on load and always emits `type_hint`; `type` is a deprecated alias and a `type` property is kept for in-process readers. See ADR-0003.
@@ -20,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Each input, param and output in the catalog gets a `description`, parsed by hand from the tool's NumPy-style docstring `Parameters`/`Returns` sections. A missing docstring, missing section, undocumented field or malformed block degrades to no description for the affected field rather than raising. No new dependency added. See ADR-0002.
 * **Breaking:** `antikythera-agents describe` now exits non-zero and writes nothing to stdout if any plugin fails to import, naming each failed plugin and its exception on stderr — a catalog that silently omitted agents due to a missing dependency was worse than a hard failure, since it gets committed to a repo and read by LLMs. Pass `--allow-partial` to emit the catalog for the agents that did load anyway, with a `failed` section naming the rest. The launcher (`antikythera-agents run`) is unaffected — it still starts with a broken plugin present and warns, as before. See ADR-0002.
 * Added `ReferenceAgent` (agent type `reference`), a dependency-free worked example exercising every part of the tool convention — a plain task input, an explicit `Input[T]`, a required and a defaulted `Param[T]`, a `Context[T]` value, an `Optional[T]` input, a `TypedDict` return with both a required and a `NotRequired` key, the `Task` escape hatch, and `ExecutionContext` cancellation. `examples/reference_agent_demo.json` drives it end to end. See ADR-0002, issue-td-10.
+* Fixed `TaskError` not calling `Data.__init__`, which made any session carrying an error fail to serialize with `AttributeError: '_name'`. The orchestrator swallows save failures, so a failed session silently stopped persisting its state and stayed `running` in storage.
+* Session failures now record the reason in `BlueprintSession.last_task_error` (task failures, dispatch failures and scope condition errors). The field existed and was read by the frontend but was never written.
+* Fixed a scope `while_policy` condition that cannot be evaluated (e.g. it reads a name no task wrote to session data) being silently treated as False, which skipped the loop and ran the session to completion as if it had succeeded. The session now fails with `ScopeConditionError`, listing the names actually available in session data.
 
 ### Removed
 
