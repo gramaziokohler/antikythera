@@ -10,6 +10,7 @@ from queue import Queue
 from typing import Any
 from typing import Callable
 from typing import Dict
+from typing import Iterable
 from typing import Optional
 from typing import Tuple
 from typing import cast
@@ -41,6 +42,7 @@ from antikythera.models.conversions import outputs_to_keys
 from antikythera.models.conversions import params_to_dict
 
 from .conditionals import safe_eval_condition
+from .scopes import ScopeConditionError
 from .scopes import ScopeRegistry
 from .sequencers import SequencerRegistry
 from .storage import BlueprintStorage
@@ -539,6 +541,22 @@ class Orchestrator:
             except Exception:
                 LOG.exception("Error in task state SSE callback")
 
+    def _notify_tasks_reset(self, fqn_task_ids: Iterable[str]) -> None:
+        """Announce tasks whose state changed without a completion message behind it.
+
+        Every other state change reaches clients as a side effect of dispatching
+        or completing a task. A reset has neither, so without this a scope that
+        loops leaves the previous iteration's results on screen: the tasks are
+        PENDING again in the graph, but the last thing anyone was told about
+        them is that they succeeded.
+        """
+        for fqn_task_id in fqn_task_ids:
+            node_data = self.graph.node.get(fqn_task_id)
+            if not node_data:
+                continue
+            task: Task = node_data["task"]
+            self._notify_task_state_change(node_data["blueprint_id"], task.id, task.state.value)
+
     def _reset_failed_tasks(self) -> None:
         """Resets tasks that are in a non-resumable state to PENDING.
 
@@ -602,6 +620,8 @@ class Orchestrator:
                     output.value = None
                     mapped_key = output.set_to or output.name
                     self.session_storage.set(task_blueprint_id, mapped_key, None)
+
+        self._notify_tasks_reset(to_reset)
 
         # If the session was in a terminal state (FAILED/COMPLETED), move it
         # back to STOPPED so that it can be resumed.
@@ -691,6 +711,8 @@ class Orchestrator:
             return
 
         self._reset_failed_tasks()
+        # Drop the reason a previous run failed, so clients never show a stale error.
+        self.session.last_task_error = None
         self._completion_event.clear()
 
         # Ensure subscriptions are active (in case we are restarting after stop)
@@ -950,7 +972,7 @@ class Orchestrator:
         if scope is None:
             raise KeyError(f"Scope not found: {scope_name}")
 
-        scope.reset_tasks(self.graph)
+        self._notify_tasks_reset(scope.reset_tasks(self.graph))
         self.session.scope_iterations.pop(scope_name, None)
         for nested in self._scopes.nested_within(scope):
             self.session.scope_iterations.pop(nested.name, None)
@@ -969,6 +991,12 @@ class Orchestrator:
         """Evaluate the scope loop policy when a scope_end task completes.
 
         Returns True if scope tasks were reset for another iteration, False otherwise.
+
+        Raises
+        ------
+        ScopeConditionError
+            If the scope declares a while-condition that cannot be evaluated
+            against the current session data.
         """
         task = processed_task.task
         if not task.scope_end:
@@ -988,7 +1016,7 @@ class Orchestrator:
             return False
 
         self.session.scope_iterations[scope.name] = iterations + 1
-        scope.reset_tasks(self.graph)
+        self._notify_tasks_reset(scope.reset_tasks(self.graph))
         for nested in self._scopes.nested_within(scope):
             self.session.scope_iterations.pop(nested.name, None)
         LOG.info(f"Scope '{scope.name}': reset {len(scope.task_fqns)} tasks to PENDING for iteration {iterations + 2}.")
@@ -1055,7 +1083,8 @@ class Orchestrator:
             except Exception as e:
                 LOG.exception(f"Failed to start task [{task.id}]: {e}")
                 task.state = TaskState.FAILED
-                self._end_session_with_state(BlueprintSessionState.FAILED)
+                error = TaskError(code="TASK_DISPATCH_FAILED", message=str(e), details=pending_task.task.id)
+                self._end_session_with_state(BlueprintSessionState.FAILED, error=error)
 
         # Persist the updated session state
         self.session_storage.save_session(self.session)
@@ -1073,8 +1102,12 @@ class Orchestrator:
         fqn_task_id = _create_global_id(processed_task.blueprint_id, processed_task.task)
         return last_task_fqn_id == fqn_task_id
 
-    def _end_session_with_state(self, ending_state: BlueprintSessionState) -> None:
+    def _end_session_with_state(self, ending_state: BlueprintSessionState, error: Optional[TaskError] = None) -> None:
         # ending session pattern: set the terminal state, notify interested parties, clean up
+        # NOTE: last_task_error is recorded *before* the state setter, which persists the
+        # session — otherwise clients fetching the session on the state change see no reason.
+        if error is not None:
+            self.session.last_task_error = error
         self.state = ending_state
         self._completion_event.set()
         self.stop()
@@ -1102,7 +1135,8 @@ class Orchestrator:
             self._notify_task_state_change(blueprint_id, processed_task.task.id, processed_task.task.state.value)
             if processed_task.task.state == TaskState.FAILED:
                 LOG.error(f"Task {processed_task.task_id} failed with error: {message.error}, aborting session.")
-                self._end_session_with_state(BlueprintSessionState.FAILED)
+                error = message.error or TaskError(code="TASK_FAILED", message=f"Task '{processed_task.task.id}' failed without reporting an error.")
+                self._end_session_with_state(BlueprintSessionState.FAILED, error=error)
                 return
 
             # Handle outputs from finished task
@@ -1116,7 +1150,15 @@ class Orchestrator:
 
             # Handle scope loop policy (only for successfully completed tasks)
             if processed_task.task.state == TaskState.SUCCEEDED and self.state == BlueprintSessionState.RUNNING:
-                self._handle_scope_completion(processed_task)
+                try:
+                    self._handle_scope_completion(processed_task)
+                except ScopeConditionError as e:
+                    # A loop whose condition cannot be evaluated has no defined
+                    # number of iterations, so the session cannot continue.
+                    LOG.error(f"Task {processed_task.task_id}: {e} Aborting session.")
+                    error = TaskError(code="SCOPE_CONDITION_ERROR", message=str(e), details=processed_task.task_id)
+                    self._end_session_with_state(BlueprintSessionState.FAILED, error=error)
+                    return
 
         # Send ACK
         ack = TaskCompletionAckMessage(id=message.id, state=TaskState(message.state), accepted_agent_id=message.agent_id)

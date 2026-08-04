@@ -2,7 +2,7 @@
     "version": "1.0",
     "id": "scope_while_example",
     "name": "Scope – While Policy",
-    "description": "Demonstrates the while-scope policy. After scope_close completes the orchestrator evaluates the condition expression against the current session data. If it evaluates to True (and max_iterations has not been reached) all scope tasks are reset to PENDING for another iteration. The condition here reads the 'elements_remaining' variable that an upstream task (or a real agent) must write to session storage.",
+    "description": "Demonstrates the while-scope policy. After scope_close completes the orchestrator evaluates the condition expression against the current session data. If it evaluates to True (and max_iterations has not been reached) all scope tasks are reset to PENDING for another iteration. The condition reads 'elements_remaining', which 'init' seeds as a declared output. Since the sleep tasks standing in for real work never decrement it, this example loops until max_iterations caps it and then moves on to finalise.",
     "tasks": [
         {
             "id": "start",
@@ -11,11 +11,19 @@
         {
             "id": "init",
             "type": "system.sleep",
-            "description": "Initialisation step before the loop – a real agent would write 'elements_remaining' to session storage here.",
+            "description": "Initialisation step before the loop. Seeds the counter the while condition reads – a real agent would compute it from the model instead of declaring a fixed value.",
             "params": [
                 {
                     "name": "duration",
-                    "value": 0
+                    "value": 2
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "elements_remaining",
+                    "value": 3,
+                    "type": "int",
+                    "description": "How many elements are left to process. Declared with a value so the count exists in session data before the first evaluation of the while condition."
                 }
             ],
             "depends_on": [
@@ -37,7 +45,7 @@
             "params": [
                 {
                     "name": "duration",
-                    "value": 0
+                    "value": 2
                 }
             ],
             "depends_on": [
@@ -49,11 +57,11 @@
         {
             "id": "pick_element",
             "type": "system.sleep",
-            "description": "Pick the next element to process. A real agent writes the updated 'elements_remaining' count as an output.",
+            "description": "Pick the next element to process. A real agent would declare 'elements_remaining' as an output here too and return the decremented count, which is what ends the loop before max_iterations.",
             "params": [
                 {
                     "name": "duration",
-                    "value": 0.5
+                    "value": 2
                 }
             ],
             "depends_on": [
@@ -69,7 +77,7 @@
             "params": [
                 {
                     "name": "duration",
-                    "value": 0.5
+                    "value": 2
                 }
             ],
             "depends_on": [
@@ -86,7 +94,7 @@
             "params": [
                 {
                     "name": "duration",
-                    "value": 0
+                    "value": 2
                 }
             ],
             "depends_on": [
@@ -102,7 +110,7 @@
             "params": [
                 {
                     "name": "duration",
-                    "value": 0
+                    "value": 2
                 }
             ],
             "depends_on": [
