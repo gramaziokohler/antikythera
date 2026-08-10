@@ -1,0 +1,15 @@
+# Standalone DEV-ONLY auth stack for localhost. This is intentionally runnable
+# as a complete Compose project:
+#
+#   docker compose -f docker-compose.auth.dev.yml up --build
+#
+# The include loads the base stack, the production auth boundary, and the
+# local-login overrides as one merged subproject. Its env_file supplies safe,
+# committed development values during interpolation. Do not use this entry
+# point in production.
+include:
+  - path:
+      - docker-compose.yml
+      - docker-compose.auth.yml
+      - docker-compose.auth.dev.override.yml
+    env_file: .env.auth.dev

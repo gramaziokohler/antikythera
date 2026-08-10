@@ -1,0 +1,34 @@
+# DEV-ONLY Dex config for verifying the auth plumbing locally WITHOUT registering
+# real OAuth apps. It uses Dex's built-in local connector so the redirect stops
+# at a real login form instead of silently authenticating a mock identity.
+#
+# Never use this in production. Selected by docker-compose.auth.dev.yml.
+
+issuer: ${AUTH_PUBLIC_URL}/dex
+
+storage:
+  type: sqlite3
+  config:
+    file: /var/dex/dex.db
+
+web:
+  http: 0.0.0.0:5556
+
+staticClients:
+  - id: oauth2-proxy
+    name: Antikythera
+    secret: ${OAUTH2_PROXY_CLIENT_SECRET}
+    redirectURIs:
+      - ${AUTH_PUBLIC_URL}/oauth2/callback
+
+enablePasswordDB: true
+
+staticPasswords:
+  - email: kilgore@kilgore.trout
+    # bcrypt hash of the DEV-ONLY password "password".
+    hash: $2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W
+    username: kilgore
+    userID: 7c8f17d8-6521-4f6b-a2f8-e0bcb2a31f85
+
+oauth2:
+  skipApprovalScreen: true

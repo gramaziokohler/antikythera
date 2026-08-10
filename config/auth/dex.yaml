@@ -1,0 +1,83 @@
+# Dex — self-hosted OIDC broker that federates multiple social login providers
+# and presents a "log in with…" chooser. oauth2-proxy is its only OIDC client;
+# dex in turn delegates to the upstream connectors below.
+#
+# Values wrapped in ${...} are substituted from the environment (dex supports
+# env expansion when started with `--config`, via the values below being read
+# from env by the entrypoint; here we rely on docker-compose passing them and
+# using `envsubst`-style substitution documented in docs/authentication.md).
+#
+# The issuer MUST match the public origin exactly, including the /dex path
+# prefix that nginx proxies. Update AUTH_PUBLIC_URL for your deployment.
+
+issuer: ${AUTH_PUBLIC_URL}/dex
+
+storage:
+  type: sqlite3
+  config:
+    file: /var/dex/dex.db
+
+web:
+  http: 0.0.0.0:5556
+
+# oauth2-proxy is the only relying party. The redirect URI is the oauth2-proxy
+# callback served on the same public origin.
+staticClients:
+  - id: oauth2-proxy
+    name: Antikythera
+    secret: ${OAUTH2_PROXY_CLIENT_SECRET}
+    redirectURIs:
+      - ${AUTH_PUBLIC_URL}/oauth2/callback
+
+# ---------------------------------------------------------------------------
+# Upstream identity providers. Enable the ones you have registered OAuth apps
+# for; comment out the rest. Add SWITCH edu-ID later as another `oidc` connector.
+# ---------------------------------------------------------------------------
+connectors:
+  - type: google
+    id: google
+    name: Google
+    config:
+      clientID: ${GOOGLE_CLIENT_ID}
+      clientSecret: ${GOOGLE_CLIENT_SECRET}
+      redirectURI: ${AUTH_PUBLIC_URL}/dex/callback
+
+  - type: github
+    id: github
+    name: GitHub
+    config:
+      clientID: ${GITHUB_CLIENT_ID}
+      clientSecret: ${GITHUB_CLIENT_SECRET}
+      redirectURI: ${AUTH_PUBLIC_URL}/dex/callback
+
+  # Apple uses OIDC. Apple requires a client secret that is a signed JWT you
+  # generate from your Apple private key (rotates every ~6 months); see
+  # docs/authentication.md. Uncomment when ready.
+  # - type: oidc
+  #   id: apple
+  #   name: Apple
+  #   config:
+  #     issuer: https://appleid.apple.com
+  #     clientID: ${APPLE_CLIENT_ID}
+  #     clientSecret: ${APPLE_CLIENT_SECRET}
+  #     redirectURI: ${AUTH_PUBLIC_URL}/dex/callback
+  #     scopes:
+  #       - openid
+  #       - email
+
+  # SWITCH edu-ID (future) — standard OIDC connector:
+  # - type: oidc
+  #   id: eduid
+  #   name: SWITCH edu-ID
+  #   config:
+  #     issuer: https://login.eduid.ch/   # confirm current issuer with SWITCH
+  #     clientID: ${EDUID_CLIENT_ID}
+  #     clientSecret: ${EDUID_CLIENT_SECRET}
+  #     redirectURI: ${AUTH_PUBLIC_URL}/dex/callback
+  #     scopes:
+  #       - openid
+  #       - email
+  #       - profile
+
+oauth2:
+  skipApprovalScreen: true

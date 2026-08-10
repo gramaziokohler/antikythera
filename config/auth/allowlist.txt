@@ -1,0 +1,10 @@
+# oauth2-proxy authenticated-emails-file.
+# One email address per line. Only these accounts may access Antikythera after a
+# successful social login; everyone else gets a 403. Comments (#) and blank lines
+# are ignored by oauth2-proxy.
+#
+# To allow an entire domain instead of listing individual addresses, set
+# OAUTH2_PROXY_EMAIL_DOMAINS (e.g. "ethz.ch") in .env.auth and remove or keep
+# this file as an additional allowlist. See docs/authentication.md.
+
+gonzalocasas@gmail.com

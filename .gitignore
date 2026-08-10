@@ -82,6 +82,10 @@ celerybeat-schedule
 
 # dotenv
 .env
+# Auth secrets (keep the committed .env.auth.example, ignore the real one)
+.env.auth
+secrets/auth/
+config/auth/dev-secrets/
 
 # virtualenv
 .venv
