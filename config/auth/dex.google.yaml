@@ -1,0 +1,31 @@
+# Google-only Dex template for exercising the real provider locally without
+# requiring GitHub credentials. Use via docker-compose.auth.google.yml.
+
+issuer: ${AUTH_PUBLIC_URL}/dex
+
+storage:
+  type: sqlite3
+  config:
+    file: /var/dex/dex.db
+
+web:
+  http: 0.0.0.0:5556
+
+staticClients:
+  - id: oauth2-proxy
+    name: Antikythera
+    secret: ${OAUTH2_PROXY_CLIENT_SECRET}
+    redirectURIs:
+      - ${AUTH_PUBLIC_URL}/oauth2/callback
+
+connectors:
+  - type: google
+    id: google
+    name: Google
+    config:
+      clientID: ${GOOGLE_CLIENT_ID}
+      clientSecret: ${GOOGLE_CLIENT_SECRET}
+      redirectURI: ${AUTH_PUBLIC_URL}/dex/callback
+
+oauth2:
+  skipApprovalScreen: true

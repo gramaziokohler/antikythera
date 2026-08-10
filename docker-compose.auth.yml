@@ -62,8 +62,11 @@ services:
     entrypoint: ["python", "-m", "antikythera_orchestrator.auth_config"]
     environment:
       AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:?Set AUTH_PUBLIC_URL in .env.auth}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?Set GOOGLE_CLIENT_ID in .env.auth}
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?Set GITHUB_CLIENT_ID in .env.auth}
+      # Template rendering remains the authority for provider requirements.
+      # This allows narrower templates (for example Google-only local testing)
+      # while the default template still fails if either provider is missing.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
     secrets:
       - oauth2_proxy_client_secret
       - google_client_secret

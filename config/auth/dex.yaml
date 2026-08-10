@@ -58,9 +58,9 @@ connectors:
   #   name: Apple
   #   config:
   #     issuer: https://appleid.apple.com
-  #     clientID: ${APPLE_CLIENT_ID}
-  #     clientSecret: ${APPLE_CLIENT_SECRET}
-  #     redirectURI: ${AUTH_PUBLIC_URL}/dex/callback
+  #     clientID: <APPLE_CLIENT_ID>
+  #     clientSecret: <APPLE_CLIENT_SECRET>
+  #     redirectURI: <AUTH_PUBLIC_URL>/dex/callback
   #     scopes:
   #       - openid
   #       - email
@@ -71,9 +71,9 @@ connectors:
   #   name: SWITCH edu-ID
   #   config:
   #     issuer: https://login.eduid.ch/   # confirm current issuer with SWITCH
-  #     clientID: ${EDUID_CLIENT_ID}
-  #     clientSecret: ${EDUID_CLIENT_SECRET}
-  #     redirectURI: ${AUTH_PUBLIC_URL}/dex/callback
+  #     clientID: <EDUID_CLIENT_ID>
+  #     clientSecret: <EDUID_CLIENT_SECRET>
+  #     redirectURI: <AUTH_PUBLIC_URL>/dex/callback
   #     scopes:
   #       - openid
   #       - email

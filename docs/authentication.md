@@ -93,6 +93,11 @@ Then fill in `.env.auth`:
 Both Google and GitHub connectors are active in the production profile. `dex-init` validates every
 ID and secret and refuses to emit a partial configuration, so missing credentials fail at startup.
 
+For a Google-only local test, leave the GitHub values empty and add
+`-f docker-compose.auth.google.yml` after the normal auth override. This selects a narrower Dex
+template and removes the unused GitHub secret mount; the default production profile continues to
+require both providers.
+
 ### 2. Access control (who is allowed in)
 
 Successful login is not enough — the email must also be allowed:
@@ -129,6 +134,24 @@ docker compose --env-file .env.auth -f docker-compose.yml -f docker-compose.auth
 ```
 
 Visit `${AUTH_PUBLIC_URL}` → you should be redirected to the dex chooser.
+
+### Testing the real Google provider on localhost
+
+Google permits plain HTTP for localhost callbacks. Register a Web OAuth client with the exact
+redirect URI `http://localhost/dex/callback`, set `AUTH_PUBLIC_URL=http://localhost` and
+`OAUTH2_PROXY_COOKIE_SECURE=false`, then start the Google-only profile:
+
+```bash
+docker compose --env-file .env.auth \
+  -f docker-compose.yml \
+  -f docker-compose.auth.yml \
+  -f docker-compose.auth.google.yml \
+  up -d --build
+```
+
+The Google client ID belongs in `.env.auth`; keep its client secret only in the file named by
+`GOOGLE_CLIENT_SECRET_FILE`. The login email must also appear in `config/auth/allowlist.txt` or
+match `OAUTH2_PROXY_EMAIL_DOMAINS`.
 
 ## Adding SWITCH edu-ID later
 
