@@ -9,6 +9,35 @@ on:
       - main
 
 jobs:
+  auth-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out frontend build context
+        run: git clone --depth 1 https://github.com/gramaziokohler/antikythera-frontend.git ../antikythera-frontend
+      - name: Validate auth Compose profile
+        run: docker compose -f docker-compose.auth.dev.yml config --quiet
+      - name: Validate auth nginx configuration
+        run: >-
+          docker run --rm
+          --add-host oauth2-proxy:127.0.0.1
+          --add-host dex:127.0.0.1
+          --add-host orchestrator:127.0.0.1
+          --add-host mqtt-broker:127.0.0.1
+          -v "$PWD/config/auth/nginx.auth.conf:/etc/nginx/conf.d/default.conf:ro"
+          nginx:stable-alpine nginx -t
+      - name: Start development authentication stack
+        run: docker compose -f docker-compose.auth.dev.yml up --build --detach --wait
+      - name: Verify login, allowlist, session, and identity propagation
+        run: python scripts/verify_auth_flow.py
+      - name: Show auth service logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.auth.dev.yml logs --no-color dex oauth2-proxy frontend orchestrator
+      - name: Stop development authentication stack
+        if: always()
+        run: docker compose -f docker-compose.auth.dev.yml down --volumes
+
   build:
     if: "!contains(github.event.pull_request.labels.*.name, 'docs-only')"
     runs-on: ${{ matrix.os }}
