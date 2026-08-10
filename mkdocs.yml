@@ -131,6 +131,13 @@ nav:
   - Get Started:
       - Introduction: introduction.md
       - Installation: installation.md
+      - Authentication: authentication.md
+  - Architecture decisions:
+      - Overview: adr/index.md
+      - "0001: Optional edge authentication": adr/0001-optional-edge-authentication.md
+      - "0002: Lightweight collaborator authorization": adr/0002-lightweight-collaborator-authorization.md
+      - "0003: Browser and machine security boundaries": adr/0003-browser-and-machine-security-boundaries.md
+      - "0004: Auth sessions and secrets": adr/0004-auth-sessions-and-secrets.md
   - API Reference:
       - antikythera:
           - antikythera.io: reference/antikythera.io.md
