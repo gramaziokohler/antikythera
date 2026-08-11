@@ -80,7 +80,7 @@ class SystemAgent(Agent):
         Parameters
         ----------
         duration
-            How long to sleep, in seconds.
+            How long to sleep, in seconds. Defaults to 1.
         """
         print(f"{Colors.OKBLUE}😴 [{task.id}][{task.type}] Sleeping for {duration}s...{Colors.ENDC}")
         time.sleep(duration)
