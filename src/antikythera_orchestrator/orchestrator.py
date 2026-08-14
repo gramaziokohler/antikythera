@@ -111,6 +111,88 @@ class ProcessedTask:
     task: Task
 
 
+def build_task_graph(
+    blueprint: Blueprint,
+    inner_blueprints: Optional[Dict[str, Blueprint]] = None,
+    composite_to_inner_blueprint_map: Optional[Dict[str, str]] = None,
+) -> Graph:
+    """Builds a dependency graph spanning a blueprint and its inner blueprints.
+
+    Every node is keyed by the fully qualified task ID and carries the ``task``
+    and the ``blueprint_id`` it belongs to; every edge carries the dependency
+    ``type``. A composite task is wired to the inner blueprint it invokes with
+    an FF dependency on the inner end task, and the inner start task gets an SS
+    dependency on the composite task.
+
+    This is a module-level function rather than a method so that the graph — and
+    with it the :class:`TaskScheduler` — can be exercised without constructing an
+    :class:`Orchestrator`, which opens a transport, connects to storage and starts
+    a poller thread. See ADR-0006.
+
+    Parameters
+    ----------
+    blueprint : :class:`Blueprint`
+        The outer blueprint.
+    inner_blueprints : dict[str, :class:`Blueprint`], optional
+        Inner blueprints by ID, as held by the session.
+    composite_to_inner_blueprint_map : dict[str, str], optional
+        Maps a composite task's fully qualified ID to the ID of the inner
+        blueprint it invokes.
+
+    Returns
+    -------
+    :class:`compas.datastructures.Graph`
+    """
+    inner_blueprints = inner_blueprints or {}
+    composite_to_inner_blueprint_map = composite_to_inner_blueprint_map or {}
+
+    graph = Graph()
+
+    all_blueprints = [blueprint]
+    all_blueprints.extend(list(inner_blueprints.values()))
+
+    dependencies_to_inject = []
+
+    for current_blueprint in all_blueprints:
+        for task in current_blueprint.tasks:
+            fqn_task_id = _create_global_id(current_blueprint.id, task)
+
+            if fqn_task_id in composite_to_inner_blueprint_map:
+                # 1. Modify `task` to point to inner blueprint's end node as FF
+                # 2. Modify start task of inner_blueprint, to have an SS dependency on THIS `task`
+                inner_blueprint_id = composite_to_inner_blueprint_map[fqn_task_id]
+                inner_blueprint = inner_blueprints[inner_blueprint_id]
+
+                # Find start/end task of inner blueprint
+                start_task = None
+                end_task = None
+                for t in inner_blueprint.tasks:
+                    if t.is_start:
+                        start_task = t
+                    if t.is_end:
+                        end_task = t
+                    if start_task and end_task:
+                        break
+
+                fqn_inner_end_task_id = _create_global_id(inner_blueprint_id, end_task)
+                fqn_inner_start_task_id = _create_global_id(inner_blueprint_id, start_task)
+
+                dependencies_to_inject.append((fqn_task_id, fqn_inner_end_task_id, DependencyType.FF))
+                dependencies_to_inject.append((fqn_inner_start_task_id, fqn_task_id, DependencyType.SS))
+
+            graph.add_node(fqn_task_id, task=task, blueprint_id=current_blueprint.id)
+
+        for task in current_blueprint.tasks:
+            for dep in task.depends_on:
+                graph.add_edge(_create_global_id(current_blueprint.id, dep), _create_global_id(current_blueprint.id, task), type=dep.type)
+
+        for from_task_id, to_task_id, dep_type in dependencies_to_inject:
+            graph.add_edge(to_task_id, from_task_id, type=dep_type)
+
+    # NOTE: Perhaps we need to do transitive_reduction here
+    return graph
+
+
 class RedispatchPoller:
     """Tracks dispatched tasks and re-publishes them if unclaimed within the backoff window.
 
@@ -1314,50 +1396,11 @@ class Orchestrator:
         if not self.session:
             return
 
-        self.graph = Graph()
-
-        all_blueprints = [self.session.blueprint]
-        all_blueprints.extend(list(self.session.inner_blueprints.values()))
-
-        dependencies_to_inject = []
-
-        for blueprint in all_blueprints:
-            for task in blueprint.tasks:
-                fqn_task_id = _create_global_id(blueprint.id, task)
-
-                if fqn_task_id in self.session.composite_to_inner_blueprint_map:
-                    # 1. Modify `task` to point to inner blueprint's end node as FF
-                    # 2. Modify start task of inner_blueprint, to have an SS dependency on THIS `task`
-                    inner_blueprint_id = self.session.composite_to_inner_blueprint_map[fqn_task_id]
-                    inner_blueprint = self.session.inner_blueprints[inner_blueprint_id]
-
-                    # Find start/end task of inner blueprint
-                    start_task = None
-                    end_task = None
-                    for t in inner_blueprint.tasks:
-                        if t.is_start:
-                            start_task = t
-                        if t.is_end:
-                            end_task = t
-                        if start_task and end_task:
-                            break
-
-                    fqn_inner_end_task_id = _create_global_id(inner_blueprint_id, end_task)
-                    fqn_inner_start_task_id = _create_global_id(inner_blueprint_id, start_task)
-
-                    dependencies_to_inject.append((fqn_task_id, fqn_inner_end_task_id, DependencyType.FF))
-                    dependencies_to_inject.append((fqn_inner_start_task_id, fqn_task_id, DependencyType.SS))
-
-                self.graph.add_node(fqn_task_id, task=task, blueprint_id=blueprint.id)
-
-            for task in blueprint.tasks:
-                for dep in task.depends_on:
-                    self.graph.add_edge(_create_global_id(blueprint.id, dep), _create_global_id(blueprint.id, task), type=dep.type)
-
-            for from_task_id, to_task_id, dep_type in dependencies_to_inject:
-                self.graph.add_edge(to_task_id, from_task_id, type=dep_type)
-
-        # NOTE: Perhaps we need to do transitive_reduction here
+        self.graph = build_task_graph(
+            self.session.blueprint,
+            self.session.inner_blueprints,
+            self.session.composite_to_inner_blueprint_map,
+        )
 
     def to_mermaid_diagram(self, title="Blueprint") -> str:
         """Generate a mermaid-syntax diagram representation of the blueprint session.
