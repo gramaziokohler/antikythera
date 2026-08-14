@@ -71,6 +71,52 @@ def test_validate_invalid_dependency():
         Blueprint(id="bp5", name="Invalid Dep", tasks=[t1, t2, t3, t_invalid])
 
 
+def test_validate_cycle():
+    # A cycle used to load cleanly and stall the session forever: neither task in it
+    # ever becomes ready, so nothing fails and nothing progresses.
+    t1 = Task(id="start", type=SystemTaskType.START)
+    t2 = Task(id="task1", type="some.task", depends_on=[Dependency(id="start"), Dependency(id="task2")])
+    t3 = Task(id="task2", type="some.task", depends_on=[Dependency(id="task1")])
+    t4 = Task(id="end", type=SystemTaskType.END, depends_on=[Dependency(id="task2")])
+
+    with pytest.raises(ValueError, match="dependency cycle") as raised:
+        Blueprint(id="bp_cycle", name="Cyclic", tasks=[t1, t2, t3, t4])
+
+    assert "task1" in str(raised.value)
+    assert "task2" in str(raised.value)
+
+
+def test_validate_task_that_cannot_reach_end():
+    # A second sink makes session completion depend on graph iteration order.
+    t1 = Task(id="start", type=SystemTaskType.START)
+    t2 = Task(id="task1", type="some.task", depends_on=[Dependency(id="start")])
+    t3 = Task(id="end", type=SystemTaskType.END, depends_on=[Dependency(id="task1")])
+    t_dangling = Task(id="side_branch", type="some.task", depends_on=[Dependency(id="start")])
+
+    with pytest.raises(ValueError, match="cannot reach the end task") as raised:
+        Blueprint(id="bp_sink", name="Side Branch", tasks=[t1, t2, t3, t_dangling])
+
+    assert "side_branch" in str(raised.value)
+
+
+def test_validate_end_task_alone_may_be_a_sink():
+    t1 = Task(id="start", type=SystemTaskType.START)
+    t2 = Task(id="task1", type="some.task", depends_on=[Dependency(id="start")])
+    t3 = Task(id="task2", type="some.task", depends_on=[Dependency(id="start")])
+    t4 = Task(id="end", type=SystemTaskType.END, depends_on=[Dependency(id="task1"), Dependency(id="task2")])
+
+    # Should not raise: both branches rejoin at END.
+    Blueprint(id="bp_diamond", name="Diamond", tasks=[t1, t2, t3, t4])
+
+
+@pytest.mark.parametrize("value", ["SF", "fs", "Fs", "finish-to-start", ""])
+def test_unrecognised_dependency_type_is_rejected(value):
+    # Start-to-Finish is gone rather than declared-but-ignored, and a miscased or
+    # misspelled type is rejected the same way instead of becoming no dependency at all.
+    with pytest.raises(ValueError):
+        Dependency(id="start", type=value)
+
+
 def _scope_blueprint(while_condition=None, body_outputs=None, body_params=None, body_condition=None):
     """start -> scope_open -> body -> scope_close -> end, with configurable conditions."""
     scope_start = {"while_policy": {"condition": while_condition}} if while_condition else {}

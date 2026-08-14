@@ -174,8 +174,7 @@
             "enum": [
                 "FS",
                 "FF",
-                "SS",
-                "SF"
+                "SS"
             ],
             "default": "FS"
         },

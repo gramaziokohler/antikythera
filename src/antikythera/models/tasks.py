@@ -18,12 +18,16 @@ class ExecutionMode(StrEnum):
 
 
 class DependencyType(StrEnum):
-    """Enumeration of possible dependency types."""
+    """Enumeration of possible dependency types.
+
+    Start-to-Finish is deliberately absent: it was never implemented in either
+    the readiness check or the queue, so declaring it would only offer blueprint
+    authors a dependency that is silently ignored. See ADR-0005.
+    """
 
     FS = "FS"  # Finish-to-Start
     FF = "FF"  # Finish-to-Finish
     SS = "SS"  # Start-to-Start
-    SF = "SF"  # Start-to-Finish
 
 
 class TaskState(StrEnum):

@@ -30,6 +30,11 @@ class Dependency(Data):
     type : DependencyType
         The type of dependency, by default DependencyType.FS (Finish-to-Start).
 
+    Raises
+    ------
+    ValueError
+        If ``type`` is not a recognised :class:`DependencyType`.
+
     """
 
     @property
@@ -39,7 +44,10 @@ class Dependency(Data):
     def __init__(self, id: str, type: DependencyType = DependencyType.FS) -> None:
         super().__init__()
         self.id = id
-        self.type = type
+        # Coerce rather than store verbatim: the scheduler matches dependency types by
+        # equality, so an unrecognised type would contribute no precondition at all and
+        # the task would dispatch with its dependency silently ignored. See ADR-0005.
+        self.type = DependencyType(type)
 
     def __repr__(self):
         return f"Dependency(id={self.id}, type={self.type})"
@@ -459,6 +467,10 @@ class Blueprint(Data):
     def validate(self) -> None:
         """Validates the blueprint structure.
 
+        A blueprint is valid when the orchestrator can run it to completion, not
+        merely when it is well-formed: it must additionally be acyclic and have
+        the end task as its only sink. See ADR-0005.
+
         Raises
         ------
         ValueError
@@ -482,7 +494,43 @@ class Blueprint(Data):
                 if dep.id not in task_ids:
                     raise ValueError(f"Task '{task.id}' depends on non-existent task '{dep.id}'.")
 
+        self._validate_is_runnable(end_tasks[0])
         self._validate_scopes(task_ids)
+
+    def _validate_is_runnable(self, end_task: Task) -> None:
+        """Reject dependency graphs the orchestrator cannot run to completion.
+
+        Two rules, both of which fail silently at runtime rather than loudly:
+
+        1. A cycle leaves every task in it waiting on another, so the session
+           starts and then stalls indefinitely with no error and no failed task.
+        2. A task with no path to the end task is a second sink, and which sink
+           the orchestrator treats as "the last task" — and therefore when the
+           session is marked completed — falls to graph iteration order.
+        """
+        successors: Dict[str, List[str]] = {t.id: [] for t in self.tasks}
+        predecessors: Dict[str, List[str]] = {t.id: [] for t in self.tasks}
+        for task in self.tasks:
+            for dep in task.depends_on:
+                successors[dep.id].append(task.id)
+                predecessors[task.id].append(dep.id)
+
+        cycle = _find_cycle(successors)
+        if cycle:
+            raise ValueError(f"Blueprint contains a dependency cycle: {' -> '.join(cycle)}.")
+
+        reaches_end = set()
+        queue = [end_task.id]
+        while queue:
+            task_id = queue.pop()
+            if task_id in reaches_end:
+                continue
+            reaches_end.add(task_id)
+            queue.extend(predecessors[task_id])
+
+        stranded = sorted(t.id for t in self.tasks if t.id not in reaches_end)
+        if stranded:
+            raise ValueError(f"Task(s) {', '.join(repr(t) for t in stranded)} cannot reach the end task '{end_task.id}'. Every task must have a path to the end task.")
 
     def _validate_scopes(self, task_ids: set) -> None:
         """Validate scope_start / scope_end pairs.
@@ -672,6 +720,41 @@ class Blueprint(Data):
                 )
             )
         return scopes
+
+
+def _find_cycle(successors: Dict[str, List[str]]) -> Optional[List[str]]:
+    """Return one cycle in *successors* as a list of task IDs, or ``None`` if there is none.
+
+    The returned list starts and ends on the same task, so it reads as a closed
+    walk when joined into an error message.
+    """
+    UNVISITED, ON_PATH, DONE = 0, 1, 2
+    status = {node: UNVISITED for node in successors}
+
+    for root in successors:
+        if status[root] != UNVISITED:
+            continue
+
+        status[root] = ON_PATH
+        path = [root]
+        stack = [(root, iter(successors[root]))]
+
+        while stack:
+            node, remaining = stack[-1]
+            for successor in remaining:
+                if status[successor] == ON_PATH:
+                    return path[path.index(successor) :] + [successor]
+                if status[successor] == UNVISITED:
+                    status[successor] = ON_PATH
+                    path.append(successor)
+                    stack.append((successor, iter(successors[successor])))
+                    break
+            else:
+                status[node] = DONE
+                stack.pop()
+                path.pop()
+
+    return None
 
 
 def _free_names(expression: str) -> set:
