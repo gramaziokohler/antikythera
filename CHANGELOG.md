@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Property-based tests over generated blueprints, covering blueprint validation and the task scheduler. A shared hypothesis generator (`tests/support/blueprint_strategies.py`) emits valid blueprints built over a fixed topological order, and a deterministic in-process run simulation (`tests/support/simulation.py`) drives the real `TaskScheduler` with no broker, storage or threads involved. The properties assert that a run always terminates, that completion order does not change the final state, that a duplicate or late completion cannot change a task that already finished, that no task is dispatched before its dependencies permit it, and that any task left non-terminal has a failed ancestor. `hypothesis` is added as a development dependency. See ADR-0006.
 - `build_task_graph(blueprint, inner_blueprints, composite_to_inner_blueprint_map)` in `antikythera_orchestrator.orchestrator`, extracted from `Orchestrator._build_graph`, so a task graph — and with it the scheduler — can be built without constructing an `Orchestrator`. `_build_graph` now delegates to it. See ADR-0006.
 - `Blueprint.check_dataflow()` reports condition expressions (task `condition` and `while_policy.condition`) that read session names no task in the blueprint declares as an output. `POST /blueprints/upload` rejects such a blueprint with `400` and a `detail.problems` list, and does not store it. Loading a blueprint from file only logs them, so blueprints already in storage stay loadable.
 
