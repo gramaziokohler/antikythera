@@ -297,6 +297,53 @@ The global nature of blueprint session data is mitigated by the data dependencie
 
 TBD
 
+## Authentication
+
+The core system can run without authentication. Public human access can be protected by the
+optional Compose auth profile documented in [docs/authentication.md](docs/authentication.md).
+
+The decisions behind this architecture are recorded in:
+
+- [ADR 0001: Optional edge authentication](docs/adr/0001-optional-edge-authentication.md)
+- [ADR 0002: Lightweight collaborator authorization](docs/adr/0002-lightweight-collaborator-authorization.md)
+- [ADR 0003: Separate browser and machine security boundaries](docs/adr/0003-browser-and-machine-security-boundaries.md)
+- [ADR 0004: Server-side sessions and file-backed secrets](docs/adr/0004-auth-sessions-and-secrets.md)
+
+### Topology
+
+```
+browser ──▶ nginx (single public origin, TLS)
+              ├─ auth_request ─▶ oauth2-proxy ──OIDC──▶ dex ──▶ { GitHub, Google, Apple, edu-ID }
+              ├─ /            ─▶ static React app        (served only if authorised)
+              ├─ /api/, SSE   ─▶ orchestrator:8000       (served only if authorised)
+              └─ /mqtt        ─▶ mqtt-broker:8083 (ws)   (served only if authorised)
+```
+
+- nginx applies `auth_request` to `/`, `/api/`, and `/mqtt`.
+- oauth2-proxy validates the session and allowlist.
+- Dex brokers the configured Google and GitHub providers.
+- Browser documents redirect into OAuth on `401`; API and WebSocket requests retain `401`.
+
+### Components (all in the antikythera repo)
+
+- `docker-compose.auth.yml` — the override that turns auth on: adds `dex` + `oauth2-proxy`
+  (internal only) and mounts `config/auth/nginx.auth.conf` over the frontend's nginx.
+- `docker-compose.auth.dev.yml` — a standalone dev entry point that merges the base and auth
+  definitions with `docker-compose.auth.dev.override.yml`, which swaps the production providers
+  for Dex's built-in **local password login**.
+- A one-shot `dex-init` container validates and renders `config/auth/dex.yaml`, reading sensitive
+  values from Compose secret files. Missing provider credentials fail before Dex starts.
+- The auth override removes the base stack's host mappings for Redis, MQTT WebSockets, FastAPI, and
+  MCP. Raw MQTT remains loopback-bound by default and can be bound explicitly to a trusted agent
+  network. nginx is the only browser-facing host port.
+
+### Identity and session integration
+
+When auth is on, nginx forwards `X-Auth-Request-Email` / `X-Auth-Request-User` to the orchestrator.
+The auth profile explicitly enables trust in those proxy headers; the no-auth profile ignores
+client-supplied copies. `GET /whoami` surfaces `{authenticated, email, user}`. The shared frontend
+auth provider displays identity and reacts to session expiry. OIDC sessions are stored in Redis.
+
 ---
 
 ## File formats

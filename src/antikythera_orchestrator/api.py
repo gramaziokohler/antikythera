@@ -305,6 +305,29 @@ async def timing_middleware(request: Request, call_next):
     return response
 
 
+class WhoAmIResponse(BaseModel):
+    authenticated: bool
+    email: Optional[str] = None
+    user: Optional[str] = None
+
+
+@app.get("/whoami", response_model=WhoAmIResponse)
+def whoami(request: Request) -> WhoAmIResponse:
+    """Return the authenticated identity forwarded by the optional auth proxy.
+
+    When the auth layer (``docker-compose.auth.yml``) is active, nginx forwards
+    ``X-Auth-Request-Email`` / ``X-Auth-Request-User`` from oauth2-proxy. When
+    auth is disabled these headers are absent and ``authenticated`` is False, so
+    callers (e.g. the frontend user badge) degrade gracefully to the no-auth mode.
+    """
+    if not config.TRUST_AUTH_HEADERS:
+        return WhoAmIResponse(authenticated=False)
+
+    email = request.headers.get("x-auth-request-email")
+    user = request.headers.get("x-auth-request-user")
+    return WhoAmIResponse(authenticated=bool(email), email=email, user=user)
+
+
 class TimingStatsResponse(BaseModel):
     endpoint: str
     count: int

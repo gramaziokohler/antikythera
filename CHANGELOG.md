@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added (optional) authentication workflows using OAuth2 (Google and GitHub logins). See `docs/authentication.md`.
 - `Blueprint.check_dataflow()` reports condition expressions (task `condition` and `while_policy.condition`) that read session names no task in the blueprint declares as an output. `POST /blueprints/upload` rejects such a blueprint with `400` and a `detail.problems` list, and does not store it. Loading a blueprint from file only logs them, so blueprints already in storage stay loadable.
 
 ### Changed
@@ -80,7 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added MCP server.....
+- Added MCP server.
 - Added `invoke docker` which builds both images
 
 ### Changed

@@ -1,0 +1,180 @@
+# ---------------------------------------------------------------------------
+# Optional authentication layer for Antikythera.
+#
+# This override plugs Google/GitHub login (later Apple / SWITCH edu-ID) on top
+# of the base stack. Enforcement remains at nginx; application integration is
+# limited to trusted identity display and session-expiry handling. Enable it
+# by adding this file to the compose invocation:
+#
+#   # auth OFF (local dev / trusted network) — unchanged behaviour:
+#   docker compose up
+#
+#   # auth ON (public deployment):
+#   docker compose --env-file .env.auth -f docker-compose.yml -f docker-compose.auth.yml up
+#
+# It adds two internal-only services — `dex` (multi-provider OIDC broker) and
+# `oauth2-proxy` (session + allowlist gate) — and swaps the frontend nginx config
+# for one that guards every route with an `auth_request` to oauth2-proxy.
+#
+# Required environment (see .env.auth.example): AUTH_PUBLIC_URL, cookie/client
+# secrets, and the per-provider OAuth credentials.
+# ---------------------------------------------------------------------------
+services:
+  # The base compose file publishes developer convenience ports. In the auth
+  # profile nginx is the browser-facing boundary, so keep data/API/MCP ports on
+  # the Docker network only. Raw MQTT remains available on an explicit host
+  # address for external agents; loopback is the safe default.
+  redis:
+    ports: !reset []
+
+  mqtt-broker:
+    ports: !override
+      - "${AUTH_MQTT_BIND_ADDRESS:-127.0.0.1}:1883:1883"
+
+  orchestrator:
+    ports: !reset []
+    environment:
+      ANTIKYTHERA_TRUST_AUTH_HEADERS: "true"
+
+  mcp-server:
+    ports: !reset []
+
+  # Replace the frontend's nginx config with the auth-enabled one. Same image,
+  # same public :80 — nginx stays the entry point and calls oauth2-proxy per
+  # request. dex + oauth2-proxy stay internal (no host ports).
+  frontend:
+    volumes:
+      - ./config/auth/nginx.auth.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      orchestrator:
+        condition: service_started
+      oauth2-proxy:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------------
+  # dex-init — validates public settings, reads provider credentials from
+  # Compose secrets, and renders the Dex template. Uses the already-built
+  # antikythera image purely for its Python interpreter (no network needed).
+  # -------------------------------------------------------------------------
+  dex-init:
+    image: antikythera:dev
+    container_name: akt-dex-init
+    entrypoint: ["python", "-m", "antikythera_orchestrator.auth_config"]
+    environment:
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:?Set AUTH_PUBLIC_URL in .env.auth}
+      # Template rendering remains the authority for provider requirements.
+      # This allows narrower templates (for example Google-only local testing)
+      # while the default template still fails if either provider is missing.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+    secrets:
+      - oauth2_proxy_client_secret
+      - google_client_secret
+      - github_client_secret
+    volumes:
+      - ./config/auth/dex.yaml:/tmpl/dex.yaml:ro
+      - dex-config:/rendered
+    restart: "no"
+
+  # -------------------------------------------------------------------------
+  # Dex — federates the upstream social providers, presents the login chooser.
+  # Reachable by the browser via nginx at ${AUTH_PUBLIC_URL}/dex. Reads the
+  # rendered config produced by dex-init.
+  # -------------------------------------------------------------------------
+  dex:
+    image: dexidp/dex:v2.44.0
+    container_name: akt-dex
+    volumes:
+      - dex-config:/etc/dex
+      - dex-data:/var/dex
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    depends_on:
+      dex-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # oauth2-proxy — validates the session cookie and enforces the email
+  # allowlist. Runs in nginx `auth_request` mode (static upstream); nginx serves
+  # the actual content only when this returns 2xx.
+  # -------------------------------------------------------------------------
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3-alpine
+    container_name: akt-oauth2-proxy
+    environment:
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_UPSTREAMS: static://202
+      OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
+
+      # --- Provider: our dex broker (OIDC) ---
+      OAUTH2_PROXY_PROVIDER: oidc
+      # Send approval_prompt=auto (not the default "force") so dex honours
+      # skipApprovalScreen and users aren't shown a consent screen every login.
+      OAUTH2_PROXY_APPROVAL_PROMPT: "auto"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      OAUTH2_PROXY_CODE_CHALLENGE_METHOD: S256
+      OAUTH2_PROXY_CLIENT_ID: oauth2-proxy
+      OAUTH2_PROXY_CLIENT_SECRET_FILE: /run/secrets/oauth2_proxy_client_secret
+      OAUTH2_PROXY_OIDC_ISSUER_URL: ${AUTH_PUBLIC_URL:?Set AUTH_PUBLIC_URL in .env.auth}/dex
+      OAUTH2_PROXY_REDIRECT_URL: ${AUTH_PUBLIC_URL:?Set AUTH_PUBLIC_URL in .env.auth}/oauth2/callback
+      OAUTH2_PROXY_SCOPE: "openid email profile offline_access"
+      # Split browser-facing vs server-to-server URLs so oauth2-proxy reaches dex
+      # over the internal network while the browser uses the public origin. This
+      # avoids a public loopback during code redemption / JWKS fetch.
+      OAUTH2_PROXY_SKIP_OIDC_DISCOVERY: "true"
+      OAUTH2_PROXY_LOGIN_URL: ${AUTH_PUBLIC_URL:?Set AUTH_PUBLIC_URL in .env.auth}/dex/auth
+      OAUTH2_PROXY_REDEEM_URL: http://dex:5556/dex/token
+      OAUTH2_PROXY_OIDC_JWKS_URL: http://dex:5556/dex/keys
+
+      # --- Access control (allowlist / domain) ---
+      # Default is EMPTY so the allowlist file is the sole authority (strict).
+      # Setting a domain here is OR-combined with the file, and "*" would allow
+      # ANY authenticated email (bypassing the allowlist) — so avoid "*".
+      OAUTH2_PROXY_EMAIL_DOMAINS: ${OAUTH2_PROXY_EMAIL_DOMAINS:-}
+      OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE: /etc/oauth2-proxy/allowlist.txt
+
+      # --- Session cookie ---
+      OAUTH2_PROXY_COOKIE_SECRET_FILE: /run/secrets/oauth2_proxy_cookie_secret
+      OAUTH2_PROXY_COOKIE_SECURE: ${OAUTH2_PROXY_COOKIE_SECURE:-true}
+      OAUTH2_PROXY_COOKIE_DOMAINS: ${AUTH_COOKIE_DOMAINS:-}
+      OAUTH2_PROXY_COOKIE_SAMESITE: ${OAUTH2_PROXY_COOKIE_SAMESITE:-lax}
+      OAUTH2_PROXY_COOKIE_EXPIRE: ${OAUTH2_PROXY_COOKIE_EXPIRE:-12h}
+      OAUTH2_PROXY_COOKIE_REFRESH: ${OAUTH2_PROXY_COOKIE_REFRESH:-1h}
+      OAUTH2_PROXY_WHITELIST_DOMAINS: ${AUTH_REDIRECT_DOMAINS:-}
+
+      # Keep OIDC tokens server-side. This makes the browser cookie small and
+      # avoids split-cookie handling in nginx during token refresh.
+      OAUTH2_PROXY_SESSION_STORE_TYPE: redis
+      OAUTH2_PROXY_REDIS_CONNECTION_URL: redis://redis:6379/1
+    volumes:
+      - ./config/auth/allowlist.txt:/etc/oauth2-proxy/allowlist.txt:ro
+    secrets:
+      - oauth2_proxy_client_secret
+      - oauth2_proxy_cookie_secret
+    depends_on:
+      dex:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4180/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  dex-data:
+  dex-config:
+
+secrets:
+  oauth2_proxy_client_secret:
+    file: ${OAUTH2_PROXY_CLIENT_SECRET_FILE:?Set OAUTH2_PROXY_CLIENT_SECRET_FILE in .env.auth}
+  oauth2_proxy_cookie_secret:
+    file: ${OAUTH2_PROXY_COOKIE_SECRET_FILE:?Set OAUTH2_PROXY_COOKIE_SECRET_FILE in .env.auth}
+  google_client_secret:
+    file: ${GOOGLE_CLIENT_SECRET_FILE:?Set GOOGLE_CLIENT_SECRET_FILE in .env.auth}
+  github_client_secret:
+    file: ${GITHUB_CLIENT_SECRET_FILE:?Set GITHUB_CLIENT_SECRET_FILE in .env.auth}

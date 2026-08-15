@@ -22,7 +22,7 @@ Antikythera is an distributed system for orchestration of fabrication processes 
 Stable releases can be installed from PyPI.
 
 ```bash
-pip install antikythera
+pip install antikythera-sdk
 ```
 
 To install the latest version for development, do:
@@ -48,6 +48,16 @@ docker compose up -d           # start all services
 ```
 
 This builds the `antikythera:latest` image and starts all services (Redis, MQTT broker, orchestrator, agents, frontend). To restart without rebuilding, just run `docker compose up -d` again.
+
+## Authentication
+
+By default the stack runs **without authentication**. For public / internet-facing deployments you can enable an optional edge-authentication profile with Google and GitHub login restricted to an email allowlist:
+
+```bash
+docker compose --env-file .env.auth -f docker-compose.yml -f docker-compose.auth.yml up
+```
+
+See [docs/authentication.md](docs/authentication.md) for setup.
 
 ## Issue Tracker
 

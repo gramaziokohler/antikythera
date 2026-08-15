@@ -20,6 +20,12 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "127.0.0.1")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", 1883))
 
+# Optional edge-authentication integration. Forwarded identity headers are only
+# meaningful when the auth-enabled reverse proxy is the sole path to the API.
+# Keep this disabled for the default/no-auth deployment so a direct client
+# cannot make /whoami appear authenticated by supplying its own headers.
+TRUST_AUTH_HEADERS = os.getenv("ANTIKYTHERA_TRUST_AUTH_HEADERS", "false").lower() in ("1", "true", "yes", "on")
+
 # Re-dispatch configuration
 REDISPATCH_BASE_DELAY = int(os.getenv("REDISPATCH_BASE_DELAY", 2))
 REDISPATCH_MAX_DELAY = int(os.getenv("REDISPATCH_MAX_DELAY", 90))

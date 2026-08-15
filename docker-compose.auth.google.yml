@@ -1,0 +1,10 @@
+# Google-only override for testing the real OAuth provider without configuring
+# GitHub. Layer this after docker-compose.yml and docker-compose.auth.yml.
+services:
+  dex-init:
+    secrets: !override
+      - oauth2_proxy_client_secret
+      - google_client_secret
+    volumes: !override
+      - ./config/auth/dex.google.yaml:/tmpl/dex.yaml:ro
+      - dex-config:/rendered

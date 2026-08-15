@@ -1,0 +1,27 @@
+# DEV-ONLY override used by docker-compose.auth.dev.yml. It swaps Dex to a
+# local password login and uses an allowlist matching the static identity
+# (kilgore@kilgore.trout). Do not compose this fragment by itself.
+services:
+  # Render the local-login template instead of the production one.
+  dex-init:
+    environment:
+      # This value is shared only between the local Dex and oauth2-proxy
+      # containers. It is not a deployment credential.
+      OAUTH2_PROXY_CLIENT_SECRET: dev-shared-secret
+    secrets: !reset []
+    volumes:
+      - ./config/auth/dex.dev.yaml:/tmpl/dex.yaml:ro
+      - dex-config:/rendered
+
+  oauth2-proxy:
+    environment:
+      # Production uses Docker secret files. Direct values are acceptable for
+      # this committed mock-only profile and avoid pretending these are real
+      # credentials.
+      OAUTH2_PROXY_CLIENT_SECRET_FILE: ""
+      OAUTH2_PROXY_CLIENT_SECRET: dev-shared-secret
+      OAUTH2_PROXY_COOKIE_SECRET_FILE: ""
+      OAUTH2_PROXY_COOKIE_SECRET: YnRErTU12zLP931GuGm11H4ttZKUQ7jKMyJym9Cv4lc=
+    secrets: !reset []
+    volumes:
+      - ./config/auth/allowlist.dev.txt:/etc/oauth2-proxy/allowlist.txt:ro

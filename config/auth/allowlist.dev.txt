@@ -1,0 +1,2 @@
+# DEV-ONLY allowlist — matches the static identity in dex.dev.yaml.
+kilgore@kilgore.trout
