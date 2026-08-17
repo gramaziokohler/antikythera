@@ -108,8 +108,8 @@ doctest_optionflags = [
 [tool.bumpversion]
 current_version = "0.4.1"
 message = "Bump version to {new_version}"
-commit = true
-tag = true
+commit = false
+tag = false
 
 [[tool.bumpversion.files]]
 filename = "src/antikythera/__init__.py"
@@ -153,4 +153,3 @@ max-doc-length = 179
 [tool.ruff.format]
 docstring-code-format = true
 docstring-code-line-length = "dynamic"
-

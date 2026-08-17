@@ -2,35 +2,95 @@ name: release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+
+permissions:
+  contents: read
 
 jobs:
-  Build:
+  release:
+    name: Detect release merge
+    runs-on: ubuntu-latest
+    outputs:
+      is-release: ${{ steps.release.outputs.is-release }}
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: compas-dev/compas-actions/release-check@v1
+        id: release
+
+  build:
+    needs: release
+    if: needs.release.outputs.is-release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
         python: ['3.12']
 
     steps:
-      - uses: compas-dev/compas-actions.build@v5
+      - uses: compas-dev/compas-actions/ci@v1
         with:
-          invoke_lint: true
-          check_import: false
-          use_conda: false
-          invoke_test: true
-          python: ${{ matrix.python }}
-          run_prebuild: true
+          python-version: ${{ matrix.python }}
+          management-tool: uv
+          invoke-tasks: lint test
+          run-prebuild: true
 
-  Publish:
-    needs: Build
+  prepare:
+    needs: [release, build]
+    if: needs.release.outputs.is-release == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: compas-dev/compas-actions.publish@prebuild_v2
+      - uses: compas-dev/compas-actions/prepare-release@v1
         with:
-          publish_to_pypi: true
-          pypi_token: ${{ secrets.PYPI }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          python: '3.12'
-          run_prebuild: true
+          python-version: '3.12'
+          management-tool: uv
+          run-prebuild: true
+
+  publish:
+    needs: [release, prepare]
+    if: needs.release.outputs.is-release == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/antikythera-sdk
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download package distributions
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: python-package-distributions
+          path: dist
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.14.2
+
+  create-release:
+    needs: [release, publish]
+    if: needs.release.outputs.is-release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: compas-dev/compas-actions/github-release@v1
+        with:
+          github-token: ${{ github.token }}
+          tag-name: ${{ needs.release.outputs.tag }}
+          target: ${{ github.sha }}
+
+  docs:
+    needs: [release, create-release]
+    if: needs.release.outputs.is-release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: compas-dev/compas-actions/docs@v1
+        with:
+          deploy: true
+          version: ${{ needs.release.outputs.version }}
+          extras: dev
