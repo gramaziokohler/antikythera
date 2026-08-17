@@ -30,6 +30,12 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
         python: ["3.9", "3.12", "3.14"]
+        exclude:
+          # macOS + 3.9 has never worked here. compas-actions.build@v5 skipped
+          # this combination internally; ci@v1 has no such carve-out, so the
+          # matrix has to state it.
+          - os: macos-latest
+            python: "3.9"
 
     steps:
       - uses: compas-dev/compas-actions/ci@v1
