@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.31,<1.32", "hatch-requirements-txt", "invoke", "compas_invocations2", "compas_pb>=1,<2", "grpcio-tools"]
+requires = ["hatchling", "hatch-requirements-txt", "invoke", "compas_invocations2", "compas_pb>=1,<2", "grpcio-tools"]
 build-backend = "hatchling.build"
 
 # ============================================================================
