@@ -10,6 +10,8 @@ from invoke.collection import Collection
 from invoke.tasks import task
 
 import compas_pb
+from compas_pb.invocations import create_class_assets
+from compas_pb.invocations import create_proto_bundle
 from compas_pb.invocations import generate_proto_classes
 
 
@@ -59,6 +61,8 @@ ns = Collection(
     build.clean,
     build.release,
     generate_proto_classes,
+    create_class_assets,
+    create_proto_bundle,
     pre_build,
     docker,
     mcp,
@@ -66,6 +70,9 @@ ns = Collection(
 ns.configure(
     {
         "base_folder": os.path.dirname(__file__),
+        # Antikythera owns these schemas, so it publishes their bindings itself.
+        "package_name": "antikythera",
+        "generated_folder": Path("./dist") / "generated",
         "frontend_repo": "../antikythera-frontend",
         "proto_folder": Path("./src") / "antikythera" / "proto",
         "proto_include_paths": [Path("./src") / "antikythera" / "proto", compas_pb.PROTOBUF_DEFS],

@@ -49,6 +49,33 @@ jobs:
           management-tool: uv
           run-prebuild: true
 
+  assets:
+    name: Build schema and binding assets
+    needs: release
+    if: needs.release.outputs.is-release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: compas-dev/compas-actions/setup-python@v1
+        with:
+          python-version: '3.12'
+          management-tool: uv
+          extras: dev
+
+      # Antikythera owns antikythera.proto, so it publishes the schemas and the bindings
+      # for every supported language, the same way compas_pb does for the COMPAS types.
+      - name: Generate .proto bundle and per-language bindings
+        run: invoke create-class-assets
+
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: github-release-assets
+          path: dist/proto/*.zip
+          if-no-files-found: error
+
   publish:
     needs: [release, prepare]
     if: needs.release.outputs.is-release == 'true'
@@ -70,7 +97,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@v1.14.2
 
   create-release:
-    needs: [release, publish]
+    needs: [release, publish, assets]
     if: needs.release.outputs.is-release == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -81,6 +108,7 @@ jobs:
           github-token: ${{ github.token }}
           tag-name: ${{ needs.release.outputs.tag }}
           target: ${{ github.sha }}
+          release-assets-artifact-name: github-release-assets
 
   docs:
     needs: [release, create-release]
