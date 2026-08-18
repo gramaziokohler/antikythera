@@ -8,21 +8,39 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
+  release-change:
+    name: Detect release merge
+    runs-on: ubuntu-latest
+    outputs:
+      is-release: ${{ steps.release.outputs.is-release }}
+    steps:
+      - uses: compas-dev/compas-actions/release-check@v1
+        id: release
+
   build:
-    if: "!contains(github.event.pull_request.labels.*.name, 'docs-only')"
+    needs: release-change
+    if: github.event_name == 'pull_request' || needs.release-change.outputs.is-release != 'true'
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
         python: ["3.9", "3.12", "3.14"]
+        exclude:
+          # macOS + 3.9 has never worked here. compas-actions.build@v5 skipped
+          # this combination internally; ci@v1 has no such carve-out, so the
+          # matrix has to state it.
+          - os: macos-latest
+            python: "3.9"
 
     steps:
-      - uses: compas-dev/compas-actions.build@v5
+      - uses: compas-dev/compas-actions/ci@v1
         with:
-          invoke_lint: true
-          check_import: false
-          use_conda: false
-          invoke_test: true
-          python: ${{ matrix.python }}
-          run_prebuild: true
+          python-version: ${{ matrix.python }}
+          management-tool: uv
+          invoke-tasks: lint test
+          run-prebuild: true

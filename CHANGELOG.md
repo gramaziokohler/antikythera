@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Breaking:** Upgraded `compas_pb` to `>=1,<2`; MQTT protobuf messages now use the v1 wire format and are incompatible with v0 readers and writers.
+* Migrated CI, documentation, pull-request, and release automation to the consolidated `compas-dev/compas-actions/*@v1` actions and the reviewed release-PR/OIDC publishing flow.
 * Renamed `type` to `type_hint` on task inputs, outputs and params (`TaskIO` and subclasses) to disambiguate it from a task's `type` (agent.tool). Blueprint JSON accepts either key on load and always emits `type_hint`; `type` is a deprecated alias and a `type` property is kept for in-process readers. See ADR-0003.
 * **Breaking:** `antikythera-agents` now requires an explicit subcommand. `antikythera-agents run` starts the launcher with the same flags the bare command used to accept (`--broker-host`, `--broker-port`, `--dev`, `--sys-only`); invoking `antikythera-agents` with no subcommand exits non-zero with usage text instead of starting the launcher. Argument parsing moved into the `cli` module, leaving `__main__` as a thin entry point.
 * Tool signatures now bind task inputs, not just params: an unannotated parameter (or one explicitly marked `Input[T]`) binds by name from `task.inputs`. Binding is strict — a required input the task doesn't supply, an input the task declares that the tool doesn't accept, or a non-optional input resolving to `None` all fail the task before the tool runs, reported as `TaskError(code="TOOL_BINDING_ERROR")` rather than the blanket `TOOL_FAILURE`. `Task`-typed (opaque) tools are exempt. See ADR-0002.
@@ -203,4 +205,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - JSON-based definition format for fabrication processes.
 - **Agents**:
     - **Plugin System**: Fully extensible agent architecture using `@agent` decorators and auto-discovery.
-
