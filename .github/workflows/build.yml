@@ -44,3 +44,17 @@ jobs:
           management-tool: uv
           invoke-tasks: lint test
           run-prebuild: true
+
+  create-assets:
+    name: Verify asset generation
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: compas-dev/compas-actions/release-assets@v1
+        with:
+          python-version: "3.12"
+          management-tool: uv
+          extras: dev
+          invoke-tasks: create-class-assets
+          paths: dist/proto/*.zip
+          artifact-name: protobuf-test-assets
