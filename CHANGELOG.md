@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Every release now publishes `antikythera.proto` and the generated bindings for each supported language (TypeScript, C#, C++, Java, Objective-C, PHP, Ruby) as release assets. Downstream packages pin a schema version and download it, instead of reading `.proto` files out of this repository — the frontend previously fetched `antikythera.proto` from the `main` branch on every build, so its wire contract silently followed whatever was merged. Built by `invoke create-class-assets`, reusing the tasks `compas_pb` provides, in a dedicated CI job so the wheel build is unaffected.
 - `Blueprint.check_dataflow()` reports condition expressions (task `condition` and `while_policy.condition`) that read session names no task in the blueprint declares as an output. `POST /blueprints/upload` rejects such a blueprint with `400` and a `detail.problems` list, and does not store it. Loading a blueprint from file only logs them, so blueprints already in storage stay loadable.
 
 ### Changed
