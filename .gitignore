@@ -155,3 +155,4 @@ docs/api/generated/
 *.pyi
 
 .agents/
+.scratch/
