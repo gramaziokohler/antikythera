@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 
+## [0.5.1] 2026-08-24
+
+### Added
+
+### Changed
+
+* Docker image is now automatically published on release of the package. 
+
+### Removed
+
+
 ## [0.5.0] 2026-08-19
 
 ### Added
