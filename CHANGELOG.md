@@ -9,14 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `deploy/docker-compose.yml`, a self-contained compose file for running Antikythera from the images published on Docker Hub — no clone, no build. It pulls `gramaziokohler/antikythera` and `gramaziokohler/antikythera-frontend`, inlines the mosquitto configuration through the compose `configs` element so it is the only file a user needs, keeps Redis off the host network, makes every published port configurable via `AKT_*_PORT` environment variables, and puts the MCP server behind an opt-in `mcp` compose profile. Unlike the development stack in the repository root it runs `antikythera-agents run` without `--sys-only`, so the `io.*` and `user_interaction.*` agents are served too — with `--sys-only` the example blueprints stall indefinitely on the first `user_interaction` task, since no running agent claims it.
-- Documentation for running Antikythera as a user rather than as a developer: `docs/deployment/docker.md` (the recommended path — quick start, what each service does, connecting external agents to the broker, configuration, updating, backing up the Redis volume, and the fact that neither the API nor the broker is authenticated) and `docs/deployment/bare-metal.md` (running the services directly on Ubuntu 24.04 with systemd units for the orchestrator, agents and MCP server, a mosquitto listener config, an nginx site, a Let's Encrypt section, and ufw rules). The bare-metal guide is cross-checked against the production ETH Zurich deployment and adopts its mosquitto logging levels, `antikythera-mcp` unit, `Requires=` dependencies, Node 22 install and verification commands; it installs the released wheel from PyPI rather than deploying from a git checkout, which removes the protobuf generation step entirely. The docs landing page now opens with the two-command Docker quick start, and `docs/installation.md` is scoped to installing the Python package.
+- `deploy/docker-compose.yml`, a self-contained compose file that runs Antikythera from the images published on Docker Hub — no clone, no build. The mosquitto config is inlined so it is the only file to fetch, Redis stays off the host network, host ports are `AKT_*_PORT` variables, and the MCP server sits behind an opt-in `mcp` profile. It runs the agents without the development stack's `--sys-only`, which leaves the example blueprints stalled on their first `user_interaction` task.
+- Documentation for running Antikythera rather than developing it: `docs/deployment/docker.md` (the recommended path) and `docs/deployment/bare-metal.md` (systemd units, nginx and TLS on Ubuntu, cross-checked against the ETH Zurich deployment). The docs landing page now opens with the Docker quick start, and `docs/installation.md` is scoped to the Python package.
 
 ### Changed
 
 ### Fixed
 
-- The `antikythera` Docker image sets `PYTHONUNBUFFERED=1`. The agent launcher writes its startup and per-task output with `print()`, which Python block-buffers when stdout is not a terminal, so `docker compose logs agents` stayed empty for the life of the container — the agents looked dead even while they were claiming and running tasks.
+- The `antikythera` Docker image sets `PYTHONUNBUFFERED=1`. The agent launcher prints to stdout, which Python block-buffers when it is not a terminal, so `docker compose logs agents` stayed empty for the life of the container.
 
 ### Removed
 
