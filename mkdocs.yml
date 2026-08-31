@@ -131,6 +131,9 @@ nav:
   - Get Started:
       - Introduction: introduction.md
       - Installation: installation.md
+  - Deployment:
+      - Run with Docker: deployment/docker.md
+      - Run on bare metal: deployment/bare-metal.md
   - API Reference:
       - antikythera:
           - antikythera.io: reference/antikythera.io.md
