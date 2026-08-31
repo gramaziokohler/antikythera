@@ -2,7 +2,8 @@
 
 [![Made with COMPAS](https://compas.dev/badge.svg)](https://compas.dev)
 [![PyPI Package latest release](https://img.shields.io/pypi/v/antikythera-sdk.svg)](https://pypi.python.org/pypi/antikythera-sdk)
-[![Docker Image Version](https://img.shields.io/docker/v/gramaziokohler/antikythera?logo=docker)](https://hub.docker.com/r/gramaziokohler/antikythera)
+[![Docker Image Version](https://img.shields.io/docker/v/gramaziokohler/antikythera?logo=docker&label=backend)](https://hub.docker.com/r/gramaziokohler/antikythera)
+[![Docker Image Version](https://img.shields.io/docker/v/gramaziokohler/antikythera-frontend?logo=docker&label=frontend)](https://hub.docker.com/r/gramaziokohler/antikythera-frontend)
 [![License](https://img.shields.io/github/license/gramaziokohler/antikythera.svg)](https://pypi.python.org/pypi/antikythera-sdk)
 [![DOI](https://zenodo.org/badge/1046154055.svg)](https://doi.org/10.5281/zenodo.20297856)
 
@@ -38,16 +39,31 @@ pip install -e ".[dev]"
 For further "getting started" instructions, a tutorial, examples, and an API reference,
 please check out the online documentation here: [antikythera docs](https://gramaziokohler.github.io/antikythera)
 
-## Docker
+## Running Antikythera
+
+The orchestrator, the system agents and the web UI are published as Docker images, so a
+complete installation needs no clone and no build:
 
 ```bash
-git clone https://github.com/gramaziokohler/antikythera.git
-cd antikythera
-docker compose build           # build the image (only needed once, or after code changes)
-docker compose up -d           # start all services
+curl -O https://raw.githubusercontent.com/gramaziokohler/antikythera/main/deploy/docker-compose.yml
+docker compose up -d
 ```
 
-This builds the `antikythera:latest` image and starts all services (Redis, MQTT broker, orchestrator, agents, frontend). To restart without rebuilding, just run `docker compose up -d` again.
+Then open <http://localhost:8080>. See [Run with Docker](https://gramaziokohler.github.io/antikythera/deployment/docker/)
+for configuration, connecting your own agents, and updating, or
+[Run on bare metal](https://gramaziokohler.github.io/antikythera/deployment/bare-metal/)
+to run the services without Docker.
+
+### Development stack
+
+The `docker-compose.yml` in the repository root is the *development* setup: it builds both
+images from local source (the frontend from a sibling `antikythera-frontend` checkout) and
+runs the orchestrator with auto-reload.
+
+```bash
+docker compose build           # build the images (only needed once, or after code changes)
+docker compose up -d           # start all services
+```
 
 ## Issue Tracker
 
