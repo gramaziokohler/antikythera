@@ -2,8 +2,8 @@
 
 [![Made with COMPAS](https://compas.dev/badge.svg)](https://compas.dev)
 [![PyPI Package latest release](https://img.shields.io/pypi/v/antikythera-sdk.svg)](https://pypi.python.org/pypi/antikythera-sdk)
-[![Docker Image Version](https://img.shields.io/docker/v/gramaziokohler/antikythera?logo=docker&label=backend)](https://hub.docker.com/r/gramaziokohler/antikythera)
-[![Docker Image Version](https://img.shields.io/docker/v/gramaziokohler/antikythera-frontend?logo=docker&label=frontend)](https://hub.docker.com/r/gramaziokohler/antikythera-frontend)
+[![Frontend Image Version](https://img.shields.io/docker/v/gramaziokohler/antikythera?logo=docker&label=backend)](https://hub.docker.com/r/gramaziokohler/antikythera)
+[![Backend Image Version](https://img.shields.io/docker/v/gramaziokohler/antikythera-frontend?logo=docker&label=frontend)](https://hub.docker.com/r/gramaziokohler/antikythera-frontend)
 [![License](https://img.shields.io/github/license/gramaziokohler/antikythera.svg)](https://pypi.python.org/pypi/antikythera-sdk)
 [![DOI](https://zenodo.org/badge/1046154055.svg)](https://doi.org/10.5281/zenodo.20297856)
 
