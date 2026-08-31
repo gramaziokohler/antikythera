@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+### Fixed
+
+- The `antikythera` Docker image sets `PYTHONUNBUFFERED=1`. The agent launcher writes its startup and per-task output with `print()`, which Python block-buffers when stdout is not a terminal, so `docker compose logs agents` stayed empty for the life of the container — the agents looked dead even while they were claiming and running tasks.
+
 ### Removed
 
 

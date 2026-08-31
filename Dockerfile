@@ -24,6 +24,10 @@ FROM python:3.13-slim
 LABEL \
     org.opencontainers.image.authors="Chen Kasirer <kasirer@arch.ethz.ch>" 
 
+# Without this, the agent launcher's startup output sits in Python's stdout
+# buffer and `docker compose logs agents` stays empty for the life of the container.
+ENV PYTHONUNBUFFERED=1
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
