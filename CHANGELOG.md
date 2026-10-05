@@ -9,7 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `deploy/docker-compose.yml`, a self-contained compose file that runs Antikythera from the images published on Docker Hub — no clone, no build. The mosquitto config is inlined so it is the only file to fetch, Redis stays off the host network, host ports are `AKT_*_PORT` variables, and the MCP server sits behind an opt-in `mcp` profile. It runs the agents without the development stack's `--sys-only`, which leaves the example blueprints stalled on their first `user_interaction` task.
+- Documentation for running Antikythera rather than developing it: `docs/deployment/docker.md` (the recommended path) and `docs/deployment/bare-metal.md` (systemd units, nginx and TLS on Ubuntu, cross-checked against the ETH Zurich deployment). The docs landing page now opens with the Docker quick start, and `docs/installation.md` is scoped to the Python package.
+
 ### Changed
+
+### Fixed
+
+- The `antikythera` Docker image sets `PYTHONUNBUFFERED=1`. The agent launcher prints to stdout, which Python block-buffers when it is not a terminal, so `docker compose logs agents` stayed empty for the life of the container.
 
 ### Removed
 

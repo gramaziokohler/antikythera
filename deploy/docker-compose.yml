@@ -1,0 +1,157 @@
+# =============================================================================
+# Antikythera — user deployment
+#
+# Runs a complete Antikythera installation from the images published on Docker
+# Hub. Nothing is built from source, so this file is all you need:
+#
+#   docker compose up -d
+#
+# Then open http://localhost:8080
+#
+# Requires Docker Compose v2.23.1 or newer (for the inline `configs` below).
+#
+# For the development setup — images built from a local clone, live reload —
+# use the docker-compose.yml in the repository root instead.
+# =============================================================================
+name: antikythera
+
+services:
+  # ---------------------------------------------------------------------------
+  # Redis — stores blueprints, sessions and session data.
+  # Not published to the host: only the orchestrator talks to it.
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:8-alpine
+    container_name: akt-redis
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # MQTT broker — message bus between the orchestrator and the agents.
+  # Published to the host so agents running elsewhere on the network
+  # (Grasshopper, robot cells, your own agents) can connect to it.
+  # ---------------------------------------------------------------------------
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    container_name: akt-mqtt-broker
+    ports:
+      - "${AKT_MQTT_PORT:-1883}:1883"    # MQTT over TCP — used by agents
+      - "${AKT_MQTT_WS_PORT:-8083}:8083" # MQTT over WebSocket — browser clients
+    configs:
+      - source: mosquitto
+        target: /mosquitto/config/mosquitto.conf
+    healthcheck:
+      test: ["CMD-SHELL", "ps -ef | grep -v grep | grep mosquitto"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Orchestrator — the REST API that schedules and tracks blueprint sessions.
+  # ---------------------------------------------------------------------------
+  orchestrator:
+    image: gramaziokohler/antikythera:latest
+    container_name: akt-orchestrator
+    ports:
+      - "${AKT_API_PORT:-8000}:8000"   # REST API (also proxied at /api by the frontend)
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MQTT_BROKER_HOST: mqtt-broker
+      MQTT_BROKER_PORT: 1883
+    depends_on:
+      mqtt-broker:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Built-in agents — the workers for the first-party task types shipped with
+  # Antikythera: system.*, io.* and user_interaction.*.
+  # Add `--sys-only` to the command to restrict this to system.* alone; note
+  # that blueprints using the other first-party types will then stall, waiting
+  # for an agent that never claims their tasks.
+  # Your own agents run outside this stack and connect to the broker above.
+  # ---------------------------------------------------------------------------
+  agents:
+    image: gramaziokohler/antikythera:latest
+    container_name: akt-agents
+    environment:
+      # The launcher prints to stdout; without this Python buffers it and
+      # `docker compose logs agents` stays empty for the life of the container.
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      mqtt-broker:
+        condition: service_healthy
+      orchestrator:
+        condition: service_started
+    command:
+      - antikythera-agents
+      - run
+      - --broker-host
+      - mqtt-broker
+      - --broker-port
+      - "1883"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Frontend — the web UI, served by nginx. Proxies /api to the orchestrator.
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: gramaziokohler/antikythera-frontend:latest
+    container_name: akt-frontend
+    ports:
+      - "${AKT_WEB_PORT:-8080}:80"
+    depends_on:
+      - orchestrator
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # MCP server — exposes the orchestrator over the Model Context Protocol, so
+  # an LLM client can author blueprints and drive sessions.
+  # Opt-in: docker compose --profile mcp up -d
+  # Clients then connect to http://localhost:8001/sse
+  # ---------------------------------------------------------------------------
+  mcp-server:
+    image: gramaziokohler/antikythera:latest
+    container_name: akt-mcp-server
+    profiles: ["mcp"]
+    ports:
+      - "${AKT_MCP_PORT:-8001}:8001"
+    environment:
+      ANTIKYTHERA_API_BASE: http://orchestrator:8000
+    depends_on:
+      - orchestrator
+    command:
+      - antikythera-mcp
+      - --transport
+      - sse
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8001"
+    restart: unless-stopped
+
+configs:
+  # Inlined so this compose file stays self-contained — no second file to fetch.
+  mosquitto:
+    content: |
+      listener 1883
+      listener 8083
+      protocol websockets
+      allow_anonymous true
+      log_type all
+
+volumes:
+  redis-data:
