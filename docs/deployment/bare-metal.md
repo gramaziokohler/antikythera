@@ -1,9 +1,8 @@
 # Run on bare metal
 
-Running the services directly on a machine, without Docker, is supported but takes more
-work than [Run with Docker](docker.md) — which is what most installations should use.
-Reach for bare metal when Docker is not an option: a locked-down lab machine, an existing
-server with its own service management, or hardware access that a container makes awkward.
+You can run Antikythera without Docker, but it takes more work than
+[Run with Docker](docker.md), which is what most installations should use. Run it without
+Docker when Docker is not an option, for example on a locked-down lab machine.
 
 !!! note
     The layout below matches the production Antikythera server at ETH Zurich, which runs
@@ -21,7 +20,7 @@ A complete installation is six processes. The MCP server is optional; the rest a
 | Redis | `redis-server` | 6379 (localhost only) |
 | MQTT broker | `mosquitto` | 1883, 8083 |
 | Orchestrator | `antikythera` | 8000 (localhost only) |
-| Built-in actors | `antikythera-actors run` | — |
+| Built-in actors | `antikythera-actors run` | |
 | MCP server (optional) | `antikythera-mcp` | 8001 (localhost only) |
 | Web UI | static files served by nginx | 80 / 443 |
 
@@ -31,8 +30,8 @@ web UI is a separate build. Everything except nginx and the broker binds to loca
 ## Target platform
 
 Written for **Ubuntu 24.04 LTS** on x86-64, with systemd; Debian 12 works the same way.
-Any Linux with Python 3.12 and the packages below will do — adjust the package manager
-commands.
+Any Linux with Python 3.12 and the packages below will do; change the package manager
+commands to match.
 
 Python 3.9 is the floor for the SDK, but run the server on **3.12**: that is what the
 production deployment and the published container image use.
@@ -96,12 +95,11 @@ sudo mkdir -p /opt/antikythera
 sudo chown antikythera:antikythera /opt/antikythera
 
 sudo -u antikythera python3 -m venv /opt/antikythera/venv
-sudo -u antikythera /opt/antikythera/venv/bin/pip install "antikythera-sdk[deployment]"
+sudo -u antikythera /opt/antikythera/venv/bin/pip install "antikythera-sdk[deployment,mcp]"
 ```
 
-The `deployment` extra pulls in FastAPI, uvicorn, the Redis client and the MCP server —
-everything the orchestrator needs beyond the SDK itself. The published wheel ships the
-generated protobuf modules, so there is no code generation step.
+The `deployment` extra adds the HTTP service and the Redis client; `mcp` adds the MCP
+server. Leave out `mcp` if you do not need it.
 
 Check that all three entry points work before writing any unit files:
 
@@ -113,16 +111,15 @@ Check that all three entry points work before writing any unit files:
 
 ### Actor plugins
 
-Actors ship as plugins, and some pull heavy third-party dependencies that are not
-installed by default. The `moveit` actor, for example, imports `compas_fab`:
+Install your own actor packages into the same virtualenv, and the actors service below
+starts them too:
 
 ```bash
-sudo -u antikythera /opt/antikythera/venv/bin/pip install compas-fab
+sudo -u antikythera /opt/antikythera/venv/bin/pip install my-robot-actors
 ```
 
-Without it the launcher still starts, but plugin discovery logs a warning for every
-plugin it could not import. Install the ones you need, or ignore the warnings for the
-ones you do not.
+If an actor package cannot be imported, for example because one of its dependencies is
+missing, the other actors still start and a warning names the one that failed.
 
 ## 4. Orchestrator service
 
@@ -197,16 +194,13 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now antikythera-actors
 ```
 
-This starts every actor registered in that virtualenv — the first-party `system.*`, `io.*`
-and `user_interaction.*` types, plus any actor plugin you install alongside them. Add
-`--sys-only` to restrict it to `system.*`, keeping in mind that a blueprint using any other
-first-party type will then stall on a task no actor claims. Actors for your own hardware
-normally run on other machines and connect to port 1883 over the network.
+This starts every actor installed in that virtualenv: the built-in `system`, `io` and
+`user_interaction` actors, and any actor package you added. Actors for your own machines
+usually run on those machines and connect to port 1883 over the network.
 
 !!! warning
-    `run` is a required subcommand. `antikythera-actors --sys-only ...` without it exits
-    non-zero with usage text and never starts the launcher — a unit file written against
-    the older CLI will fail on restart.
+    `run` is required: `antikythera-actors --sys-only` without `run` does not start any
+    actors. Unit files written for older versions need it added.
 
 ## 6. MCP server (optional)
 
@@ -262,8 +256,8 @@ sudo cp -a dist/. /var/www/antikythera/
 
 The build bakes in the broker address the UI hands to the orchestrator when starting a
 session. With everything on one server the default (`127.0.0.1`) is correct. If the broker
-runs elsewhere, set it at build time — it must be the address the **orchestrator** uses to
-reach the broker, not the address browsers use:
+runs elsewhere, set it when you build. Use the address the **orchestrator** uses to
+reach the broker, not the one browsers use:
 
 ```bash
 VITE_MQTT_BROKER_HOST=broker.example.lan VITE_MQTT_BROKER_PORT=1883 npm run build
@@ -340,16 +334,16 @@ sudo systemctl list-timers | grep certbot
 ```
 
 Certbot writes a second `server` block for port 443. Any `location` you added above lives
-only in the block certbot copied it from — check that `/api/` and `/mcp/` are present in
-the HTTPS block too, and re-add them if not.
+only in the block certbot copied it from. Check that `/api/` and `/mcp/` are in the
+HTTPS block too, and add them if not.
 
 !!! warning
     TLS encrypts the connection. It does not authenticate anyone. A server reachable from
-    the public internet over HTTPS is still a server anyone can drive — see
+    the public internet over HTTPS is still a server anyone can use. See
     [Security](#security).
 
 Browser clients that speak MQTT over WebSockets cannot reach `ws://host:8083` from an
-HTTPS page. If you have such clients — the bundled UI is not one of them — proxy the
+HTTPS page. If you have such clients (the bundled UI is not one of them), proxy the
 broker's WebSocket listener through nginx and point them at `wss://host/mqtt`:
 
 ```nginx
@@ -387,8 +381,8 @@ Then open the server in a browser, upload a blueprint from `examples/`, and star
 ## Security
 
 There is **no authentication** on the REST API and the broker accepts anonymous
-connections. Anyone who can reach these ports can start, stop and delete sessions — and on
-a machine driving real hardware, that is not a theoretical concern.
+connections. Anyone who can reach these ports can start, stop and delete sessions, and on
+a machine that drives real hardware, that matters.
 
 Expose ports 80/443 and 1883 to the local network only, and keep 8000, 8001 and 6379 on
 localhost as the units above do. If access from outside is genuinely needed, put it behind
@@ -405,7 +399,7 @@ sudo ufw enable
 ## Updating
 
 ```bash
-sudo -u antikythera /opt/antikythera/venv/bin/pip install --upgrade "antikythera-sdk[deployment]"
+sudo -u antikythera /opt/antikythera/venv/bin/pip install --upgrade "antikythera-sdk[deployment,mcp]"
 sudo systemctl restart antikythera-orchestrator antikythera-actors antikythera-mcp
 ```
 

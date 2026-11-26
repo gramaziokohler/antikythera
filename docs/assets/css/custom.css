@@ -3,3 +3,9 @@
   --md-primary-fg-color--light: #0092d2;
   --md-primary-fg-color--dark:  #0092d2;
 }
+
+/* Wrap long names in the navigation and table of contents instead of cutting them off. */
+.md-nav__link .md-ellipsis {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

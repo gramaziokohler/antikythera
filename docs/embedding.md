@@ -1,69 +1,57 @@
 # Embedding the orchestrator
 
-The orchestrator does not need the HTTP API, Redis or an MQTT broker. It is a Python class
-that takes a blueprint session, a transport to reach actors over, and a storage backend.
-That makes Antikythera usable as a small process coordinator inside any Python application.
+The orchestrator is a Python class. It does not need the HTTP service, Redis or an MQTT
+broker, so you can use Antikythera to coordinate tasks inside any Python program.
 
-## In a single process
+## The parts
 
-With an in-memory transport and in-memory storage, the orchestrator and the actors run in
-the same process and nothing else is needed:
+An orchestrator needs three things:
+
+- a **session**: the blueprint to run, and an id for this run.
+- a **transport**: how to reach the actors.
+- a **storage**: where to keep the session and its data.
+
+The [hello world](index.md#hello-world) runs everything in one process, with an in-memory
+transport and an in-memory storage:
 
 ```python
-from compas_eve.codecs import ProtobufMessageCodec
-from compas_eve.memory import InMemoryTransport
-
-from antikythera.models import Blueprint, BlueprintSession, Task, TaskInput, TaskOutput
-from antikythera_actors import Actor, ActorLauncher, actor, tool
-from antikythera_orchestrator import InMemoryStorage, Orchestrator
-
-
-@actor(type="math")
-class MathActor(Actor):
-    @tool(name="double")
-    def double(self, value: int) -> dict:
-        return {"result": value * 2}
-
-
-start = Task(id="start", type="system.start")
-double = Task(id="double", type="math.double", inputs=[TaskInput(name="value", value=21)], outputs=[TaskOutput(name="result")])
-end = Task(id="end", type="system.end")
-start >> double >> end
-blueprint = Blueprint(id="answer", name="Answer", tasks=[start, double, end])
-
 transport = InMemoryTransport(codec=ProtobufMessageCodec())
 storage = InMemoryStorage()
 
 actors = ActorLauncher(transport=transport)
 actors.start()
 
-orchestrator = Orchestrator(BlueprintSession(bsid="answer-1", blueprint=blueprint), transport=transport, storage=storage)
+session = BlueprintSession(bsid="hello-1", blueprint=blueprint)
+orchestrator = Orchestrator(session, transport=transport, storage=storage)
 orchestrator.start()
 orchestrator.await_completion(timeout=10)
-
-print(storage.session_storage("answer-1").get("answer", "result"))  # 42
-actors.stop()
 ```
 
-The transport must use `ProtobufMessageCodec`, the format the orchestrator and actors
-exchange. Both constructors reject a transport that does not.
+`ActorLauncher` starts the actors defined in your program and the ones installed as
+plugins, including the `system` actor that runs the start and end tasks. `await_completion` waits until the session has finished, and
+returns `False` if the time ran out first.
 
-## Across machines
+The transport must use `ProtobufMessageCodec`, because that is the message format of
+the orchestrator and the actors. Both refuse a transport with another codec.
 
-Keep the storage in memory but talk MQTT, and actors can run anywhere that reaches the
-broker, for example started with `uvx` as described in [Running actors](actors.md):
+## Actors on other machines
+
+To let actors on other machines take part, use a network transport instead. With MQTT,
+pass the broker address:
 
 ```python
 orchestrator = Orchestrator(session, broker_host="mqtt.example.org", storage=InMemoryStorage())
 ```
 
-Any other `compas_eve` transport works the same way. Zenoh, for instance, needs no broker at all.
+The actors then connect to the same broker, for example with `uvx` as described in
+[Writing actors](actors.md#running-actors). [NATS](nats.md) and [Zenoh](zenoh.md) work as
+well, and any other `compas_eve` transport can be passed as `transport=`.
 
 ## Storage
 
-`InMemoryStorage` holds sessions, blueprints and models for as long as the process runs.
-Put the blueprints that composite tasks refer to, and the models that sequencers read, into
-it before starting:
+`InMemoryStorage` keeps sessions, blueprints and models until the program ends. If a
+blueprint has composite tasks, or reads a model, add the inner blueprints and the models
+to the storage before you start:
 
 ```python
 with storage.blueprint_storage() as blueprints:
@@ -73,5 +61,13 @@ with storage.model_storage() as models:
     models.add_model("my-model", model)
 ```
 
-`RedisStorage` is the default backend and keeps everything across restarts; it is what the
-HTTP API service uses. Implement `StorageBackend` to keep state somewhere else.
+To read the results, open the session data. Values are stored per blueprint id:
+
+```python
+with storage.session_storage("hello-1") as data:
+    print(data.get("hello-world", "greeting"))
+```
+
+`RedisStorage` keeps everything when the program restarts. It is the default, and what the
+HTTP service uses. To keep data somewhere else, implement
+[StorageBackend][antikythera_orchestrator.storage.backends.StorageBackend].

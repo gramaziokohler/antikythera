@@ -8,36 +8,53 @@
 An all knowing, all controlling, robotic and otherwise, process manager.
 </p>
 
-## Quick start
+Antikythera runs fabrication processes. You describe a process as a **blueprint**: a list
+of tasks and the order to do them in. **Actors** do the tasks: a robot, a CNC machine, a
+script, or a person answering a question in the browser. The **orchestrator** hands each
+task to an actor when it is ready to start, and keeps track of the results.
 
-The orchestrator, the system actors and the web UI are published as Docker images.
-Nothing needs to be cloned or built — download the deployment compose file and start it:
+Actors can run on different machines. The orchestrator and the actors talk over a network,
+so one process can use a robot in the workshop, a computer next to a machine, and a person
+with a tablet.
 
-```bash
-curl -O https://raw.githubusercontent.com/gramaziokohler/antikythera/main/deploy/docker-compose.yml
-docker compose up -d
-```
+## Hello, world
 
-Then open <http://localhost:8080>.
-
-See [Run with Docker](deployment/docker.md) for what is running, how to connect your own
-actors, and how to configure it. To run without Docker, see
-[Run on bare metal](deployment/bare-metal.md).
-
-## Install the SDK
-
-To write blueprints and actors, or to talk to a running orchestrator from Python,
-install the SDK from PyPI.
+Install the SDK:
 
 ```bash
 pip install antikythera-sdk
 ```
 
-To also install the orchestrator and its deployment dependencies — for running the server
-yourself rather than in a container:
+Save this as `hello_world.py`:
 
-```bash
-pip install antikythera-sdk[deployment]
+```python
+--8<-- "examples/hello_world.py"
 ```
 
-More in [Installation](installation.md).
+Run it:
+
+```console
+$ python hello_world.py
+🏃 [system.start] Starting...
+✅ [system.start] Finished.
+🏃 [system.end] Starting...
+✅ [system.end] Finished.
+Hello, world!
+```
+
+The blueprint has three tasks: `start`, `hello` and `end`. Every blueprint begins with a
+`system.start` task and finishes with a `system.end` task; Antikythera runs both itself.
+The `hello` task has the type `greeter.hello`, so the `hello` tool of the `greeter` actor
+runs it. The tool's return value is saved as the task's `greeting` output, and the
+program reads it back at the end.
+
+Here, everything runs in one Python process. In a real setup, the orchestrator runs as a
+service with a web UI, and actors connect to it from other machines.
+
+## Next steps
+
+- [Concepts](concepts.md) explains blueprints, tasks, actors and the orchestrator.
+- [Run with Docker](deployment/docker.md) starts the full system, with the web UI, in two commands.
+- [Writing actors](actors.md) shows how to connect your own machines and code.
+- [Writing blueprints](blueprints.md) shows how to describe a process.
+- [Examples](examples.md) lists blueprints that show each feature.

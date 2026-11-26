@@ -1,7 +1,7 @@
-# Running actors
+# Writing actors
 
-An actor is a Python class whose methods are tools. A task of type `greeter.hello` is run by
-the `hello` tool of the actor registered as `greeter`:
+An actor is a Python class that does tasks. Its methods marked with `@tool` are its tools.
+A task of type `greeter.hello` is done by the `hello` tool of the actor of type `greeter`:
 
 ```python
 from antikythera_actors import Actor, actor, tool
@@ -11,42 +11,76 @@ from antikythera_actors import Actor, actor, tool
 class Greeter(Actor):
     @tool(name="hello")
     def hello(self, name: str) -> dict:
+        """Greet someone by name."""
         return {"greeting": f"Hello, {name}!"}
 ```
 
-Actors connect to the orchestrator over MQTT, so they can run on any machine that reaches
-the broker: a robot cell controller, a laptop next to a CNC, a GPU server. There are three
-ways to start them, from no setup at all to a full installation.
+## Inputs, params and outputs
 
-## With uvx, from a file
+Antikythera looks at the arguments of a tool to know what to give it:
 
-[uv](https://docs.astral.sh/uv/)'s `uvx` runs a command from a package without installing it
-first. Point `antikythera-actors` at the file that defines your actors:
+```python
+from antikythera_actors.annotations import Param
+
+
+@tool(name="drill")
+def drill(self, position: list, depth: Param[float] = 10.0) -> dict:
+    ...
+    return {"hole_id": hole_id}
+```
+
+- A plain argument, like `position`, is a task **input**, read from the session data.
+- An argument marked `Param[...]`, like `depth`, is a task **param**, a fixed setting from
+  the blueprint.
+- An argument with a default value is optional.
+- The tool returns a dictionary. Each key is an **output** of the task.
+
+If a task does not give a tool what it needs, the task fails with the error
+`TOOL_BINDING_ERROR`, and the tool does not run. If the tool raises an exception, the task
+fails with `TOOL_FAILURE`. Either way, the session fails with that error. You can fix
+the problem and run the task again from the web UI.
+
+A tool can also ask for:
+
+| Argument | Gives the tool |
+| --- | --- |
+| `context: ExecutionContext` | A way to know if the task was cancelled, to stop a long job early |
+| `task: Task` | The whole task, for tools that need to read it directly |
+| `element_id: Context[str]` | The model element being worked on, in a [dynamic expansion](concepts.md#more-features) |
+
+The [reference actor](https://github.com/gramaziokohler/antikythera/blob/main/src/antikythera_actors/reference_actor.py)
+uses all of these. It is a good file to copy from.
+
+Write a docstring for every tool. `antikythera-actors describe` prints the tools of every
+installed actor as JSON, with their docstrings, inputs, params and outputs, so people
+writing blueprints know what each tool needs.
+
+## Running actors
+
+Actors connect to the orchestrator over the network, so they can run on any machine that
+can reach it: the computer next to a robot, a laptop, a GPU server. By default they connect
+to an MQTT broker. There are three ways to start them.
+
+### With uvx
+
+[uv](https://docs.astral.sh/uv/)'s `uvx` runs a program without installing it first. Point
+`antikythera-actors` at the file with your actors:
 
 ```bash
 uvx --from antikythera-sdk antikythera-actors run --actor greeter.py --broker-host mqtt.example.org
 ```
 
-`--actor` accepts a `.py` file or an importable module name and can be repeated. Only the
-actors defined there run, so the built-in actors of the main stack are not started a second
-time. Add the packages your actor needs with `--with`:
+`--actor` takes a `.py` file or a module name, and can be given more than once. Only the
+actors in those files run. Add the packages your actor needs with `--with`:
 
 ```bash
 uvx --from antikythera-sdk --with compas_fab antikythera-actors run --actor robot_cell.py
 ```
 
-If your actors are an installed package that registers them in the `antikythera.actors`
-entry point group, add it with `--with` and leave out `--actor`. `--only` then picks which of
-the installed actors run:
+### As a script
 
-```bash
-uvx --from antikythera-sdk --with my-robot-actors antikythera-actors run --only robot
-```
-
-## As a script
-
-Like an MCP server started with `mcp.run()`, an actor file can start itself. Declare its
-dependencies in an [inline script header](https://packaging.python.org/en/latest/specifications/inline-script-metadata/)
+An actor file can also start itself. List its dependencies in an
+[inline script header](https://packaging.python.org/en/latest/specifications/inline-script-metadata/)
 and call `run()`:
 
 ```python
@@ -71,13 +105,25 @@ if __name__ == "__main__":
 MQTT_BROKER_HOST=mqtt.example.org uv run greeter.py
 ```
 
-`run()` takes the actor classes to run, and the broker as keyword arguments or from the
-`MQTT_BROKER_HOST` and `MQTT_BROKER_PORT` environment variables.
+### As an installed package
 
-## From a process manager or client configuration
+To share actors, put them in a Python package and register them as a plugin in its
+`pyproject.toml`:
 
-Clients that launch tools as subprocesses, the way MCP clients launch MCP servers, can start
-an actor with the same command and arguments:
+```toml
+[project.entry-points.'antikythera.actors']
+robot = "my_robot_actors.robot"
+```
+
+Once the package is installed, `antikythera-actors run` finds and starts its actors with
+all the others. `--only robot` runs only the actors of that type:
+
+```bash
+uvx --from antikythera-sdk --with my-robot-actors antikythera-actors run --only robot
+```
+
+The same command works in tools that start programs from a configuration file, the way MCP
+clients start MCP servers:
 
 ```json
 {
@@ -95,10 +141,8 @@ an actor with the same command and arguments:
 | `--broker-port` | `MQTT_BROKER_PORT`, or `1883` | MQTT broker port |
 | `--mqtt-transport` | `tcp` | `tcp` or `websockets` |
 | `--tls` | off | Connect to the broker over TLS |
-| `--actor FILE_OR_MODULE` | | Run only the actors defined there. Repeatable |
+| `--transport` | `ANTIKYTHERA_TRANSPORT`, or `mqtt` | `mqtt`, `nats` or `zenoh`; see [NATS](nats.md) and [Zenoh](zenoh.md) |
+| `--actor FILE_OR_MODULE` | | Run only the actors in this file or module. Repeatable |
 | `--only ACTOR_TYPE` | | Run only actors of this type. Repeatable |
 | `--sys-only` | off | Run only the `system` actor |
-| `--dev` | off | Reload installed actor plugins when their files change |
-
-`antikythera-actors describe` prints the tools of every installed actor as JSON, the catalog
-blueprint authors work from.
+| `--dev` | off | Reload actors when their files change |
