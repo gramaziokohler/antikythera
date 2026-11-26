@@ -45,3 +45,33 @@ def test_tool_runtime_failure_reports_tool_failure_code():
     (msg,), _ = launcher.task_completion_publisher.publish.call_args
     assert msg.state == TaskState.FAILED
     assert msg.error.code == "TOOL_FAILURE"
+
+
+def test_task_is_only_claimed_by_an_actor_of_its_type():
+    from compas_eve.codecs import ProtobufMessageCodec
+    from compas_eve.memory import InMemoryTransport
+
+    from antikythera.models import TaskAssignmentMessage
+    from antikythera_actors import Actor
+    from antikythera_actors import ActorLauncher
+    from antikythera_actors import actor
+    from antikythera_actors import tool
+
+    @actor(type="claim_test_a")
+    class First(Actor):
+        @tool(name="shared")
+        def shared(self) -> dict:
+            return {}
+
+    @actor(type="claim_test_b")
+    class Second(Actor):
+        @tool(name="shared")
+        def shared(self) -> dict:
+            return {}
+
+    launcher = ActorLauncher(actor_types=["claim_test_a", "claim_test_b"], discover=False, transport=InMemoryTransport(codec=ProtobufMessageCodec()))
+    launcher.task_claim_publisher.publish = lambda claim: None
+
+    launcher.on_task_start(TaskAssignmentMessage(id="bp.t", type="claim_test_b.shared", inputs={}, output_keys=[], params={}, context={}))
+
+    assert launcher.pending_claims["bp.t"][1] == "claim_test_b"

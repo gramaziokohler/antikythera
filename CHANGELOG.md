@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An actor launcher could claim a task for the wrong actor: claims matched the tool name only, so any actor with a tool of the same name (say `notify` or `double`) took tasks meant for another actor type. Tasks now go only to actors of the type in their `type`.
 - `Orchestrator.stop()` raised `KeyError` over MQTT when called right after a session completed, because the session end calls it on the transport's thread at the same time. It is now serialized.
 - Example blueprints that did not run: `scope_skip.json` always failed because its condition read a value nothing set (an `init` task now seeds it); `toy_problem_6.json` used `blueprint` instead of `blueprint_id` and a sequencer that needs a nesting result (now `basic_sequencer`, one notification per model element); `toy_problem_12_notification.json` had the same id as `toy_problem_10_competitive.json`, so uploading one replaced the other; examples 10, 12 and 13 declared a `start_time` output that `system.start` never produces. Every example now has a name and description saying what it shows.
 - `antikythera-actors` flushes its startup messages, so they show up when its output is piped or logged.
