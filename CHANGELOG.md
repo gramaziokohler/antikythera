@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- The `antikythera_ghpython` package and its single Grasshopper component (`AKT_Start_Blueprint`).
 
 ## [0.5.1] 2026-08-24
 
