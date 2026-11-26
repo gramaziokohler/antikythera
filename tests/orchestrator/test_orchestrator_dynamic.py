@@ -12,19 +12,19 @@ from antikythera.models import TaskInput
 from antikythera.models import TaskOutput
 from antikythera.models import TaskParam
 from antikythera.models.blueprints import BlueprintSessionState
-from antikythera_agents.annotations import Context
-from antikythera_agents.base_agent import Agent
-from antikythera_agents.decorators import agent
-from antikythera_agents.decorators import tool
-from antikythera_agents.launcher import AgentLauncher
+from antikythera_actors.annotations import Context
+from antikythera_actors.base_actor import Actor
+from antikythera_actors.decorators import actor
+from antikythera_actors.decorators import tool
+from antikythera_actors.launcher import ActorLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.storage import BlueprintStorage
 from antikythera_orchestrator.storage import ModelStorage
 from antikythera_orchestrator.storage import SessionStorage
 
 
-@agent(type="test_dynamic")
-class DynamicExpansionTestAgent(Agent):
+@actor(type="test_dynamic")
+class DynamicExpansionTestActor(Actor):
     @tool(name="process")
     def process_element(self, task: Task) -> Dict[str, Any]:
         guid = task.context.get("element_id")
@@ -33,7 +33,7 @@ class DynamicExpansionTestAgent(Agent):
         return result
 
 
-def test_dynamic_expansion_basic_sequencer(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_dynamic_expansion_basic_sequencer(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_actors, cleanup_manager):
     model = Model()
     element1 = Element()
     element2 = Element()
@@ -116,8 +116,8 @@ def test_dynamic_expansion_basic_sequencer(mock_storage, mock_transport_orchestr
 
     orchestrator = cleanup_manager.register(Orchestrator(session))
 
-    launcher = cleanup_manager.register(AgentLauncher())
-    launcher.agents["test_dynamic"] = DynamicExpansionTestAgent()
+    launcher = cleanup_manager.register(ActorLauncher())
+    launcher.actors["test_dynamic"] = DynamicExpansionTestActor()
     launcher.start()
 
     orchestrator.start()
@@ -146,7 +146,7 @@ def test_dynamic_expansion_basic_sequencer(mock_storage, mock_transport_orchestr
     assert session.state == BlueprintSessionState.COMPLETED
 
 
-def test_dynamic_expansion_pause_resume(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_dynamic_expansion_pause_resume(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_actors, cleanup_manager):
     # Setup
     model = Model()
     element1 = Element()
@@ -194,34 +194,34 @@ def test_dynamic_expansion_pause_resume(mock_storage, mock_transport_orchestrato
 
     orchestrator = cleanup_manager.register(Orchestrator(session))
 
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
 
-    agent_started = threading.Event()
+    actor_started = threading.Event()
     blocking_event = threading.Event()
-    agent_done = threading.Event()
+    actor_done = threading.Event()
 
-    class BlockingTestAgent(Agent):
+    class BlockingTestActor(Actor):
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
-            agent_started.set()
+            actor_started.set()
             blocking_event.wait()
-            agent_done.set()
+            actor_done.set()
             return {"processed": True}
 
-    launcher.agents["test_dynamic"] = BlockingTestAgent()
+    launcher.actors["test_dynamic"] = BlockingTestActor()
     launcher.start()
 
     # Test starts!
     orchestrator.start()
 
-    assert agent_started.wait(timeout=5), "Agent did not start executing in time"
+    assert actor_started.wait(timeout=5), "Actor did not start executing in time"
     assert orchestrator.state == BlueprintSessionState.RUNNING
 
     orchestrator.pause()
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
     blocking_event.set()
-    assert agent_done.wait(timeout=5), "Agent did not complete in time"
+    assert actor_done.wait(timeout=5), "Actor did not complete in time"
 
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
@@ -231,20 +231,20 @@ def test_dynamic_expansion_pause_resume(mock_storage, mock_transport_orchestrato
     assert session.state == BlueprintSessionState.COMPLETED
 
 
-def test_dynamic_expansion_context_annotation_binds_per_element(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_dynamic_expansion_context_annotation_binds_per_element(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_actors, cleanup_manager):
     """Each inner blueprint instance's `Context[str]`-annotated tool receives its own
     element's expansion context, verified against a genuinely dynamic blueprint (a sequencer
     expanding a composite task over a model's elements) rather than a hand-built task.
 
-    The agent class is defined locally, without `@agent`, and assigned directly to the
-    launcher — mirroring `BlockingTestAgent` above — because `@agent`-decorated classes join
-    a process-wide registry that every `AgentLauncher()` auto-instantiates, and
+    The actor class is defined locally, without `@actor`, and assigned directly to the
+    launcher — mirroring `BlockingTestActor` above — because `@actor`-decorated classes join
+    a process-wide registry that every `ActorLauncher()` auto-instantiates, and
     `can_claim_task` matches purely on tool name (the part after the first dot), not on
-    agent-type prefix. A globally-registered agent here with a tool also named `process`
-    would collide with `DynamicExpansionTestAgent`'s tool of the same name above.
+    actor-type prefix. A globally-registered actor here with a tool also named `process`
+    would collide with `DynamicExpansionTestActor`'s tool of the same name above.
     """
 
-    class ContextBindingTestAgent(Agent):
+    class ContextBindingTestActor(Actor):
         @tool(name="report_context")
         def process_element(self, element_id: Context[str]) -> Dict[str, Any]:
             return {"seen_element_id": element_id}
@@ -291,8 +291,8 @@ def test_dynamic_expansion_context_annotation_binds_per_element(mock_storage, mo
 
     orchestrator = cleanup_manager.register(Orchestrator(session))
 
-    launcher = cleanup_manager.register(AgentLauncher())
-    launcher.agents["test_dynamic_context"] = ContextBindingTestAgent()
+    launcher = cleanup_manager.register(ActorLauncher())
+    launcher.actors["test_dynamic_context"] = ContextBindingTestActor()
     launcher.start()
 
     orchestrator.start()
@@ -320,7 +320,7 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
         return session_storage.load_session()
 
 
-def test_dynamic_expansion_pause_resume_dead_session(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_dynamic_expansion_pause_resume_dead_session(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_actors, cleanup_manager):
     """Integration test for dynamic expanded blueprint session with pause mid-task execution.
     The task that was running when paused will finish. since the orcehstrator is still listening
     for completion event, it will be marked appropriatelymj.
@@ -377,13 +377,13 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_storage, mock_transpor
     # The map will contain the expanded tasks, not the original dynamic_process task
     # assert orchestrator.session.composite_to_inner_blueprint_map == {"test_outer_bp_pr.dynamic_process": "test_inner_bp_pr"}
 
-    # 5. Start Execution with Blocking Agent
+    # 5. Start Execution with Blocking Actor
     element2_started = threading.Event()
     blocking_event = threading.Event()
     execution_counts: Dict[str, int] = {}
     counts_lock = threading.Lock()
 
-    class BlockingTestAgent(Agent):
+    class BlockingTestActor(Actor):
         @tool(name="process")
         def process_element(self, task: Task) -> Dict[str, Any]:
             model = task.get_param_value("model")
@@ -396,8 +396,8 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_storage, mock_transpor
                 blocking_event.wait()
             return {"processed": True}
 
-    launcher = cleanup_manager.register(AgentLauncher())
-    launcher.agents["test_dynamic"] = BlockingTestAgent()
+    launcher = cleanup_manager.register(ActorLauncher())
+    launcher.actors["test_dynamic"] = BlockingTestActor()
     launcher.start()
 
     orchestrator.start()
@@ -417,7 +417,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_storage, mock_transpor
     # the orchestrator (still subscribed at this point, since only `pause()` was called).
     # Without this, `orchestrator.stop()` could unsubscribe before the completion is
     # recorded, leaving the task's state as RUNNING; on resume, `_reset_failed_tasks()`
-    # treats RUNNING as "abandoned by a dead agent" and re-dispatches it, causing Element 2
+    # treats RUNNING as "abandoned by a dead actor" and re-dispatches it, causing Element 2
     # to execute twice.
     launcher.stop()
 
@@ -425,7 +425,7 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_storage, mock_transpor
     orchestrator.stop()
     assert orchestrator.state == BlueprintSessionState.STOPPED
 
-    # Simulate a full restart: both the orchestrator and the agent process are recreated
+    # Simulate a full restart: both the orchestrator and the actor process are recreated
     # from scratch, as they would be after a real crash.
     del orchestrator
     del session
@@ -436,8 +436,8 @@ def test_dynamic_expansion_pause_resume_dead_session(mock_storage, mock_transpor
 
     assert orchestrator.session.composite_to_inner_blueprint_map == original_map
 
-    launcher = cleanup_manager.register(AgentLauncher())
-    launcher.agents["test_dynamic"] = BlockingTestAgent()
+    launcher = cleanup_manager.register(ActorLauncher())
+    launcher.actors["test_dynamic"] = BlockingTestActor()
     launcher.start()
 
     orchestrator.start()

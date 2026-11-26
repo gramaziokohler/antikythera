@@ -2,7 +2,7 @@
     "version": "1.0",
     "id": "toy-problem-competitive",
     "name": "Toy Problem 12 Notification",
-    "description": "Showcase notification agent",
+    "description": "Showcase notification actor",
     "tasks": [
         {
             "id": "start",

@@ -24,8 +24,8 @@ FROM python:3.13-slim
 LABEL \
     org.opencontainers.image.authors="Chen Kasirer <kasirer@arch.ethz.ch>" 
 
-# Without this, the agent launcher's startup output sits in Python's stdout
-# buffer and `docker compose logs agents` stays empty for the life of the container.
+# Without this, the actor launcher's startup output sits in Python's stdout
+# buffer and `docker compose logs actors` stays empty for the life of the container.
 ENV PYTHONUNBUFFERED=1
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -35,5 +35,5 @@ WORKDIR /app
 COPY --from=builder /dist /dist
 RUN WHL=$(ls /dist/*.whl) && uv pip install --system "${WHL}[deployment,mcp]" && rm -rf /dist
 
-# Default: run the orchestrator. Override `command:` in docker-compose for agents.
+# Default: run the orchestrator. Override `command:` in docker-compose for actors.
 CMD ["antikythera", "--host", "0.0.0.0", "--port", "8000"]

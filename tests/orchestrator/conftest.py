@@ -37,14 +37,14 @@ def mock_transport_orchestrator(in_memory_transport):
 
 @pytest.fixture
 def mock_transport_launcher(in_memory_transport):
-    with patch("antikythera_agents.launcher._get_eve_transport", return_value=in_memory_transport) as mock:
+    with patch("antikythera_actors.launcher._get_eve_transport", return_value=in_memory_transport) as mock:
         yield mock
 
 
 @pytest.fixture(autouse=True)
-def mock_agent_discovery():
-    """Prevent plugin discovery from loading external agents (e.g., fall_demo_2025 agents that require ROS)."""
-    with patch("antikythera_agents.launcher._ensure_agents"):
+def mock_actor_discovery():
+    """Prevent plugin discovery from loading external actors (e.g., fall_demo_2025 actors that require ROS)."""
+    with patch("antikythera_actors.launcher._ensure_actors"):
         yield
 
 
@@ -66,17 +66,17 @@ def cleanup_manager():
 
 
 @pytest.fixture(autouse=True)
-def fast_system_agents():
-    """Patch system agents to run instantly for tests."""
+def fast_system_actors():
+    """Patch system actors to run instantly for tests."""
     with (
-        patch("antikythera_orchestrator.system_agents.SystemAgent.start_process") as mock_start,
-        patch("antikythera_orchestrator.system_agents.SystemAgent.end_process") as mock_end,
+        patch("antikythera_orchestrator.system_actors.SystemActor.start_process") as mock_start,
+        patch("antikythera_orchestrator.system_actors.SystemActor.end_process") as mock_end,
     ):
         # Configure mocks to return expected dictionary and be fast
         mock_start.return_value = {"process_start_time": 0.0}
         mock_end.return_value = {"process_end_time": 0.0}
 
-        # Important: set __name__ because Agent.list_tools accesses it
+        # Important: set __name__ because Actor.list_tools accesses it
         mock_start.__name__ = "start_process"
         mock_end.__name__ = "end_process"
 

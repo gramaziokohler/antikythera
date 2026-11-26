@@ -20,7 +20,21 @@ else:
     from importlib.metadata import entry_points
 
 _DEBUG = False
-_PLUGINS_GROUP = "antikythera.agents"
+_PLUGINS_GROUP = "antikythera.actors"
+# Entry point group used before actors were called actors. Plugins still registered
+# under it are not loaded, but a warning says how to fix them so they don't go missing silently.
+_LEGACY_PLUGINS_GROUP = "antikythera.agents"
+
+
+def _warn_about_legacy_plugins() -> None:
+    legacy = [plugin.name for plugin in entry_points(group=_LEGACY_PLUGINS_GROUP)]
+    if legacy:
+        warnings.warn(
+            f"Ignoring plugins registered under the old entry point group '{_LEGACY_PLUGINS_GROUP}': {', '.join(legacy)}. "
+            f"Register them under '{_PLUGINS_GROUP}' instead.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
 
 
 def _create_logger(debug):
@@ -132,6 +146,7 @@ class _PluginManager:
             LOG("Plugin discovery already done, skipping")
             return
 
+        _warn_about_legacy_plugins()
         discovered_plugins = entry_points(group=_PLUGINS_GROUP)
 
         LOG(f"Found {len(discovered_plugins)} plugins in group '{_PLUGINS_GROUP}'")
@@ -163,6 +178,7 @@ class _PluginManager:
             The name and exception for each entry point that failed to import, in
             discovery order. Empty if every plugin imported successfully.
         """
+        _warn_about_legacy_plugins()
         discovered_plugins = entry_points(group=_PLUGINS_GROUP)
 
         LOG(f"Found {len(discovered_plugins)} plugins in group '{_PLUGINS_GROUP}' (strict)")

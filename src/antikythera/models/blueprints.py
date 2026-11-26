@@ -130,7 +130,7 @@ class Task(Data):
     id : str
         Unique identifier for the task.
     type : str
-        The type of the task, which determines the agent that will execute it.
+        The type of the task, which determines the actor that will execute it.
     description : str, optional
         A human-readable description of the task.
     inputs : List[TaskInput], optional
@@ -558,7 +558,7 @@ class Blueprint(Data):
         any, while loading one from file only logs them, so that blueprints already
         in storage stay loadable and repairable.
 
-        Note that an unresolved name is not *provably* wrong: agents may return
+        Note that an unresolved name is not *provably* wrong: actors may return
         outputs the blueprint never declared (see :meth:`Task.set_output_value`),
         and an inner blueprint additionally receives context from the composite
         task that invokes it.  Both cases are reported here.
@@ -583,7 +583,7 @@ class Blueprint(Data):
                     warnings.append(
                         f"Task '{task.id}': {description} '{expression}' reads '{name}', "
                         f"which no task in this blueprint declares as an output. "
-                        f"It will raise NameError at runtime unless an agent writes it."
+                        f"It will raise NameError at runtime unless an actor writes it."
                     )
 
         return warnings

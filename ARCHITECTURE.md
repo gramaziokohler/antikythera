@@ -6,8 +6,8 @@
 
 ## Terminology
 
-* `Agent`: An entity that can run a specific type of `Task`. It can be a remote machine or a local process (e.g., OS-level process, robot control program, CNC program, microcontroller program).
-* `Task`: A unit of work executed by an `Agent`. Tasks are `Nodes` in a `DAG` (Directed Acyclic Graph). Each task:
+* `Actor`: An entity that can run a specific type of `Task` (called *agent* before 0.6, renamed because the word now mostly means LLM agents). It can be a remote machine or a local process (e.g., OS-level process, robot control program, CNC program, microcontroller program).
+* `Task`: A unit of work executed by an `Actor`. Tasks are `Nodes` in a `DAG` (Directed Acyclic Graph). Each task:
   * Functions as a state machine with states: `PENDING`, `READY`, `RUNNING`, `SUCCEEDED`, `FAILED`
   * Declaratively defines input and output data to establish dependencies between nodes
 * `DAG` / `Graph`: Directed Acyclic Graph. Data structure used to represent a `Blueprint` through `Nodes` (tasks) and `Edges` (dependencies). Always contains at least two nodes: `START` and `END`, which can define data dependencies to enable graph composition.
@@ -15,7 +15,7 @@
 * `Outer Blueprint`: A blueprint that contains other blueprints as sub-processes. Inner blueprints can be static (pre-defined blueprints) or dynamic (blueprints defined at runtime).
 * `Behavior Tree`: A robotics-oriented representation of a decision tree for implementing control logic in semi-autonomous robot operation.
 * `BSID`: Blueprint Session Identifier - a UUID that uniquely identifies a blueprint execution session. Sessions can have long running times (potentially multiple weeks).
-* `Tool`: A single capability of an `Agent`, declared with the `@tool` decorator. A `Task` names the tool that will execute it through its `type` field, in the form `{agent_type}.{tool_name}`.
+* `Tool`: A single capability of an `Actor`, declared with the `@tool` decorator. A `Task` names the tool that will execute it through its `type` field, in the form `{actor_type}.{tool_name}`.
 * `Tool Descriptor`: The machine-readable declaration of what a `Tool` accepts and produces, derived from its Python signature. Used to bind arguments at execution time and to publish a catalog for blueprint authors.
 * `Opaque Tool`: A `Tool` that takes the whole `Task` rather than declaring named arguments. Its inputs and outputs cannot be derived, so it has no descriptor detail and is exempt from strict binding. Used where outputs are genuinely determined by the blueprint rather than the tool.
 * `Expansion Context`: The identity of the item a dynamically expanded inner blueprint is working on — `element_id`, and whatever else the `Sequencer` attaches. Distinct from `ExecutionContext`, which is the cancellation and lifecycle handle given to a running tool.
@@ -28,7 +28,7 @@
 * Python 3.12
 * `MQTT` (via `compas_eve`): Transport layer for the event system, enabling distributed communication
 * `compas`: Core framework, including the `DAG` implementation
-* `compas_pb`: Protocol Buffers integration for COMPAS used for serialization of messages in the Agent Communication Protocol.
+* `compas_pb`: Protocol Buffers integration for COMPAS used for serialization of messages in the Actor Communication Protocol.
 * `compas_model`: Model representation for fabricatable objects
 * `Redis`: Persistent data store for sessions, blueprints and models
 * `FastAPI` + `uvicorn`: HTTP interface to the orchestrator service
@@ -46,7 +46,7 @@ The technologies above were selected to provide a balance between reliability, p
 ## High-Level Architecture
 
 - **Orchestrator**: control-plane
-- **Agents:** execution-plane
+- **Actors:** execution-plane
 - **Data store:** data-plane
 - **Observability:** TDB
 
@@ -58,13 +58,13 @@ The **orchestrator** is in charge of coordinating the execution of a **blueprint
 
 `SKIP_REQUESTED` is a special intermediate state used when a user manually skips a task that has not yet run. Instead of immediately marking it as `SKIPPED` (which would satisfy downstream dependencies prematurely), the task waits in `SKIP_REQUESTED` until its own dependencies are met. Once the scheduler determines it is ready to run, it is then transitioned to `SKIPPED`, ensuring correct execution order.
 
-Each task is executed by an **agent**, either remote or local. The overall system has location transparency, so agents can be running in one or more machines in the same or different networks.
+Each task is executed by an **actor**, either remote or local. The overall system has location transparency, so actors can be running in one or more machines in the same or different networks.
 
-The orchestrator and the agent launchers talk over a `compas_eve` transport, MQTT by default. Both accept any other transport whose codec is `ProtobufMessageCodec`, for example `InMemoryTransport` to run a whole blueprint in one process with no broker, or a Zenoh transport for brokerless networking.
+The orchestrator and the actor launchers talk over a `compas_eve` transport, MQTT by default. Both accept any other transport whose codec is `ProtobufMessageCodec`, for example `InMemoryTransport` to run a whole blueprint in one process with no broker, or a Zenoh transport for brokerless networking.
 
-The orchestrator runs a single **blueprint** at a time. Each run of a blueprint is identified by a session identifier (`BSID`). A session has a state (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED`). Parallelism can be achieved inside the blueprint itself by using different agents. 
+The orchestrator runs a single **blueprint** at a time. Each run of a blueprint is identified by a session identifier (`BSID`). A session has a state (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED`). Parallelism can be achieved inside the blueprint itself by using different actors. 
 
-The orchestrator loads a **blueprint** from a file or an API call, and will begin to execute it. The link between the JSON representation and the in-memory execution should not be lost during loading, because it is necessary to allow live modifications of the running graph. Modifications of the graph are append-only operations, so that the orchestrator can always keep track of the original graph. Edge-cases like the deletion of a node should be handled with care, to gracefully deal with loss of data dependency as well as case of a agent running a node while it is deleted.
+The orchestrator loads a **blueprint** from a file or an API call, and will begin to execute it. The link between the JSON representation and the in-memory execution should not be lost during loading, because it is necessary to allow live modifications of the running graph. Modifications of the graph are append-only operations, so that the orchestrator can always keep track of the original graph. Edge-cases like the deletion of a node should be handled with care, to gracefully deal with loss of data dependency as well as case of a actor running a node while it is deleted.
 
 #### Orchestrator API
 
@@ -103,24 +103,24 @@ The orchestrator API is exposed through a FastAPI application (`python -m antiky
 
 Sessions remain active until the process receives a shutdown signal, at which point the API shuts down all orchestrators gracefully.
 
-### Agents
+### Actors
 
-An **agent** is an entity that can run a specific type of **task**.
+An **actor** is an entity that can run a specific type of **task**.
 
-Python agents are implemented as subclasses of the `Agent` base class and use decorators to define their capabilities, however, it is possible to implement agents in other languages, provided they adhere to the **Agent Communication Protocol**.
+Python actors are implemented as subclasses of the `Actor` base class and use decorators to define their capabilities, however, it is possible to implement actors in other languages, provided they adhere to the **Actor Communication Protocol**.
 
-Agents can run locally or remotely. Agents don't explicitely send or receive MQTT messages. Their lifetime is controlled by an agent launcher process that takes care of instantiating and disposing agents as needed, as well as triggering task execution. The agent launcher is also in charge of handling the termination of the orchestrator and disposing of all agents.
+Actors can run locally or remotely. Actors don't explicitely send or receive MQTT messages. Their lifetime is controlled by an actor launcher process that takes care of instantiating and disposing actors as needed, as well as triggering task execution. The actor launcher is also in charge of handling the termination of the orchestrator and disposing of all actors.
 
-#### Python Agents
+#### Python Actors
 
-A base class for Python agents is provided to simplify development. Agents are registered used a class decorator, and their capabilities (tools) are defined using method decorators. Below is an example of a simple agent that can handle two types of tasks: `system.start` and `system.sleep`.
+A base class for Python actors is provided to simplify development. Actors are registered used a class decorator, and their capabilities (tools) are defined using method decorators. Below is an example of a simple actor that can handle two types of tasks: `system.start` and `system.sleep`.
 
 ```python
-from antikythera_agents import Agent, agent, tool
+from antikythera_actors import Actor, actor, tool
 from antikythera.models import Task
 
-@agent(type="system")
-class SystemAgent(Agent):
+@actor(type="system")
+class SystemActor(Actor):
     def __init__(self):
         super().__init__()
         self.start_time = time.time()
@@ -141,7 +141,7 @@ class SystemAgent(Agent):
 
 #### Development Mode
 
-Both the orchestrator and the agent launcher support a development mode that enables hot reloading when source code changes. This is useful for rapid development and testing.
+Both the orchestrator and the actor launcher support a development mode that enables hot reloading when source code changes. This is useful for rapid development and testing.
 
 To enable development mode, start the services with the `--dev` flag:
 
@@ -149,37 +149,37 @@ To enable development mode, start the services with the `--dev` flag:
 # Start orchestrator in dev mode
 python -m antikythera_orchestrator --dev
 
-# Start agent launcher in dev mode
-antikythera-agents run --dev
+# Start actor launcher in dev mode
+antikythera-actors run --dev
 ```
 
-Note that `antikythera-agents` takes an explicit subcommand: `run` starts the launcher, `describe` emits the tool catalog. There is no implicit default.
+Note that `antikythera-actors` takes an explicit subcommand: `run` starts the launcher, `describe` emits the tool catalog. There is no implicit default.
 
 When enabled, the system watches for changes in the source files and automatically reloads the services. The orchestrator also enables debug-level logging in development mode.
 
-When enabled, the system watches for changes in the source files of loaded agents and automatically reloads them without restarting the process.
+When enabled, the system watches for changes in the source files of loaded actors and automatically reloads them without restarting the process.
 
 #### Error Handling and Recovery
 
 If a task ends up in a failed state, the orchestrator should be able to resume execution from that point. This topic is not yet addressed but will require tasks to define retry policies and idempotency, i.e. if a task can be run multiple times without side effects, and if they can be retried in case of failure. For the time being, a failed task will cause the orchestrator to stop the session.
 
-Initially, only very simple agents will be implemented to execute toy problems.
+Initially, only very simple actors will be implemented to execute toy problems.
 
-### Agent/Tool Descriptor
+### Actor/Tool Descriptor
 
-Blueprint authors — whether human or LLM — need to know which task types are available and what inputs, outputs, and parameters each one accepts. Agents shall provide a static artifact, independent of whether any agent is currently running.
+Blueprint authors — whether human or LLM — need to know which task types are available and what inputs, outputs, and parameters each one accepts. Actors shall provide a static artifact, independent of whether any actor is currently running.
 
 The tool's **signature is the source of truth**: the same introspected metadata both binds arguments at execution time and produces the published descriptor. A descriptor that is wrong is therefore also a tool that does not run. See [ADR-0002](docs/adr/0002-tool-signatures-are-the-source-of-truth.md).
 
 **Schema annotation on `@tool`**
 
-Python tools created using the provided Antikythera agent mechanisms automatically generate a descriptor from their signature, triggered by the `@tool` decorator.
+Python tools created using the provided Antikythera actor mechanisms automatically generate a descriptor from their signature, triggered by the `@tool` decorator.
 
 If not provided, the tool's name is the function name. Arguments are task inputs by default, and are otherwise annotated to say where their value comes from: `Context[...]` for values resolved from dynamic expansion, and `Param[...]` for values wired in as task parameters. The return type is a `TypedDict`:
 
 ```python
-from antikythera_agents.annotations import Context, Param
-from antikythera_agents.typing_compat import NotRequired, TypedDict  # 3.9-safe re-exports
+from antikythera_actors.annotations import Context, Param
+from antikythera_actors.typing_compat import NotRequired, TypedDict  # 3.9-safe re-exports
 
 class StockPnP(TypedDict):
     stock_trajectories: list[JointTrajectory]
@@ -203,7 +203,7 @@ def plan_stock_pnp(
     """
 ```
 
-The markers live in `antikythera_agents.annotations`. They are deliberately *not* named `TaskInput` / `TaskParam`, which are existing serialisable classes appearing in blueprint JSON.
+The markers live in `antikythera_actors.annotations`. They are deliberately *not* named `TaskInput` / `TaskParam`, which are existing serialisable classes appearing in blueprint JSON.
 
 Everything in the descriptor comes from the signature, the return type, and `__doc__` — names, type hints and optionality from the signature; per-field descriptions from the NumPy-style `Parameters` and `Returns` sections.
 
@@ -211,7 +211,7 @@ Everything in the descriptor comes from the signature, the return type, and `__d
 
 **Strict binding.** For tools that declare a signature, a mismatch between blueprint and signature fails the task at the boundary with a `TOOL_BINDING_ERROR` naming the offending key: a missing required argument, an input the tool does not accept, a non-optional input resolving to `None`, or a declared output absent from the returned dict. `isinstance` is checked where the annotation is a plain class and skipped for parameterised generics. Because opaque tools are exempt, existing blueprints come under scrutiny one migrated tool at a time.
 
-**Agent descriptor format**
+**Actor descriptor format**
 
 A flat JSON structure, mirroring the vocabulary of the blueprint file an author is about to write. It is *structurally similar* to the MCP tools descriptor but not MCP-compatible: MCP's `inputSchema` is JSON Schema, which has nothing meaningful to say about COMPAS types (see [ADR-0003](docs/adr/0003-type-hint-replaces-type-in-blueprint-io.md)).
 
@@ -219,7 +219,7 @@ Example output:
 ```json
 [
   {
-    "agent": "trajectory_planner",
+    "actor": "trajectory_planner",
     "tools": [
         {
             "name": "plan_stock_pnp",
@@ -242,25 +242,25 @@ Example output:
 ]
 ```
 
-`agent` is the `@agent(type=...)` value; `type` is `{agent_type}.{tool_name}` — the exact string a blueprint author writes in a task's `type` field.
+`actor` is the `@actor(type=...)` value; `type` is `{actor_type}.{tool_name}` — the exact string a blueprint author writes in a task's `type` field.
 
-A CLI subcommand imports all registered agents and emits this as a static JSON file:
+A CLI subcommand imports all registered actors and emits this as a static JSON file:
 
 ```bash
-antikythera-agents describe > tools.json
-antikythera-agents describe --format json      # same
-antikythera-agents describe --allow-partial    # see below
+antikythera-actors describe > tools.json
+antikythera-actors describe --format json      # same
+antikythera-actors describe --allow-partial    # see below
 ```
 
-Because this artifact is committed to a repository and read by LLMs — and because the usual invocation redirects stdout, discarding stderr — `describe` **fails loudly** when an agent module cannot be imported: non-zero exit, nothing written, an error naming each failed plugin. A consumer cannot otherwise distinguish "this tool does not exist" from "a dependency was missing on the machine that generated the file". `--allow-partial` emits anyway, recording the gaps in a `failed` section.
+Because this artifact is committed to a repository and read by LLMs — and because the usual invocation redirects stdout, discarding stderr — `describe` **fails loudly** when an actor module cannot be imported: non-zero exit, nothing written, an error naming each failed plugin. A consumer cannot otherwise distinguish "this tool does not exist" from "a dependency was missing on the machine that generated the file". `--allow-partial` emits anyway, recording the gaps in a `failed` section.
 
-**Runtime announcement (deferred).** The intent is for each agent launcher to also announce its descriptor over MQTT, so the orchestrator can discover agents at runtime and offer a live view of available tools. This is deferred until something consumes it. Note that it *does* require a protocol change: the launcher builds a single transport hardcoded to `ProtobufMessageCodec`, so a JSON descriptor cannot travel over it — announcing needs either a new protobuf message or a second transport with a second codec. `compas_eve` supports retained publishes, so a retained message on startup is preferable to a periodic heartbeat; it does not expose a Last Will and Testament, so presence detection would need the underlying paho client.
+**Runtime announcement (deferred).** The intent is for each actor launcher to also announce its descriptor over MQTT, so the orchestrator can discover actors at runtime and offer a live view of available tools. This is deferred until something consumes it. Note that it *does* require a protocol change: the launcher builds a single transport hardcoded to `ProtobufMessageCodec`, so a JSON descriptor cannot travel over it — announcing needs either a new protobuf message or a second transport with a second codec. `compas_eve` supports retained publishes, so a retained message on startup is preferable to a periodic heartbeat; it does not expose a Last Will and Testament, so presence detection would need the underlying paho client.
 
 #### Distribution
 
-Since agents are often project-specific, the natural distribution unit is the agent Python package itself. Projects commit a `tools.json` (generated via `antikythera-agents describe`) alongside their agent code. Blueprint authors — human or LLM — consume this file at authoring time. The MCP server could later expose it as a resource so connected LLM clients receive it automatically, and validate blueprints against it; neither is implemented yet.
+Since actors are often project-specific, the natural distribution unit is the actor Python package itself. Projects commit a `tools.json` (generated via `antikythera-actors describe`) alongside their actor code. Blueprint authors — human or LLM — consume this file at authoring time. The MCP server could later expose it as a resource so connected LLM clients receive it automatically, and validate blueprints against it; neither is implemented yet.
 
-No changes to the Agent Communication Protocol are required **for the static file**. The deferred runtime announcement is a separate matter, as noted above.
+No changes to the Actor Communication Protocol are required **for the static file**. The deferred runtime announcement is a separate matter, as noted above.
 
 ### Sequencers
 
@@ -383,7 +383,7 @@ This schema will evolve as the system matures.
 
 #### Input and Output Mapping
 
-Tasks can optionally declare a `get_from` field within their `inputs` and a `set_to` field within their `outputs` definitions to remap task-level names to the names used in blueprint session data. This helps avoid key collisions and lets an agent-specific signature stay stable while the surrounding blueprint uses different data keys.
+Tasks can optionally declare a `get_from` field within their `inputs` and a `set_to` field within their `outputs` definitions to remap task-level names to the names used in blueprint session data. This helps avoid key collisions and lets an actor-specific signature stay stable while the surrounding blueprint uses different data keys.
 
 ```json
 {
@@ -537,36 +537,36 @@ The `.cog` file format is a ZIP archive used to package multiple models and thei
 }
 ```
 
-### Agent Communication Protocol
+### Actor Communication Protocol
 
-Agents communicate with the orchestrator via 6 types of messages sent over MQTT. The schema for these protocol messages are defined using Protocol Buffers (`protobuf`) and the `compas_pb` library for type-safe serialization of COMPAS objects:
+Actors communicate with the orchestrator via 6 types of messages sent over MQTT. The schema for these protocol messages are defined using Protocol Buffers (`protobuf`) and the `compas_pb` library for type-safe serialization of COMPAS objects:
 
 1. **Task Assignment**: The orchestrator sends a `TaskAssignmentMessage` when a task is ready to be executed.
-2. **Task Claim Request**: Agents capable of executing the task send a `TaskClaimRequest` to the orchestrator.
-3. **Task Allocation**: The orchestrator selects one agent and sends a `TaskAllocationMessage` confirming the assignment.
-4. **Task Status Updates**: When the allocated agent begins executing a task it publishes a `TaskStatusUpdateMessage` so the orchestrator know the task is now actively running. After this, the agent may send additional status updates (e.g., progress reports) as needed.
-5. **Task Completion**: The agent sends a `TaskCompletionMessage` with the task result upon completion (success or failure).
+2. **Task Claim Request**: Actors capable of executing the task send a `TaskClaimRequest` to the orchestrator.
+3. **Task Allocation**: The orchestrator selects one actor and sends a `TaskAllocationMessage` confirming the assignment.
+4. **Task Status Updates**: When the allocated actor begins executing a task it publishes a `TaskStatusUpdateMessage` so the orchestrator know the task is now actively running. After this, the actor may send additional status updates (e.g., progress reports) as needed.
+5. **Task Completion**: The actor sends a `TaskCompletionMessage` with the task result upon completion (success or failure).
 6. **Task Completion ACK**: The orchestrator sends a `TaskCompletionAckMessage` immediately after it accepts a `TaskCompletionMessage`.
 
 ### Execution Modes
 
 The system supports different execution modes for tasks:
 
-* **EXCLUSIVE** (Default): Standard "first-come-first-serve" model. The orchestrator assigns the task to the first agent that claims it. Subsequent claims are ignored (ie. rejected).
-* **COMPETITIVE**: The task is assigned to *all* agents that claim it.
-  * The orchestrator sends a `TaskAllocationMessage` to every agent that claims the task.
-  * Agents execute the task in parallel.
-  * The first agent to complete the task sends a `TaskCompletionMessage`.
-  * The orchestrator accepts this completion, updates the task state to `SUCCEEDED`, and broadcasts a `TaskCompletionAckMessage` identifying the "winner" (accepted agent).
-  * Other agents running the task receive the ACK. If they are not the winner, they must **cancel** their local execution immediately, without sending a `TaskCompletionMessage`.
+* **EXCLUSIVE** (Default): Standard "first-come-first-serve" model. The orchestrator assigns the task to the first actor that claims it. Subsequent claims are ignored (ie. rejected).
+* **COMPETITIVE**: The task is assigned to *all* actors that claim it.
+  * The orchestrator sends a `TaskAllocationMessage` to every actor that claims the task.
+  * Actors execute the task in parallel.
+  * The first actor to complete the task sends a `TaskCompletionMessage`.
+  * The orchestrator accepts this completion, updates the task state to `SUCCEEDED`, and broadcasts a `TaskCompletionAckMessage` identifying the "winner" (accepted actor).
+  * Other actors running the task receive the ACK. If they are not the winner, they must **cancel** their local execution immediately, without sending a `TaskCompletionMessage`.
 
 ### Re-dispatch (Unclaimed Task Watchdog)
 
-If a dispatched task (`TaskAssignmentMessage`, state `READY`) receives no `TaskClaimRequest` within a backoff window, the orchestrator's `RedispatchPoller` (`src/antikythera_orchestrator/orchestrator.py`) re-publishes the same `TaskAssignmentMessage`. This only guards against *unclaimed* tasks — it does not handle agent crashes mid-execution, timeouts after claim, or rejected claims.
+If a dispatched task (`TaskAssignmentMessage`, state `READY`) receives no `TaskClaimRequest` within a backoff window, the orchestrator's `RedispatchPoller` (`src/antikythera_orchestrator/orchestrator.py`) re-publishes the same `TaskAssignmentMessage`. This only guards against *unclaimed* tasks — it does not handle actor crashes mid-execution, timeouts after claim, or rejected claims.
 
 - A background thread polls tracked tasks every second; a task is tracked from dispatch until claimed (`RUNNING`) or reset.
 - Backoff is exponential: `min(base_delay * 2**attempts, max_delay)` between re-publishes.
-- After `max_redispatches` unclaimed attempts, the poller synthesizes a `TaskCompletionMessage(state=FAILED, error.code="NO_AGENT_CLAIMED")`, failing the task (and session) as if the agent had reported failure.
+- After `max_redispatches` unclaimed attempts, the poller synthesizes a `TaskCompletionMessage(state=FAILED, error.code="NO_ACTOR_CLAIMED")`, failing the task (and session) as if the actor had reported failure.
 - Config knobs (`antikythera/config.py`): `REDISPATCH_BASE_DELAY` (default 2s), `REDISPATCH_MAX_DELAY` (default 90s), `MAX_REDISPATCHES` (default 5).
 - Orthogonal to `ExecutionMode`: tracking always starts at `READY` regardless of EXCLUSIVE/COMPETITIVE.
 
@@ -575,12 +575,12 @@ If a dispatched task (`TaskAssignmentMessage`, state `READY`) receives no `TaskC
 The complete protobuf schema is maintained in [`src/antikythera/proto/antikythera.proto`](src/antikythera/proto/antikythera.proto).
 
 **Key message types:**
-- `TaskAssignmentMessage`: Sent by orchestrator to agents when tasks are ready
-- `TaskClaimRequest`: Sent by agents to claim a task
-- `TaskAllocationMessage`: Sent by orchestrator to confirm task assignment to a specific agent
-- `TaskStatusUpdateMessage`: Sent by agents as soon as they start working on a task
-- `TaskCompletionMessage`: Sent by agents to orchestrator upon task completion
-- `TaskCompletionAckMessage`: Sent by orchestrator after recording task completion to signal that the task is closed for all agents
+- `TaskAssignmentMessage`: Sent by orchestrator to actors when tasks are ready
+- `TaskClaimRequest`: Sent by actors to claim a task
+- `TaskAllocationMessage`: Sent by orchestrator to confirm task assignment to a specific actor
+- `TaskStatusUpdateMessage`: Sent by actors as soon as they start working on a task
+- `TaskCompletionMessage`: Sent by actors to orchestrator upon task completion
+- `TaskCompletionAckMessage`: Sent by orchestrator after recording task completion to signal that the task is closed for all actors
 - `TaskState`: Enum defining task lifecycle states
 - `TaskError`: Error information for failed tasks
 - `ExecutionMode`: Enum defining execution mode (EXCLUSIVE, COMPETITIVE)
@@ -591,13 +591,13 @@ The complete protobuf schema is maintained in [`src/antikythera/proto/antikyther
 package antikythera.v1;
 
 enum ExecutionMode {
-  EXECUTION_MODE_EXCLUSIVE = 0;   // Default: Only one agent is allocated the task
-  EXECUTION_MODE_COMPETITIVE = 1; // Multiple agents can run, first to finish wins
+  EXECUTION_MODE_EXCLUSIVE = 0;   // Default: Only one actor is allocated the task
+  EXECUTION_MODE_COMPETITIVE = 1; // Multiple actors can run, first to finish wins
 }
 
 message TaskAssignmentMessage {
   string id = 1;                                    // Required: unique task identifier
-  string type = 2;                                  // Required: task type (determines which agent handles it)
+  string type = 2;                                  // Required: task type (determines which actor handles it)
   map<string, compas_pb.data.AnyData> inputs = 3;   // Optional: task inputs from blueprint session data
   repeated string output_keys = 4;                  // Optional: expected output keys (for validation)
   map<string, compas_pb.data.AnyData> params = 5;   // Optional: task-specific parameters (not from session data)
@@ -607,20 +607,20 @@ message TaskAssignmentMessage {
 
 message TaskClaimRequest {
   string task_id = 1;                               // Required: task identifier
-  string agent_id = 2;                              // Required: agent identifier
+  string actor_id = 2;                              // Required: actor identifier
   google.protobuf.Timestamp timestamp = 3;          // Optional: claim timestamp
 }
 
 message TaskAllocationMessage {
   string task_id = 1;                               // Required: task identifier
-  string assigned_agent_id = 2;                     // Required: agent identifier allocated to the task
+  string assigned_actor_id = 2;                     // Required: actor identifier allocated to the task
   google.protobuf.Timestamp timestamp = 3;          // Optional: allocation timestamp
 }
 
 message TaskStatusUpdateMessage {
   string id = 1;                                    // Required: task identifier
   TaskState state = 2;                              // Required: typically TASK_STATE_RUNNING when execution starts
-  string agent_id = 3;                              // Required: agent claiming the task
+  string actor_id = 3;                              // Required: actor claiming the task
   compas_pb.data.AnyData data = 4;                  // Optional: any additional status data (e.g., progress)
   google.protobuf.Timestamp timestamp = 5;          // Optional: update emission time
 }
@@ -638,7 +638,7 @@ message TaskCompletionMessage {
 message TaskCompletionAckMessage {
   string id = 1;                                    // Required: task identifier being acknowledged
   TaskState state = 2;                              // Optional: final recorded state (SUCCEEDED/FAILED)
-  string accepted_agent_id = 3;                     // Optional: agent whose completion was accepted
+  string accepted_actor_id = 3;                     // Optional: actor whose completion was accepted
   google.protobuf.Timestamp timestamp = 4;          // Optional: time the orchestrator processed the completion
 }
 
@@ -685,9 +685,9 @@ from antikythera.models import Task, Blueprint
 
 # Define tasks
 t_start = Task(id="start", type="system.start")
-A = Task(id="A", type="agent.task")
-B = Task(id="B", type="agent.task")
-C = Task(id="C", type="agent.task")
+A = Task(id="A", type="actor.task")
+B = Task(id="B", type="actor.task")
+C = Task(id="C", type="actor.task")
 t_end = Task(id="end", type="system.end")
 
 # Define flow using the >> operator
@@ -742,29 +742,29 @@ The Antikythera project is organized as follows:
   - **`orchestrator/`**: Orchestrator implementation
   - **`storage/`**: Persistence layer
   - **`sequencers.py`**: Logic for dynamic blueprint expansion
-  - **`system_agents.py`**: Built-in system agents (start, end, sleep, composite)
+  - **`system_actors.py`**: Built-in system actors (start, end, sleep, composite)
   - **`api.py`**: FastAPI application implementation
   - **`__main__.py`**: Application entry point
 
-- **`antikythera_agents/`**: Built-in agent implementations
-  - **`launcher.py`**: Agent launcher
-  - **`reference_agent.py`**: Worked example agent — see "Reference Agent" below
+- **`antikythera_actors/`**: Built-in actor implementations
+  - **`launcher.py`**: Actor launcher
+  - **`reference_actor.py`**: Worked example actor — see "Reference Actor" below
 
 ### Extension Points
 
-Antikythera is designed to be extensible. Custom agents can be implemented in separate repositories and languages, provided they adhere to the **Agent Communication Protocol**. The system supports:
+Antikythera is designed to be extensible. Custom actors can be implemented in separate repositories and languages, provided they adhere to the **Actor Communication Protocol**. The system supports:
 
-- Python-based agents using the provided base classes and `compas_pb` serialization
-- External agents communicating via MQTT using the defined protobuf message schemas
+- Python-based actors using the provided base classes and `compas_pb` serialization
+- External actors communicating via MQTT using the defined protobuf message schemas
 
-### Agent Execution Context & Lifecycle
+### Actor Execution Context & Lifecycle
 
-To support competitive execution (and advanced execution patterns like cancellation, pausing, or progress reporting), agents need to interact with the runtime environment during task execution. This is achieved via a `ExecutionContext` object passed to the tool.
+To support competitive execution (and advanced execution patterns like cancellation, pausing, or progress reporting), actors need to interact with the runtime environment during task execution. This is achieved via a `ExecutionContext` object passed to the tool.
 
-**Python Agent Implementation Pattern:**
+**Python Actor Implementation Pattern:**
 
 1.  **Launcher/Runtime**: Creates a `ExecutionContext` for each execution. This context wraps thread-safe primitives (like `threading.Event` or `asyncio.Future`) for signalling.
-2.  **Base Agent**: Injects the `context` object into the tool function if the signature requests it.
+2.  **Base Actor**: Injects the `context` object into the tool function if the signature requests it.
 3.  **Tool Implementation**: Accepts `context` as an argument to check for cancellation or register cleanup hooks.
 
 ```python
@@ -811,29 +811,29 @@ parameters may coexist on the same signature. The catalog reports a tool's `Cont
 parameters under `requires_context` — a list of names, since the value comes from the runtime
 rather than from anything a blueprint author writes.
 
-### Reference Agent
+### Reference Actor
 
-`antikythera_agents/reference_agent.py` (`ReferenceAgent`, agent type `reference`) is the
-worked example for the tool convention above — copy from it when authoring a new agent.
+`antikythera_actors/reference_actor.py` (`ReferenceActor`, actor type `reference`) is the
+worked example for the tool convention above — copy from it when authoring a new actor.
 Between its three tools (`assemble`, `wait`, `passthrough`) it exercises every annotation
 kind the binder understands: a plain task input and one declared explicitly with `Input[T]`,
 a required and a defaulted `Param[T]`, a `Context[T]` value, an `Optional[T]` input, a
 `TypedDict` return with both a required and a `NotRequired` key, the `Task` escape hatch, and
 `ExecutionContext` cancellation. It has no dependency beyond this package, so it runs in CI.
-`examples/reference_agent_demo.json` drives it end to end through a real orchestrator run.
+`examples/reference_actor_demo.json` drives it end to end through a real orchestrator run.
 
 ## Roadmap
 
 - **M1 (Toy problem 1):** author a trivial blueprint composed by 3 tasks (A1, A2, B1) + 1 start and 1 end task. A1 and A2 depend on START, B1 depends on A1 and A2, END depends on B1. A1 will wait for user input on the terminal (or any other input method) and define one output data key. A2 will be a "sleep 5 seconds" task, B1 will define a data input on the output key generated by A1 and print it.
-- **M2 (Toy problem 2):**: author a blueprint for robotic pick and place of a single element using a 6-DoF robot (ABB GoFa robot model) composed by 7 tasks: A1: plan trajectory, A2: move/execute trajectory, A3: actuate gripper, A4: plan trajectory, A5: move/execute trajectory. All tasks are sequential and depend on the previous one. START and END are placed at the start and end of the blueprint respectively. The `move/execute trajectory` tasks should implement `needs_approval`. This means, there are 3 new agent types: `compas_fab.plan_trajectory` (used to calculate approach and retract trajectories), `compas_rrc.move_to_trajectory` and `compas_rrc.actuate_gripper`.
-- **M4 (Toy problem 4):**: Inner blueprints using `system.composite` (static): 1) Implement static inner blueprint and agent, 2) Inputs and Outputs of inner blueprints.
-- **M5 (Toy problem 5):** Pick and place for a single element using a 6-DoF robot with inner blueprints. Tasks: 1) `Plan Pick` and `Plan Place` for `MoveIt` planner agent. 2) For next Milestote: Model is read-only and globally accessible inside inner blueprints, but the element sequencer will assign additional information: current element id + list of state (built/not built) of all elements.
+- **M2 (Toy problem 2):**: author a blueprint for robotic pick and place of a single element using a 6-DoF robot (ABB GoFa robot model) composed by 7 tasks: A1: plan trajectory, A2: move/execute trajectory, A3: actuate gripper, A4: plan trajectory, A5: move/execute trajectory. All tasks are sequential and depend on the previous one. START and END are placed at the start and end of the blueprint respectively. The `move/execute trajectory` tasks should implement `needs_approval`. This means, there are 3 new actor types: `compas_fab.plan_trajectory` (used to calculate approach and retract trajectories), `compas_rrc.move_to_trajectory` and `compas_rrc.actuate_gripper`.
+- **M4 (Toy problem 4):**: Inner blueprints using `system.composite` (static): 1) Implement static inner blueprint and actor, 2) Inputs and Outputs of inner blueprints.
+- **M5 (Toy problem 5):** Pick and place for a single element using a 6-DoF robot with inner blueprints. Tasks: 1) `Plan Pick` and `Plan Place` for `MoveIt` planner actor. 2) For next Milestote: Model is read-only and globally accessible inside inner blueprints, but the element sequencer will assign additional information: current element id + list of state (built/not built) of all elements.
 - **M6 (Toy problem 6):**: Add `compas_model` to M5, including element ids referenced from tasks and dynamic inner blueprint expansion based on calls to some kind of sequencer (sequencing the model's elements).
 - **M8 (Toy problem 8):**: Implement conditional logical execution of tasks based on input data and/or parameters.
 
-* Two possible levels of agents (can both exist in Antikythera):
+* Two possible levels of actors (can both exist in Antikythera):
  - Type 1: Simple wrapper for some Python code (e.g. inverse_kinematics(config) -> Frame, forward_kinematics(Frame) -> config)
- - Type 2: Process-aware/model-aware/scene-aware: mindful agents
+ - Type 2: Process-aware/model-aware/scene-aware: mindful actors
 
 
 - Model -> Element -> FabricationElement
@@ -852,42 +852,42 @@ a required and a defaulted `Param[T]`, a `Context[T]` value, an `Optional[T]` in
 - [ ] Prepare Hello World of Antikythera: simple, yet impressive for demo'ing
   - [ ] Demonstrates the distributed nature of the system:
     - [ ] Showcase dynamic task re-assignment by having two robots running a cell, and making one fail, so that all subsequent tasks are automatically re-assigned to the other robot (depends on retry policies).
-    - [ ] Human-in-the-loop: human selects the next element to fabricate (using a phone agent)
+    - [ ] Human-in-the-loop: human selects the next element to fabricate (using a phone actor)
     - [ ] Make each host visibly acting whenever a task is executed in it (e.g. light up a LED)
   - [ ] No-Code fabrication process
     - [ ] Host 0: Orchestrator: Raspberry Pi
     - [ ] Host 1: Raspberry Pi
-      - [ ] Scene Agent (robot agnostic, RobotCell + RobotCellState support via compas_fab)
-      - [ ] Planning Agent: FK+IK+LM (Cartesian Motion)+FM (Free space motion) -> Consider how to make these MATERIAL or ELEMENT-CENTRIC or WORKOBJECT-CENTRIC
+      - [ ] Scene Actor (robot agnostic, RobotCell + RobotCellState support via compas_fab)
+      - [ ] Planning Actor: FK+IK+LM (Cartesian Motion)+FM (Free space motion) -> Consider how to make these MATERIAL or ELEMENT-CENTRIC or WORKOBJECT-CENTRIC
     - [ ] Host 2: Raspberry Pi
-      - [ ] RRC Agent: execution for ABB (Move To Frame + Move to Config + Move to Trajectory + Set IO + Get IO)
+      - [ ] RRC Actor: execution for ABB (Move To Frame + Move to Config + Move to Trajectory + Set IO + Get IO)
     - [ ] Host 3: Grasshopper
-      - [ ] GH Agent receives trajectories over task input, waits for user approval then sends task completion
-    - [ ] Host 4: Phone -> Human-in-the-loop agent to fabricate some elements manually
+      - [ ] GH Actor receives trajectories over task input, waits for user approval then sends task completion
+    - [ ] Host 4: Phone -> Human-in-the-loop actor to fabricate some elements manually
 - [ ] Add retry policies and idempotency definition for tasks and blueprints, e.g. in a composite blueprint, the execute robotic motion task can fail and that could trigger a retry of the whole inner blueprint (or just the failed task, depending on the case)
   - [ ] Consider how or if this includes or provides backtracking capabilities
-- [ ] Create an AGENT CATALOG
-  - [ ] We don't create our own Registry of agents, instead, we create a meta search aggregator to search over Pypi+Docker Hub+GHCR for python package and/or containers. This way we don't need to maintain a registry of agents, but we can still have a discoverability layer for users to find existing agents.
-  - [ ] Agent catalog is the result of the aggregation of registry results
+- [ ] Create an ACTOR CATALOG
+  - [ ] We don't create our own Registry of actors, instead, we create a meta search aggregator to search over Pypi+Docker Hub+GHCR for python package and/or containers. This way we don't need to maintain a registry of actors, but we can still have a discoverability layer for users to find existing actors.
+  - [ ] Actor catalog is the result of the aggregation of registry results
 - [ ] Benchmark latency of the data store and/or network communication
-- [ ] AKT Yaml host file (`akt.yaml`) for defining what agents to launch on a specific machine and how to connect to broker
-  - [ ] Support launching agents in containers
-  - [ ] Support launching Python agents (via `uv run python` command in the same venv as `akt`)
+- [ ] AKT Yaml host file (`akt.yaml`) for defining what actors to launch on a specific machine and how to connect to broker
+  - [ ] Support launching actors in containers
+  - [ ] Support launching Python actors (via `uv run python` command in the same venv as `akt`)
   - Sample `akt.yaml`:
   ```yaml
   broker: 192.168.0.100
 
-  agents:
+  actors:
     fab:
-      image: antikythera/compas_fab/agents
+      image: antikythera/compas_fab/actors
       env:
         - CNC_IP_ADDRESS=192.168.0.101
     rrc:
-      image: antikythera/compas_rrc/agents
+      image: antikythera/compas_rrc/actors
     demo:
       python: git+https://github.com/gramaziokohler/some_pip_package.git
         --> uv pip install git+https://github.com/gramaziokohler/some_pip_package.git
-            uv run python -m antikythera_agents run
+            uv run python -m antikythera_actors run
   ```
 
 - [ ] BT: Explore if we can/should use BTs for control logic (BT inside a blueprint | Blueprint inside a BT)
@@ -909,11 +909,11 @@ a required and a defaulted `Param[T]`, a `Context[T]` value, an `Optional[T]` in
   - [ ] GraphNode (is it used?) in the frontend / ReactFlow Node?
 - [ ] Some kind of distributed file system
 - [ ] Observability
-  - [ ] Add MQTT log listener on the orchestrator and log agent entries (consider logging to DB?)
+  - [ ] Add MQTT log listener on the orchestrator and log actor entries (consider logging to DB?)
 - [ ] Conceptualize map/reducer strategy for output data management in dynamic tasks. 
-- [ ] Implement a XR interface and XR agents
+- [ ] Implement a XR interface and XR actors
 - [ ] Grasshopper components to control execution
-- [ ] Grasshopper Agents (GHaaS): two components at least, one to receive a task assignment, and one to output task completion, in between, any GH component can be used.
+- [ ] Grasshopper Actors (GHaaS): two components at least, one to receive a task assignment, and one to output task completion, in between, any GH component can be used.
 - [ ] Grasshopper could become a full fledged interface for antikythera -> Define how.
 
 - Protocol robustness

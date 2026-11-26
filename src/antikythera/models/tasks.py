@@ -66,7 +66,7 @@ class TaskError(Data):
 
 
 class TaskAssignmentMessage(Data):
-    """Task assignment message sent by orchestrator to agents."""
+    """Task assignment message sent by orchestrator to actors."""
 
     @property
     def __data__(self) -> Dict[str, Any]:
@@ -117,49 +117,49 @@ class TaskAssignmentMessage(Data):
 
 
 class TaskClaimRequest(Data):
-    """Task claim request sent by agents to orchestrator."""
+    """Task claim request sent by actors to orchestrator."""
 
     @property
     def __data__(self) -> Dict[str, Any]:
         return {
             "task_id": self.task_id,
-            "agent_id": self.agent_id,
+            "actor_id": self.actor_id,
             "timestamp": self.timestamp.isoformat(),
         }
 
-    def __init__(self, task_id: str, agent_id: str, timestamp: Optional[datetime] = None) -> None:
+    def __init__(self, task_id: str, actor_id: str, timestamp: Optional[datetime] = None) -> None:
         super().__init__()
         self.task_id = task_id
-        self.agent_id = agent_id
+        self.actor_id = actor_id
         self.timestamp = timestamp or datetime.now(timezone.utc)
 
     def __str__(self) -> str:
-        return f"TaskClaimRequest(task_id={self.task_id}, agent_id={self.agent_id}, timestamp={self.timestamp})"
+        return f"TaskClaimRequest(task_id={self.task_id}, actor_id={self.actor_id}, timestamp={self.timestamp})"
 
 
 class TaskAllocationMessage(Data):
-    """Task allocation message sent by orchestrator to agents."""
+    """Task allocation message sent by orchestrator to actors."""
 
     @property
     def __data__(self) -> Dict[str, Any]:
         return {
             "task_id": self.task_id,
-            "assigned_agent_id": self.assigned_agent_id,
+            "assigned_actor_id": self.assigned_actor_id,
             "timestamp": self.timestamp.isoformat(),
         }
 
-    def __init__(self, task_id: str, assigned_agent_id: str, timestamp: Optional[datetime] = None) -> None:
+    def __init__(self, task_id: str, assigned_actor_id: str, timestamp: Optional[datetime] = None) -> None:
         super().__init__()
         self.task_id = task_id
-        self.assigned_agent_id = assigned_agent_id
+        self.assigned_actor_id = assigned_actor_id
         self.timestamp = timestamp or datetime.now(timezone.utc)
 
     def __str__(self) -> str:
-        return f"TaskAllocationMessage(task_id={self.task_id}, assigned_agent_id={self.assigned_agent_id}, timestamp={self.timestamp})"
+        return f"TaskAllocationMessage(task_id={self.task_id}, assigned_actor_id={self.assigned_actor_id}, timestamp={self.timestamp})"
 
 
 class TaskCompletionMessage(Data):
-    """Task completion message sent by agents to orchestrator."""
+    """Task completion message sent by actors to orchestrator."""
 
     @property
     def __data__(self) -> Dict[str, Any]:
@@ -170,7 +170,7 @@ class TaskCompletionMessage(Data):
             "error": self.error,
             "timestamp": self.timestamp.isoformat(),
             "duration_ms": self.duration_ms,
-            "agent_id": self.agent_id,
+            "actor_id": self.actor_id,
         }
 
     def __init__(
@@ -181,7 +181,7 @@ class TaskCompletionMessage(Data):
         error: Optional[TaskError] = None,
         timestamp: Optional[datetime] = None,
         duration_ms: Optional[int] = None,
-        agent_id: Optional[str] = None,
+        actor_id: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.id = id
@@ -190,7 +190,7 @@ class TaskCompletionMessage(Data):
         self.error = error
         self.timestamp = timestamp or datetime.now(timezone.utc)
         self.duration_ms = duration_ms
-        self.agent_id = agent_id
+        self.actor_id = actor_id
 
     def __str__(self) -> str:
         return (
@@ -201,7 +201,7 @@ class TaskCompletionMessage(Data):
             f"error={self.error}, "
             f"timestamp={self.timestamp}, "
             f"duration_ms={self.duration_ms}, "
-            f"agent_id={self.agent_id})"
+            f"actor_id={self.actor_id})"
         )
 
 
@@ -213,7 +213,7 @@ class TaskCompletionAckMessage(Data):
         return {
             "id": self.id,
             "state": self.state,
-            "accepted_agent_id": self.accepted_agent_id,
+            "accepted_actor_id": self.accepted_actor_id,
             "timestamp": self.timestamp.isoformat(),
         }
 
@@ -221,14 +221,14 @@ class TaskCompletionAckMessage(Data):
         self,
         id: str,
         state: TaskState,
-        accepted_agent_id: str,
+        accepted_actor_id: str,
         timestamp: Optional[datetime] = None,
     ) -> None:
         super().__init__()
         self.id = id
         self.state = state
-        self.accepted_agent_id = accepted_agent_id
+        self.accepted_actor_id = accepted_actor_id
         self.timestamp = timestamp or datetime.now(timezone.utc)
 
     def __str__(self) -> str:
-        return f"TaskCompletionAckMessage(id={self.id}, state={self.state}, accepted_agent_id={self.accepted_agent_id}, timestamp={self.timestamp})"
+        return f"TaskCompletionAckMessage(id={self.id}, state={self.state}, accepted_actor_id={self.accepted_actor_id}, timestamp={self.timestamp})"

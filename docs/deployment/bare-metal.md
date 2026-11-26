@@ -21,11 +21,11 @@ A complete installation is six processes. The MCP server is optional; the rest a
 | Redis | `redis-server` | 6379 (localhost only) |
 | MQTT broker | `mosquitto` | 1883, 8083 |
 | Orchestrator | `antikythera` | 8000 (localhost only) |
-| Built-in agents | `antikythera-agents run` | — |
+| Built-in actors | `antikythera-actors run` | — |
 | MCP server (optional) | `antikythera-mcp` | 8001 (localhost only) |
 | Web UI | static files served by nginx | 80 / 443 |
 
-The orchestrator, the agents and the MCP server all come from the same Python package; the
+The orchestrator, the actors and the MCP server all come from the same Python package; the
 web UI is a separate build. Everything except nginx and the broker binds to localhost.
 
 ## Target platform
@@ -54,7 +54,7 @@ Redis is fine with the packaged defaults: it binds to localhost and persists to
 
 ## 2. Configure the MQTT broker
 
-Antikythera needs a plain TCP listener for agents and a WebSocket listener for browser
+Antikythera needs a plain TCP listener for actors and a WebSocket listener for browser
 clients. Write `/etc/mosquitto/conf.d/antikythera.conf`:
 
 ```conf
@@ -107,14 +107,14 @@ Check that all three entry points work before writing any unit files:
 
 ```bash
 /opt/antikythera/venv/bin/antikythera --help
-/opt/antikythera/venv/bin/antikythera-agents --help
+/opt/antikythera/venv/bin/antikythera-actors --help
 /opt/antikythera/venv/bin/antikythera-mcp --help
 ```
 
-### Agent plugins
+### Actor plugins
 
-Agents ship as plugins, and some pull heavy third-party dependencies that are not
-installed by default. The `moveit` agent, for example, imports `compas_fab`:
+Actors ship as plugins, and some pull heavy third-party dependencies that are not
+installed by default. The `moveit` actor, for example, imports `compas_fab`:
 
 ```bash
 sudo -u antikythera /opt/antikythera/venv/bin/pip install compas-fab
@@ -166,14 +166,14 @@ sudo systemctl enable --now antikythera-orchestrator
 The orchestrator also writes an `orchestrator.log` into its working directory, in addition
 to what journald captures.
 
-## 5. Agents service
+## 5. Actors service
 
-The built-in agents run as their own process.
-`/etc/systemd/system/antikythera-agents.service`:
+The built-in actors run as their own process.
+`/etc/systemd/system/antikythera-actors.service`:
 
 ```ini
 [Unit]
-Description=Antikythera agents
+Description=Antikythera actors
 After=network-online.target mosquitto.service antikythera-orchestrator.service
 Wants=network-online.target
 Requires=mosquitto.service antikythera-orchestrator.service
@@ -183,7 +183,7 @@ Type=simple
 User=antikythera
 WorkingDirectory=/opt/antikythera
 EnvironmentFile=/etc/antikythera.env
-ExecStart=/opt/antikythera/venv/bin/antikythera-agents run \
+ExecStart=/opt/antikythera/venv/bin/antikythera-actors run \
     --broker-host 127.0.0.1 --broker-port 1883
 Restart=on-failure
 RestartSec=5
@@ -194,17 +194,17 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now antikythera-agents
+sudo systemctl enable --now antikythera-actors
 ```
 
-This starts every agent registered in that virtualenv — the first-party `system.*`, `io.*`
-and `user_interaction.*` types, plus any agent plugin you install alongside them. Add
+This starts every actor registered in that virtualenv — the first-party `system.*`, `io.*`
+and `user_interaction.*` types, plus any actor plugin you install alongside them. Add
 `--sys-only` to restrict it to `system.*`, keeping in mind that a blueprint using any other
-first-party type will then stall on a task no agent claims. Agents for your own hardware
+first-party type will then stall on a task no actor claims. Actors for your own hardware
 normally run on other machines and connect to port 1883 over the network.
 
 !!! warning
-    `run` is a required subcommand. `antikythera-agents --sys-only ...` without it exits
+    `run` is a required subcommand. `antikythera-actors --sys-only ...` without it exits
     non-zero with usage text and never starts the launcher — a unit file written against
     the older CLI will fail on restart.
 
@@ -366,7 +366,7 @@ location /mqtt {
 ## Verifying
 
 ```bash
-systemctl is-active antikythera-orchestrator antikythera-agents antikythera-mcp
+systemctl is-active antikythera-orchestrator antikythera-actors antikythera-mcp
 ss -tlnp | grep -E ':(8000|8001)\b'
 
 curl -fsS http://127.0.0.1:8000/docs >/dev/null && echo "orchestrator: ok"
@@ -378,7 +378,7 @@ Diagnostics when one of those fails:
 
 ```bash
 sudo journalctl -u antikythera-orchestrator -n 100 --no-pager
-sudo journalctl -u antikythera-agents -n 100 --no-pager
+sudo journalctl -u antikythera-actors -n 100 --no-pager
 sudo journalctl -u antikythera-mcp -n 100 --no-pager
 ```
 
@@ -406,7 +406,7 @@ sudo ufw enable
 
 ```bash
 sudo -u antikythera /opt/antikythera/venv/bin/pip install --upgrade "antikythera-sdk[deployment]"
-sudo systemctl restart antikythera-orchestrator antikythera-agents antikythera-mcp
+sudo systemctl restart antikythera-orchestrator antikythera-actors antikythera-mcp
 ```
 
 Rebuild and redeploy the frontend bundle separately, from its own repository.

@@ -10,7 +10,7 @@ An all knowing, all controlling, robotic and otherwise, process manager.
 
 ## Quick start
 
-The orchestrator, the system agents and the web UI are published as Docker images.
+The orchestrator, the system actors and the web UI are published as Docker images.
 Nothing needs to be cloned or built — download the deployment compose file and start it:
 
 ```bash
@@ -21,12 +21,12 @@ docker compose up -d
 Then open <http://localhost:8080>.
 
 See [Run with Docker](deployment/docker.md) for what is running, how to connect your own
-agents, and how to configure it. To run without Docker, see
+actors, and how to configure it. To run without Docker, see
 [Run on bare metal](deployment/bare-metal.md).
 
 ## Install the SDK
 
-To write blueprints and agents, or to talk to a running orchestrator from Python,
+To write blueprints and actors, or to talk to a running orchestrator from Python,
 install the SDK from PyPI.
 
 ```bash

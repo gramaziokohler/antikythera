@@ -16,9 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** agents are now called actors, since "agent" has come to mean LLM agents. Everything that said agent was renamed: the `antikythera_agents` package is `antikythera_actors` (`Actor`, `@actor`, `ActorLauncher`, `base_actor`, `io_actor`, `reference_actor`), `system_agents` is `system_actors`, the `antikythera-agents` command is `antikythera-actors`, the plugin entry point group is `antikythera.actors`, and the docker compose service is `actors` (container `akt-actors`). In `antikythera.proto` the `agent_id`, `assigned_agent_id` and `accepted_agent_id` fields are now `actor_id`, `assigned_actor_id` and `accepted_actor_id`, with the same field numbers, so the binary wire format is unchanged and existing frontends keep working. Plugins still registered under the old `antikythera.agents` group are not loaded, and a warning names them.
 - All packaging metadata now lives in `pyproject.toml`; `requirements*.txt` are gone. The build backend switched from hatchling to setuptools, matching the other COMPAS packages.
 - The base install now covers running an orchestrator and agents from Python: `asteval` and `redis` moved into the core dependencies, and `compas_model`, which was imported but never declared, is now listed. The `deployment` extra is just the HTTP API service (FastAPI, uvicorn), and the MCP server's dependencies (`mcp`, `httpx`) moved to a new `mcp` extra. The Docker image installs both extras. `antikythera` and `antikythera-mcp` now say which extra to install when it is missing.
 - Requires `compas_eve >=2.4` and `compas_pb >=1.2`. `invoke` failed to start against the previously locked `compas_pb` 1.1.4, which lacks `create_proto_bundle`.
+- `importlib_metadata` is declared for Python 3.9, where plugin discovery imports it.
 - The packages ship `py.typed` markers, so type checkers use their inline annotations.
 - Dropped the `prepare-changelog` and `release` invoke tasks; releases go through the `prepare release` workflow.
 

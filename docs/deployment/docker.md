@@ -1,6 +1,6 @@
 # Run with Docker
 
-This is the recommended way to run Antikythera. The orchestrator, the system agents
+This is the recommended way to run Antikythera. The orchestrator, the system actors
 and the web UI are published as images on Docker Hub, so nothing has to be cloned,
 built or installed — one compose file starts the whole system.
 
@@ -34,29 +34,29 @@ starts are immediate.
 | --- | --- | --- | --- |
 | `frontend` | `gramaziokohler/antikythera-frontend` | 8080 | Web UI, proxies `/api` to the orchestrator |
 | `orchestrator` | `gramaziokohler/antikythera` | 8000 | REST API — schedules and tracks sessions |
-| `agents` | `gramaziokohler/antikythera` | — | The built-in `system.*`, `io.*` and `user_interaction.*` agents |
-| `mqtt-broker` | `eclipse-mosquitto` | 1883, 8083 | Message bus between orchestrator and agents |
+| `actors` | `gramaziokohler/antikythera` | — | The built-in `system.*`, `io.*` and `user_interaction.*` actors |
+| `mqtt-broker` | `eclipse-mosquitto` | 1883, 8083 | Message bus between orchestrator and actors |
 | `redis` | `redis` | — | Stores blueprints, sessions and session data |
 
 Redis is deliberately not published to the host — only the orchestrator talks to it.
-The MQTT broker *is* published, because agents running on other machines connect to it.
+The MQTT broker *is* published, because actors running on other machines connect to it.
 
-## Agents
+## Actors
 
-The `agents` service runs every agent that ships with Antikythera — the `system.*`,
+The `actors` service runs every actor that ships with Antikythera — the `system.*`,
 `io.*` and `user_interaction.*` task types. That is what the example blueprints need, so
 they run to completion out of the box. Adding `--sys-only` to that service's command
 restricts it to `system.*`; a blueprint using any other first-party type then stalls
-indefinitely on a task no agent claims.
+indefinitely on a task no actor claims.
 
-### Connecting your own agents
+### Connecting your own actors
 
-Agents for your own hardware do not run inside this stack. They run wherever the hardware is — a workshop PC,
+Actors for your own hardware do not run inside this stack. They run wherever the hardware is — a workshop PC,
 a robot controller, a Grasshopper session — and connect to the MQTT broker over the network:
 
 ```bash
 pip install antikythera-sdk
-antikythera-agents run --broker-host <host-running-docker> --broker-port 1883
+antikythera-actors run --broker-host <host-running-docker> --broker-port 1883
 ```
 
 The dashboard in the web UI shows the broker address to use, with a button to copy it.
@@ -64,7 +64,7 @@ The dashboard in the web UI shows the broker address to use, with a button to co
 !!! warning
     The UI derives that address from the port the broker is normally published on (1883).
     If you change `AKT_MQTT_PORT` below, the address shown will be wrong — adjust the port
-    yourself when configuring agents.
+    yourself when configuring actors.
 
 ## The MCP server
 
@@ -146,10 +146,10 @@ Set the corresponding `AKT_*_PORT` in `.env` and run `docker compose up -d` agai
 **UI loads but shows no data** — the orchestrator is not reachable. Check
 `docker compose ps` for a service that is not `running`, then `docker compose logs orchestrator`.
 
-**A session stalls with a task stuck on READY** — no running agent handles that task type.
-Check `docker compose logs agents` to see which agents started, and confirm any agent of
+**A session stalls with a task stuck on READY** — no running actor handles that task type.
+Check `docker compose logs actors` to see which actors started, and confirm any actor of
 your own is pointed at the same broker as the orchestrator: the host and port passed to
-`antikythera-agents run` must match the address shown on the dashboard, with port 1883
+`antikythera-actors run` must match the address shown on the dashboard, with port 1883
 open on the machine running Docker.
 
 **`configs` top-level element error** — the Compose plugin is older than v2.23.1. Update

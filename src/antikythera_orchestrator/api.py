@@ -759,7 +759,7 @@ def start_session(session_id: str, request: RestartSessionRequest) -> SessionAct
     if not session:
         # Check if it exists in storage and revive it.
         # Always use the server-side MQTT config — the client-supplied broker_host
-        # reflects the agent-facing address (e.g. localhost for browser agents) and
+        # reflects the actor-facing address (e.g. localhost for browser actors) and
         # is not usable for the orchestrator's own connection inside Docker.
         try:
             session = _revive_session(session_id, config.MQTT_BROKER_HOST, config.MQTT_BROKER_PORT)
@@ -810,7 +810,7 @@ def restart_session(session_id: str) -> StartBlueprintResponse:
         raise HTTPException(status_code=404, detail=f"Session not found: {snf}")
 
     # As in start_session, the orchestrator's own broker connection uses the
-    # server-side config rather than the agent-facing address sent by the client.
+    # server-side config rather than the actor-facing address sent by the client.
     new_session_id = _start_blueprint_session(
         StartBlueprintRequest(
             blueprint_id=previous.blueprint.id,

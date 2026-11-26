@@ -19,13 +19,13 @@ services:
       start_period: 5s
     restart: unless-stopped
   # ---------------------------------------------------------------------------
-  # MQTT broker — message bus for orchestrator ↔ agents communication
+  # MQTT broker — message bus for orchestrator ↔ actors communication
   # ---------------------------------------------------------------------------
   mqtt-broker:
     image: eclipse-mosquitto:latest
     container_name: akt-mqtt-broker
     ports:
-      - "1883:1883"   # MQTT (TCP) — used by orchestrator and agents
+      - "1883:1883"   # MQTT (TCP) — used by orchestrator and actors
       - "8083:8083"   # MQTT over WebSocket — used by the browser frontend
     volumes:
       - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
@@ -61,18 +61,18 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # System agents — background workers for built-in task types (system.*)
+  # System actors — background workers for built-in task types (system.*)
   # ---------------------------------------------------------------------------
-  agents:
+  actors:
     image: antikythera:dev
-    container_name: akt-agents-sys
+    container_name: akt-actors-sys
     depends_on:
       mqtt-broker:
         condition: service_healthy
       orchestrator:
         condition: service_started
     command:
-      - antikythera-agents
+      - antikythera-actors
       - run
       - --sys-only
       - --broker-host

@@ -7,17 +7,17 @@ from antikythera.models import Task
 from antikythera.models import TaskInput
 from antikythera.models import TaskOutput
 from antikythera.models import TaskState
-from antikythera_agents.base_agent import Agent
-from antikythera_agents.decorators import agent
-from antikythera_agents.decorators import tool
-from antikythera_agents.launcher import AgentLauncher
+from antikythera_actors.base_actor import Actor
+from antikythera_actors.decorators import actor
+from antikythera_actors.decorators import tool
+from antikythera_actors.launcher import ActorLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 
-# Define a test agent
+# Define a test actor
 # We use a unique type to avoid conflicts
-@agent(type="test_data_agent")
-class DataProducerConsumerTestAgent(Agent):
+@actor(type="test_data_actor")
+class DataProducerConsumerTestActor(Actor):
     @tool(name="producer")
     def producer(self, task: Task) -> Dict[str, Any]:
         return {"value": 42}
@@ -42,7 +42,7 @@ def test_data_passing_between_tasks(mock_storage, mock_transport_orchestrator, m
     # We want output 'value' to be stored as 'value' in session (default behavior)
     task_a = Task(
         id="task_a",
-        type="test_data_agent.producer",
+        type="test_data_actor.producer",
         outputs=[TaskOutput(name="value")],
     )
 
@@ -50,7 +50,7 @@ def test_data_passing_between_tasks(mock_storage, mock_transport_orchestrator, m
     # We need to map session key 'value' to task input 'input_value'
     task_b = Task(
         id="task_b",
-        type="test_data_agent.consumer",
+        type="test_data_actor.consumer",
         inputs=[TaskInput(name="input_value", get_from="value")],
         outputs=[TaskOutput(name="received")],
     )
@@ -66,7 +66,7 @@ def test_data_passing_between_tasks(mock_storage, mock_transport_orchestrator, m
     orchestrator = Orchestrator(session)
 
     # 3. Launcher
-    launcher = AgentLauncher()
+    launcher = ActorLauncher()
     launcher.start()
 
     # 4. Start
@@ -104,7 +104,7 @@ def test_static_inputs(mock_storage, mock_transport_orchestrator, mock_transport
     # Task with static input
     task_static = Task(
         id="task_static",
-        type="test_data_agent.static_consumer",
+        type="test_data_actor.static_consumer",
         inputs=[TaskInput(name="static_val", value=123)],  # Static integer
         outputs=[TaskOutput(name="received", set_to="received_static")],
     )
@@ -118,7 +118,7 @@ def test_static_inputs(mock_storage, mock_transport_orchestrator, mock_transport
     session = BlueprintSession(bsid="test_session_static", blueprint=blueprint)
     orchestrator = Orchestrator(session)
 
-    launcher = AgentLauncher()
+    launcher = ActorLauncher()
     launcher.start()
 
     orchestrator.start()

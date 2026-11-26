@@ -16,7 +16,7 @@ def test_preprocess_blueprint_static_composite(mock_storage, mock_transport_orch
     """
     # 1. Setup Inner Blueprint
     inner_start = Task(id="inner_start", type="system.start")
-    inner_task = Task(id="inner_task", type="test.agent")
+    inner_task = Task(id="inner_task", type="test.actor")
     inner_end = Task(id="inner_end", type="system.end")
     inner_start >> inner_task >> inner_end
     inner_bp = Blueprint(
@@ -70,7 +70,7 @@ def test_preprocess_blueprint_nested_static_composite(mock_storage, mock_transpo
     """
     # 1. Setup Blueprints
     deep_start = Task(id="deep_start", type="system.start")
-    deep_task = Task(id="deep_task", type="test.agent")
+    deep_task = Task(id="deep_task", type="test.actor")
     deep_end = Task(id="deep_end", type="system.end")
     deep_start >> deep_task >> deep_end
     deep_bp = Blueprint(id="deep_bp_id", name="Deep Blueprint", tasks=[deep_start, deep_task, deep_end])
@@ -171,7 +171,7 @@ def test_preprocess_dynamic_expansion(mock_storage, mock_transport_orchestrator)
 
     # Setup Inner Blueprint (target of expansion)
     inner_start = Task(id="inner_start", type="system.start")
-    inner_task = Task(id="inner_task", type="test.agent")
+    inner_task = Task(id="inner_task", type="test.actor")
     inner_end = Task(id="inner_end", type="system.end")
     inner_start >> inner_task >> inner_end
     inner_bp = Blueprint(
