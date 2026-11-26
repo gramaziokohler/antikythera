@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Guides for running actors and for embedding the orchestrator in an application.
 - NATS backend, in the new `nats` extra: `antikythera.transports.nats.NatsTransport`, a compas_eve transport over NATS (kept in Antikythera until it moves to compas_eve), and `NatsStorage`, a storage backend on JetStream object stores. One NATS server with JetStream can replace both the MQTT broker and Redis. Topic names map to subjects the way the NATS server's MQTT support maps them, so MQTT actors work with a NATS orchestrator through it. See the "Running on NATS" guide.
 - `ANTIKYTHERA_TRANSPORT` (`mqtt`, `nats`) and `ANTIKYTHERA_STORAGE` (`redis`, `nats`, `memory`) choose the transport and storage of the service and the actors; `antikythera-actors run` also takes `--transport` and `--nats-url`. The HTTP API now goes through the configured storage backend instead of the Redis classes, and `StorageBackend` gained `list_sessions`.
+- A `NATS backend` CI job runs the test suite against a NATS server, with `NATS_TEST_REQUIRED` set so the NATS tests fail rather than skip if the server is missing.
 - `examples/embedded.py`, `examples/greeter_actor.py` and `examples/README.md`, an index of what each example shows and needs. `tests/test_examples.py` runs every example blueprint in-process, so they keep working.
 
 ### Changed

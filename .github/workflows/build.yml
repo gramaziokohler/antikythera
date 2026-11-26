@@ -45,6 +45,32 @@ jobs:
           invoke-tasks: lint test
           run-prebuild: true
 
+  nats:
+    name: NATS backend
+    needs: release-change
+    if: github.event_name == 'pull_request' || needs.release-change.outputs.is-release != 'true'
+    runs-on: ubuntu-latest
+    env:
+      # The NATS tests skip without a server; here one is started, so they must run.
+      NATS_TEST_REQUIRED: "1"
+    steps:
+      - name: Start a NATS server with JetStream
+        run: |
+          docker run -d --name nats -p 4222:4222 nats:2.10 -js
+          for attempt in $(seq 30); do
+            nc -z 127.0.0.1 4222 && exit 0
+            sleep 1
+          done
+          docker logs nats
+          exit 1
+
+      - uses: compas-dev/compas-actions/ci@v1
+        with:
+          python-version: "3.12"
+          management-tool: uv
+          invoke-tasks: test
+          run-prebuild: true
+
   create-assets:
     name: Verify asset generation
     needs: build
