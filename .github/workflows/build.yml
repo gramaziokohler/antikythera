@@ -45,14 +45,15 @@ jobs:
           invoke-tasks: lint test
           run-prebuild: true
 
-  nats:
-    name: NATS backend
+  network-backends:
+    name: NATS and Zenoh backends
     needs: release-change
     if: github.event_name == 'pull_request' || needs.release-change.outputs.is-release != 'true'
     runs-on: ubuntu-latest
     env:
-      # The NATS tests skip without a server; here one is started, so they must run.
+      # The NATS and Zenoh tests skip without a server; here both are started, so they must run.
       NATS_TEST_REQUIRED: "1"
+      ZENOH_TEST_REQUIRED: "1"
     steps:
       - name: Start a NATS server with JetStream
         run: |
@@ -62,6 +63,20 @@ jobs:
             sleep 1
           done
           docker logs nats
+          exit 1
+
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start a Zenoh router with a storage
+        run: |
+          docker run -d --name zenoh -p 7447:7447 -v "$PWD/tests/zenoh-router.json5:/zenoh.json5" eclipse/zenoh:1.10.2 -c /zenoh.json5
+          for attempt in $(seq 30); do
+            nc -z 127.0.0.1 7447 && exit 0
+            sleep 1
+          done
+          docker logs zenoh
           exit 1
 
       - uses: compas-dev/compas-actions/ci@v1

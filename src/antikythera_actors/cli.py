@@ -81,6 +81,12 @@ def _run(args: argparse.Namespace) -> None:
 
         print(f"Connecting to NATS at {args.nats_url}", flush=True)
         transport = create_transport("nats", nats_url=args.nats_url)
+    elif args.transport == "zenoh":
+        from antikythera import config
+        from antikythera.transport import create_transport
+
+        print(f"Connecting to Zenoh at {args.zenoh_connect or config.ZENOH_CONFIG or config.ZENOH_CONNECT}", flush=True)
+        transport = create_transport("zenoh", zenoh_connect=args.zenoh_connect)
     else:
         print(f"Connecting to MQTT broker at {args.broker_host}:{args.broker_port}", flush=True)
     try:
@@ -164,11 +170,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument(
         "--transport",
-        choices=["mqtt", "nats"],
+        choices=["mqtt", "nats", "zenoh"],
         default=config.TRANSPORT,
         help="How to reach the orchestrator (env: ANTIKYTHERA_TRANSPORT). Defaults to mqtt.",
     )
     run_parser.add_argument("--nats-url", default=config.NATS_URL, help="NATS server URL, with --transport nats (env: NATS_URL).")
+    run_parser.add_argument(
+        "--zenoh-connect",
+        default=None,
+        metavar="ENDPOINTS",
+        help="Zenoh endpoint(s), separated by commas, with --transport zenoh (env: ZENOH_CONNECT, default tcp/127.0.0.1:7447).",
+    )
     run_parser.add_argument("--broker-host", default=config.MQTT_BROKER_HOST, help="MQTT broker host (env: MQTT_BROKER_HOST).")
     run_parser.add_argument("--broker-port", type=int, default=config.MQTT_BROKER_PORT, help="MQTT broker port (env: MQTT_BROKER_PORT).")
     run_parser.add_argument("--mqtt-transport", choices=["tcp", "websockets"], default="tcp", help="MQTT socket transport.")

@@ -69,8 +69,12 @@ mcp = [
 nats = [
     "nats-py >=2.6",
 ]
+# Zenoh transport and storage backend, another alternative to MQTT + Redis.
+zenoh = [
+    "eclipse-zenoh >=1.10",
+]
 dev = [
-    "antikythera-sdk[deployment,mcp,nats]",
+    "antikythera-sdk[deployment,mcp,nats,zenoh]",
     "build",
     "bump-my-version",
     "compas_invocations2[mkdocs] >=1.3",

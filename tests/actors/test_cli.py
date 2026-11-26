@@ -152,6 +152,13 @@ def test_describe_exits_zero_when_every_plugin_imports(monkeypatch, capsys):
     assert "system" in {entry["actor"] for entry in catalog}
 
 
+def test_run_parses_zenoh_transport():
+    args = cli.build_parser().parse_args(["run", "--transport", "zenoh", "--zenoh-connect", "tcp/example:7447"])
+
+    assert args.transport == "zenoh"
+    assert args.zenoh_connect == "tcp/example:7447"
+
+
 def test_run_parses_nats_transport():
     args = cli.build_parser().parse_args(["run", "--transport", "nats", "--nats-url", "nats://example:4222"])
 

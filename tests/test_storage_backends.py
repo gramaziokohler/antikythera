@@ -1,9 +1,10 @@
 """The storage contract every backend fulfils, run against each of them.
 
-Redis runs on fakeredis; NATS needs a server and is skipped without one (see the
-`nats_url` fixture).
+Redis runs on fakeredis; NATS and Zenoh need a server and are skipped without one (see the
+`nats_url` and `zenoh_endpoint` fixtures).
 """
 
+import importlib.util
 from unittest.mock import patch
 
 import fakeredis
@@ -20,7 +21,7 @@ from antikythera_orchestrator.storage.exceptions import RequestedModelNotFound
 from antikythera_orchestrator.storage.exceptions import RequestedSessionNotFound
 
 
-@pytest.fixture(params=["memory", "redis", "nats"])
+@pytest.fixture(params=["memory", "redis", "nats", "zenoh"])
 def storage(request):
     if request.param == "memory":
         yield InMemoryStorage()
@@ -32,7 +33,7 @@ def storage(request):
         ):
             yield RedisStorage()
     else:
-        yield request.getfixturevalue("nats_storage")
+        yield request.getfixturevalue(f"{request.param}_storage")
 
 
 def _blueprint(blueprint_id="bp", name="BP"):
@@ -95,6 +96,16 @@ def test_blueprints(storage):
             blueprints.remove_blueprint("first")
 
 
+def test_ids_with_reserved_characters(storage):
+    sessions = storage.session_storage("odd/session*id")
+    sessions.save_session(BlueprintSession(bsid="odd/session*id", blueprint=_blueprint()))
+    sessions.set("bp/with$slash", "key/with?chars#", 1)
+
+    assert sessions.get_all("bp/with$slash") == {"key/with?chars#": 1}
+    assert "odd/session*id" in storage.list_sessions()
+    assert storage.session_storage("odd").get_all("bp/with$slash") == {}
+
+
 def test_models_and_nestings(storage):
     with storage.model_storage() as models:
         models.add_model("m1", Model())
@@ -122,6 +133,11 @@ def test_create_storage_by_name():
 
     assert isinstance(create_storage("memory"), InMemoryStorage)
     assert isinstance(create_storage("redis"), RedisStorage)
+    if importlib.util.find_spec("zenoh"):
+        from antikythera_orchestrator.storage.zenoh_storage import ZenohStorage
+
+        # Connects on first use, so creating one needs no router.
+        assert isinstance(create_storage("zenoh"), ZenohStorage)
     with pytest.raises(ValueError, match="Unknown storage"):
         create_storage("floppy")
 

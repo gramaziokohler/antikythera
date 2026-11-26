@@ -69,3 +69,52 @@ def nats_storage(nats_url):
         await client.close()
 
     asyncio.run(cleanup())
+
+
+ZENOH_TEST_ENDPOINT = os.getenv("ZENOH_TEST_ENDPOINT", "tcp/127.0.0.1:7447")
+ZENOH_TEST_REQUIRED = os.getenv("ZENOH_TEST_REQUIRED", "").lower() in ("1", "true", "yes")
+
+
+def zenoh_test_config(connect=None, listen=None):
+    """A Zenoh configuration for tests: no multicast scouting, so test sessions only meet each other."""
+    from antikythera.transports.zenoh import zenoh_config
+
+    config = zenoh_config(connect=connect, multicast_scouting=False)
+    if listen:
+        config.insert_json5("listen/endpoints", f'["{listen}"]')
+    return config
+
+
+@pytest.fixture(scope="session")
+def zenoh_endpoint():
+    """Endpoint of a Zenoh router with a storage on `antikythera/storage/**` (env ZENOH_TEST_ENDPOINT).
+
+    Skips the tests that need it if none is reachable, unless ZENOH_TEST_REQUIRED is set.
+    """
+    if ZENOH_TEST_REQUIRED:
+        import zenoh  # noqa: F401
+    else:
+        pytest.importorskip("zenoh")
+    host, _, port = ZENOH_TEST_ENDPOINT.split("/", 1)[-1].rpartition(":")
+    try:
+        with socket.create_connection((host, int(port)), timeout=0.5):
+            pass
+    except OSError:
+        message = f"no Zenoh router at {ZENOH_TEST_ENDPOINT} (start one as described in docs/zenoh.md)"
+        if ZENOH_TEST_REQUIRED:
+            pytest.fail(f"ZENOH_TEST_REQUIRED is set but there is {message}")
+        pytest.skip(message)
+    return ZENOH_TEST_ENDPOINT
+
+
+@pytest.fixture
+def zenoh_storage(zenoh_endpoint):
+    """A ZenohStorage on its own key prefix, emptied afterwards."""
+    import uuid
+
+    from antikythera_orchestrator.storage.zenoh_storage import ZenohStorage
+
+    storage = ZenohStorage(zenoh_test_config(connect=zenoh_endpoint), prefix=f"antikythera/storage/test-{uuid.uuid4().hex[:8]}")
+    yield storage
+    storage.delete_all(list(storage._query(f"{storage.prefix}/**")))
+    storage.close()
