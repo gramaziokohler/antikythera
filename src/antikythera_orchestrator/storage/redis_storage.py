@@ -20,8 +20,7 @@ from antikythera_orchestrator.storage.interfaces import BaseSessionStorage
 
 LOG = logging.getLogger(__name__)
 
-# Each storage class uses a separate Redis logical database to mirror the immudb
-# per-database namespace separation.
+# Each storage class uses a separate Redis logical database.
 _SESSION_DB = 0
 _BLUEPRINT_DB = 1
 _MODEL_DB = 2

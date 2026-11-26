@@ -10,7 +10,7 @@ from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 
-def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
+def test_orchestrator_pause_resume(mock_storage, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define a blueprint with two sequential tasks
     task_start = Task(id="start", type="system.start")
 
@@ -93,7 +93,7 @@ def test_orchestrator_pause_resume(mock_immudb, mock_transport_orchestrator, moc
     launcher.stop()
 
 
-def test_orchestrator_stop(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
+def test_orchestrator_stop(mock_storage, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define a simple blueprint
     task_start = Task(id="start", type="system.start")
     task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=1.0)])

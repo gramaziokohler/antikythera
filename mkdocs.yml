@@ -159,7 +159,6 @@ nav:
           - antikythera_orchestrator.storage: reference/antikythera_orchestrator.storage.md
           - antikythera_orchestrator.storage.interfaces: reference/antikythera_orchestrator.storage.interfaces.md
           - antikythera_orchestrator.storage.redis_storage: reference/antikythera_orchestrator.storage.redis_storage.md
-      - antikythera_ghpython: reference/antikythera_ghpython.md
   - Other:
       - Changelog: changelog.md
       - License: license.md

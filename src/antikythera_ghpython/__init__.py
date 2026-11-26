@@ -1,1 +1,0 @@
-"""Antikythera Grasshopper Python integration."""

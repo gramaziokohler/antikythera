@@ -28,7 +28,7 @@ def _make_dynamic_composite_task(task_id, inner_blueprint_id, element_id="elem1"
     )
 
 
-def _make_trivial_orchestrator(bsid, mock_immudb, mock_transport_orchestrator):
+def _make_trivial_orchestrator(bsid, mock_storage, mock_transport_orchestrator):
     """Helper to create an orchestrator with a trivial blueprint (no composite preprocessing)."""
     task_start = Task(id="start", type="system.start")
     task_end = Task(id="end", type="system.end")
@@ -38,16 +38,16 @@ def _make_trivial_orchestrator(bsid, mock_immudb, mock_transport_orchestrator):
     return Orchestrator(session)
 
 
-def test_get_currently_running_composite_blueprints_no_running_tasks(mock_immudb, mock_transport_orchestrator):
+def test_get_currently_running_composite_blueprints_no_running_tasks(mock_storage, mock_transport_orchestrator):
     """When no tasks are RUNNING, should return an empty set."""
-    orchestrator = _make_trivial_orchestrator("test_no_running", mock_immudb, mock_transport_orchestrator)
+    orchestrator = _make_trivial_orchestrator("test_no_running", mock_storage, mock_transport_orchestrator)
 
     result = orchestrator.get_currently_running_composite_blueprints()
 
     assert result == set()
 
 
-def test_get_currently_running_composite_blueprints_ignores_regular_running_task(mock_immudb, mock_transport_orchestrator):
+def test_get_currently_running_composite_blueprints_ignores_regular_running_task(mock_storage, mock_transport_orchestrator):
     """A regular (non-dynamic) running task should NOT be included — method is for composite blueprints only."""
     task_start = Task(id="start", type="system.start")
     task_work = Task(id="work", type="system.sleep", params=[TaskParam(name="duration", value=1)])
@@ -65,9 +65,9 @@ def test_get_currently_running_composite_blueprints_ignores_regular_running_task
     assert result == set()
 
 
-def test_get_currently_running_composite_blueprints_with_dynamic_task(mock_immudb, mock_transport_orchestrator):
+def test_get_currently_running_composite_blueprints_with_dynamic_task(mock_storage, mock_transport_orchestrator):
     """A dynamically expanded running task should return the blueprint_id from its dynamic params."""
-    orchestrator = _make_trivial_orchestrator("test_dynamic", mock_immudb, mock_transport_orchestrator)
+    orchestrator = _make_trivial_orchestrator("test_dynamic", mock_storage, mock_transport_orchestrator)
 
     task_composite = _make_dynamic_composite_task("dynamic_task", "inner_bp_dynamic")
     task_composite.state = TaskState.RUNNING
@@ -78,9 +78,9 @@ def test_get_currently_running_composite_blueprints_with_dynamic_task(mock_immud
     assert result == {"inner_bp_dynamic"}
 
 
-def test_get_currently_running_composite_blueprints_multiple_dynamic_tasks(mock_immudb, mock_transport_orchestrator):
+def test_get_currently_running_composite_blueprints_multiple_dynamic_tasks(mock_storage, mock_transport_orchestrator):
     """Multiple running dynamic tasks with different inner blueprints should all be returned."""
-    orchestrator = _make_trivial_orchestrator("test_multi_dynamic", mock_immudb, mock_transport_orchestrator)
+    orchestrator = _make_trivial_orchestrator("test_multi_dynamic", mock_storage, mock_transport_orchestrator)
 
     task_a = _make_dynamic_composite_task("dyn_a", "inner_bp_a", element_id="elem_a")
     task_a.state = TaskState.RUNNING
@@ -95,9 +95,9 @@ def test_get_currently_running_composite_blueprints_multiple_dynamic_tasks(mock_
     assert result == {"inner_bp_a", "inner_bp_b"}
 
 
-def test_get_currently_running_composite_blueprints_ignores_non_running_dynamic(mock_immudb, mock_transport_orchestrator):
+def test_get_currently_running_composite_blueprints_ignores_non_running_dynamic(mock_storage, mock_transport_orchestrator):
     """Dynamic composite tasks not in RUNNING state should not be included."""
-    orchestrator = _make_trivial_orchestrator("test_non_running_dynamic", mock_immudb, mock_transport_orchestrator)
+    orchestrator = _make_trivial_orchestrator("test_non_running_dynamic", mock_storage, mock_transport_orchestrator)
 
     task_succeeded = _make_dynamic_composite_task("dyn_done", "inner_bp_done")
     task_succeeded.state = TaskState.SUCCEEDED
@@ -117,9 +117,9 @@ def test_get_currently_running_composite_blueprints_ignores_non_running_dynamic(
 # ===========================================================================
 
 
-def test_handle_skipped_composite_task_skips_inner_blueprint_tasks(mock_immudb, mock_transport_orchestrator):
+def test_handle_skipped_composite_task_skips_inner_blueprint_tasks(mock_storage, mock_transport_orchestrator):
     """When a composite task is skipped, all tasks in its inner blueprint should also be marked SKIPPED."""
-    orchestrator = _make_trivial_orchestrator("test_skip_inner", mock_immudb, mock_transport_orchestrator)
+    orchestrator = _make_trivial_orchestrator("test_skip_inner", mock_storage, mock_transport_orchestrator)
 
     outer_bp_id = "outer_bp"
     inner_bp_id = "inner_bp_skip"
@@ -150,9 +150,9 @@ def test_handle_skipped_composite_task_skips_inner_blueprint_tasks(mock_immudb, 
     assert composite_task.state == TaskState.SKIPPED
 
 
-def test_skip_inner_blueprint_preserves_already_terminal_tasks(mock_immudb, mock_transport_orchestrator):
+def test_skip_inner_blueprint_preserves_already_terminal_tasks(mock_storage, mock_transport_orchestrator):
     """Tasks already in a terminal state (SUCCEEDED, FAILED) should not be changed when skipping."""
-    orchestrator = _make_trivial_orchestrator("test_skip_preserve", mock_immudb, mock_transport_orchestrator)
+    orchestrator = _make_trivial_orchestrator("test_skip_preserve", mock_storage, mock_transport_orchestrator)
 
     inner_bp_id = "inner_bp_preserve"
 
@@ -170,9 +170,9 @@ def test_skip_inner_blueprint_preserves_already_terminal_tasks(mock_immudb, mock
     assert task_pending.state == TaskState.SKIPPED
 
 
-def test_skip_inner_blueprint_does_not_affect_other_blueprints(mock_immudb, mock_transport_orchestrator):
+def test_skip_inner_blueprint_does_not_affect_other_blueprints(mock_storage, mock_transport_orchestrator):
     """Skipping inner blueprint tasks should not affect tasks from other blueprints."""
-    orchestrator = _make_trivial_orchestrator("test_skip_isolation", mock_immudb, mock_transport_orchestrator)
+    orchestrator = _make_trivial_orchestrator("test_skip_isolation", mock_storage, mock_transport_orchestrator)
 
     target_bp_id = "target_bp"
     other_bp_id = "other_bp"
@@ -189,9 +189,9 @@ def test_skip_inner_blueprint_does_not_affect_other_blueprints(mock_immudb, mock
     assert other_task.state == TaskState.PENDING
 
 
-def test_skip_inner_blueprint_recursively_skips_nested_composites(mock_immudb, mock_transport_orchestrator):
+def test_skip_inner_blueprint_recursively_skips_nested_composites(mock_storage, mock_transport_orchestrator):
     """If an inner blueprint contains composite tasks, their inner blueprints should also be skipped recursively."""
-    orchestrator = _make_trivial_orchestrator("test_skip_recursive", mock_immudb, mock_transport_orchestrator)
+    orchestrator = _make_trivial_orchestrator("test_skip_recursive", mock_storage, mock_transport_orchestrator)
 
     # outer_bp_id = "outer_bp"
     inner_bp_id = "inner_bp"
@@ -234,7 +234,7 @@ def test_skip_inner_blueprint_recursively_skips_nested_composites(mock_immudb, m
 # ===========================================================================
 
 
-def test_reset_failed_tasks_resets_running_and_ready_tasks(mock_immudb, mock_transport_orchestrator):
+def test_reset_failed_tasks_resets_running_and_ready_tasks(mock_storage, mock_transport_orchestrator):
     """On resume, RUNNING and READY tasks should be reset to PENDING alongside FAILED tasks."""
     task_start = Task(id="start", type="system.start")
     task_a = Task(id="a", type="some.task")
@@ -267,7 +267,7 @@ def test_reset_failed_tasks_resets_running_and_ready_tasks(mock_immudb, mock_tra
 # ===========================================================================
 
 
-def test_skip_task_state_skips_single_task(mock_immudb, mock_transport_orchestrator):
+def test_skip_task_state_skips_single_task(mock_storage, mock_transport_orchestrator):
     """skip_task_state should only skip the target task, not downstream dependents."""
     task_start = Task(id="start", type="system.start")
     task_a = Task(id="a", type="some.task")
@@ -287,9 +287,9 @@ def test_skip_task_state_skips_single_task(mock_immudb, mock_transport_orchestra
     assert task_end.state == TaskState.PENDING  # downstream NOT affected
 
 
-def test_skip_task_state_skips_composite_inner_blueprints(mock_immudb, mock_transport_orchestrator):
+def test_skip_task_state_skips_composite_inner_blueprints(mock_storage, mock_transport_orchestrator):
     """Skipping a composite task should also recursively skip its inner blueprint tasks."""
-    orchestrator = _make_trivial_orchestrator("test_skip_composite_api", mock_immudb, mock_transport_orchestrator)
+    orchestrator = _make_trivial_orchestrator("test_skip_composite_api", mock_storage, mock_transport_orchestrator)
 
     outer_bp_id = "outer"
     inner_bp_id = "inner_bp"
@@ -317,9 +317,9 @@ def test_skip_task_state_skips_composite_inner_blueprints(mock_immudb, mock_tran
     assert inner_end.state == TaskState.SKIP_REQUESTED
 
 
-def test_skip_task_state_raises_on_unknown_task(mock_immudb, mock_transport_orchestrator):
+def test_skip_task_state_raises_on_unknown_task(mock_storage, mock_transport_orchestrator):
     """skip_task_state should raise KeyError for a non-existent task."""
-    orchestrator = _make_trivial_orchestrator("test_skip_unknown", mock_immudb, mock_transport_orchestrator)
+    orchestrator = _make_trivial_orchestrator("test_skip_unknown", mock_storage, mock_transport_orchestrator)
 
     try:
         orchestrator.skip_task_state("trivial", "nonexistent")
@@ -328,7 +328,7 @@ def test_skip_task_state_raises_on_unknown_task(mock_immudb, mock_transport_orch
         pass
 
 
-def test_task_scheduler_skipped(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
+def test_task_scheduler_skipped(mock_storage, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define a simple blueprint with multiple tasks and dependencies
     task_start = Task(id="start", type="system.start")
     task_1 = Task(id="task_1", type="system.sleep", params=[TaskParam(name="duration", value=1.0)])

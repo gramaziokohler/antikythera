@@ -20,7 +20,7 @@ from antikythera_orchestrator.storage import ModelStorage
 EXAMPLES_DIR = os.path.join(os.path.dirname(__file__), "../../examples")
 
 
-def test_reference_agent_context_binds_per_element_in_dynamic_expansion(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_reference_agent_context_binds_per_element_in_dynamic_expansion(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
     """The reference agent's `assemble` tool, run inside a genuinely dynamically-expanded
     inner blueprint (a sequencer over a model's elements), binds a distinct `element_id` per
     element via its `Context[str]` parameter — the same shape proven in
@@ -91,7 +91,7 @@ def test_reference_agent_context_binds_per_element_in_dynamic_expansion(mock_imm
     }
 
 
-def test_reference_agent_example_blueprint_runs_end_to_end(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_reference_agent_example_blueprint_runs_end_to_end(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
     """`examples/reference_agent_demo.json` (issue-td-10) drives every tool of the reference
     agent through a real orchestrator/launcher run and completes successfully.
     """

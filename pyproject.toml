@@ -71,7 +71,7 @@ dev = ["requirements-dev.txt", "requirements-orchestrator.txt"]
 deployment = ["requirements-orchestrator.txt"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/antikythera", "src/antikythera_agents", "src/antikythera_ghpython", "src/antikythera_orchestrator"]
+packages = ["src/antikythera", "src/antikythera_agents", "src/antikythera_orchestrator"]
 artifacts = ["src/antikythera/proto/antikythera_pb2.py", "src/antikythera/proto/antikythera_pb2.pyi"]
 
 [tool.hatch.build.targets.sdist]
@@ -142,7 +142,7 @@ select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
 force-single-line = true
-known-first-party = ["antikythera", "antikythera_agents", "antikythera_ghpython", "antikythera_orchestrator"]
+known-first-party = ["antikythera", "antikythera_agents", "antikythera_orchestrator"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

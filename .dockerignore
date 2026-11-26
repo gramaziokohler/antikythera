@@ -41,5 +41,5 @@ Dockerfile
 *.log
 orchestrator.log
 
-# Runtime data (immudb bind-mount directory)
+# Runtime data
 data/

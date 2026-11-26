@@ -1,7 +1,3 @@
-# Storage backend selection.
-# To migrate from immudb to Redis, change the three imports below to use
-# `antikythera_orchestrator.storage.redis_storage` instead.
-
 from antikythera_orchestrator.storage.exceptions import RequestedBlueprintNotFound
 from antikythera_orchestrator.storage.exceptions import RequestedModelNotFound
 from antikythera_orchestrator.storage.exceptions import RequestedSessionNotFound

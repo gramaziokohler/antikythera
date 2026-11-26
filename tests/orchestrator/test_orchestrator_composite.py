@@ -16,7 +16,7 @@ from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.storage import BlueprintStorage
 
 
-def test_composite_task_execution(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
+def test_composite_task_execution(mock_storage, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define Inner Blueprint
     # Inner Task: Multiplies input by 2
     # We'll use a custom agent or reuse TestDataAgent if I can import it or redefine it.

@@ -34,7 +34,7 @@ class DataProducerConsumerTestAgent(Agent):
         return {"received": static_val}
 
 
-def test_data_passing_between_tasks(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
+def test_data_passing_between_tasks(mock_storage, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define blueprint
     task_start = Task(id="start", type="system.start")
 
@@ -97,7 +97,7 @@ def test_data_passing_between_tasks(mock_immudb, mock_transport_orchestrator, mo
     launcher.stop()
 
 
-def test_static_inputs(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
+def test_static_inputs(mock_storage, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define blueprint
     task_start = Task(id="start", type="system.start")
 
