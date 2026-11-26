@@ -59,23 +59,32 @@ orchestrator = Orchestrator(
 )
 ```
 
-## Mixing MQTT and NATS
+## The web UI and MQTT actors
 
-`NatsTransport` maps topic names the way the NATS server's own MQTT support does:
-`antikythera/task/start` is the subject `antikythera.task.start`. With MQTT enabled on the
-server, actors that speak MQTT connect to it unchanged and work with an orchestrator on
-NATS. That lets a deployment move to NATS one piece at a time:
+The web UI connects with MQTT over WebSocket (`ws://<host>:8083/mqtt`), and existing
+actors may speak plain MQTT. The NATS server serves both: enable its MQTT and WebSocket
+listeners, and they exchange messages with the orchestrator on NATS unchanged.
+`NatsTransport` maps topic names the way the server's MQTT support does
+(`antikythera/task/start` is the subject `antikythera.task.start`), so a deployment can
+also move to NATS one piece at a time.
 
 ```
 # nats.conf
 server_name: antikythera
-jetstream {}
+jetstream { store_dir: /data }
 mqtt { port: 1883 }
+websocket { port: 8083, no_tls: true }
 ```
 
 ```bash
-docker run -p 4222:4222 -p 1883:1883 -v $PWD/nats.conf:/nats.conf nats -c /nats.conf
+docker run -p 4222:4222 -p 1883:1883 -p 8083:8083 -v $PWD/nats.conf:/nats.conf nats -c /nats.conf
 ```
+
+The WebSocket listener hands connections on the `/mqtt` path to the MQTT layer, so the
+browser needs no change. This was tested with the web UI answering a `user_prompt` task
+on NATS 2.10 and 2.15, with no MQTT broker and no Redis running. In production, put the
+WebSocket listener behind TLS (a `tls` block in `websocket`, or a reverse proxy), as with
+any broker.
 
 The NATS transport lives in Antikythera for now (`antikythera.transports.nats`) and is
 meant to move to `compas_eve` once it has proven itself.
