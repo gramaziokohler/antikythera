@@ -6,7 +6,7 @@ def check_transport(transport: Transport) -> Transport:
     """Check that ``transport`` can carry Antikythera's messages.
 
     The orchestrator and the agent launchers exchange protobuf messages, so the
-    transport they share must use [ProtobufMessageCodec][compas_eve.codecs.ProtobufMessageCodec].
+    transport they share must use `compas_eve.codecs.ProtobufMessageCodec`.
     compas_eve transports default to JSON, which fails only once the first message is sent.
 
     Parameters
