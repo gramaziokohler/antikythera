@@ -10,8 +10,8 @@ from typing import Optional
 from antikythera.models import Blueprint
 from antikythera.models import Dependency
 from antikythera.models import Task
-from antikythera_orchestrator.storage import RedisStorage
 from antikythera_orchestrator.storage import StorageBackend
+from antikythera_orchestrator.storage import default_storage
 
 if TYPE_CHECKING:
     from antikythera.models import BlueprintSession
@@ -54,12 +54,13 @@ class Sequencer(ABC):
         The session the dynamic task belongs to.
     storage : StorageBackend, optional
         Where to read models and nesting results from. The orchestrator passes its own
-        backend; defaults to [RedisStorage][antikythera_orchestrator.storage.backends.RedisStorage].
+        backend; defaults to the configured one, see
+        [default_storage][antikythera_orchestrator.storage.backends.default_storage].
     """
 
     def __init__(self, session: "BlueprintSession", storage: Optional[StorageBackend] = None):
         self.session = session
-        self.storage: StorageBackend = storage or RedisStorage()
+        self.storage: StorageBackend = storage or default_storage()
 
     @abstractmethod
     def expand(self, task: Task, blueprint: Blueprint) -> Blueprint:

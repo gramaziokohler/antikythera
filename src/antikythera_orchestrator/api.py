@@ -40,12 +40,10 @@ from antikythera.models import BlueprintSessionState
 from antikythera.models import Task
 from antikythera.models import TaskState
 from antikythera_orchestrator.orchestrator import Orchestrator
-from antikythera_orchestrator.storage import BlueprintStorage
-from antikythera_orchestrator.storage import ModelStorage
 from antikythera_orchestrator.storage import RequestedBlueprintNotFound
 from antikythera_orchestrator.storage import RequestedModelNotFound
 from antikythera_orchestrator.storage import RequestedSessionNotFound
-from antikythera_orchestrator.storage import SessionStorage
+from antikythera_orchestrator.storage import default_storage
 
 LOG = logging.getLogger(__name__)
 
@@ -353,7 +351,7 @@ def _resolve_session_id(request: StartBlueprintRequest) -> str:
     with _sessions_lock:
         if session_id in _sessions:
             raise HTTPException(status_code=409, detail=f"A session with ID '{session_id}' already exists.")
-    with SessionStorage(session_id) as storage:
+    with default_storage().session_storage(session_id) as storage:
         if storage.load_session_with_metadata() is not None:
             raise HTTPException(status_code=409, detail=f"A session with ID '{session_id}' already exists in storage.")
 
@@ -362,7 +360,7 @@ def _resolve_session_id(request: StartBlueprintRequest) -> str:
 
 def _start_blueprint_session(request: StartBlueprintRequest) -> str:
     try:
-        with BlueprintStorage() as storage:
+        with default_storage().blueprint_storage() as storage:
             blueprint = storage.get_blueprint(request.blueprint_id)
 
     except Exception as exc:  # pragma: no cover - runtime safety
@@ -402,11 +400,11 @@ def list_sessions(
     limit: int = Query(10, ge=1, le=1000, description="Number of sessions to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
 ) -> list[SessionInfo]:
-    sessions_in_storage = SessionStorage.list_sessions(limit=limit, offset=offset)
+    sessions_in_storage = default_storage().list_sessions(limit=limit, offset=offset)
 
     session_infos = []
     for session_id in sessions_in_storage:
-        with SessionStorage(session_id) as storage:
+        with default_storage().session_storage(session_id) as storage:
             session_data = storage.load_session_with_metadata()
             if not session_data:
                 continue
@@ -448,7 +446,7 @@ def list_sessions(
 @app.get("/blueprints", response_model=list[BlueprintInfo])
 def list_blueprints() -> list[BlueprintInfo]:
     try:
-        with BlueprintStorage() as storage:
+        with default_storage().blueprint_storage() as storage:
             blueprints_metadata = storage.list_blueprints()
     except Exception as exc:
         LOG.exception("Failed to fetch blueprints from database")
@@ -523,7 +521,7 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
         )
 
     try:
-        with BlueprintStorage() as storage:
+        with default_storage().blueprint_storage() as storage:
             storage.add_blueprint(blueprint)
     except Exception as exc:
         LOG.exception("Failed to save blueprint to database")
@@ -535,7 +533,7 @@ async def upload_blueprint(file: UploadFile) -> UploadBlueprintResponse:
 @app.delete("/blueprints/{blueprint_id}", response_model=DeleteBlueprintResponse)
 def delete_blueprint(blueprint_id: str) -> DeleteBlueprintResponse:
     try:
-        with BlueprintStorage() as storage:
+        with default_storage().blueprint_storage() as storage:
             storage.remove_blueprint(blueprint_id)
     except RequestedBlueprintNotFound as exc:
         LOG.warning(f"Blueprint {blueprint_id} not found: {exc}")
@@ -563,7 +561,7 @@ def delete_session(session_id: str) -> DeleteSessionResponse:
             del _sessions[session_id]
 
     try:
-        with SessionStorage(session_id) as storage:
+        with default_storage().session_storage(session_id) as storage:
             storage.remove_session()
     except RequestedSessionNotFound as exc:
         LOG.warning(f"Session {session_id} not found: {exc}")
@@ -611,7 +609,7 @@ def _enrich_data_with_types(data_dict: Dict) -> Dict:
 @app.get("/sessions/{session_id}/data", response_model=SessionDataResponse)
 def get_session_data(session_id: str) -> SessionDataResponse:
     # Always load from storage to ensure consistency
-    with SessionStorage(session_id) as storage:
+    with default_storage().session_storage(session_id) as storage:
         session = storage.load_session()
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -665,7 +663,7 @@ def stop_session(session_id: str) -> SessionActionResponse:
 
 
 def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
-    with SessionStorage(session_id) as session_storage:
+    with default_storage().session_storage(session_id) as session_storage:
         session = session_storage.load_session()
         if not session:
             raise RequestedSessionNotFound(f"session id: {session_id}")
@@ -855,7 +853,7 @@ def reset_task(session_id: str, request: ResetTaskRequest) -> SessionActionRespo
 
         return SessionActionResponse(session_id=session_id, message=f"Reset {len(reset_tasks)} task(s) to PENDING.")
 
-    with SessionStorage(session_id) as storage:
+    with default_storage().session_storage(session_id) as storage:
         session_data = storage.load_session()
         if not session_data:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -905,7 +903,7 @@ def reset_scope(session_id: str, scope_name: str) -> SessionActionResponse:
 
     # TODO: this resets scope tasks in dead sessions, it's shitty because it breaks encapsulation
     # and also I'm not sure if this really needs to be possible. leaving for now for reasons, but probably needs to be removed.
-    with SessionStorage(session_id) as storage:
+    with default_storage().session_storage(session_id) as storage:
         session_data = storage.load_session()
         if not session_data:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -957,7 +955,7 @@ def skip_task(session_id: str, request: SkipTaskRequest) -> SessionActionRespons
 
         return SessionActionResponse(session_id=session_id, message=f"Skipped {len(skipped_tasks)} task(s).")
 
-    with SessionStorage(session_id) as storage:
+    with default_storage().session_storage(session_id) as storage:
         session_data = storage.load_session()
         if not session_data:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -993,7 +991,7 @@ async def _handle_upload_json_file(file: UploadFile) -> list[str]:
 
     model_id = f"{Path(file.filename).stem}_{str(model_data.guid)[0:8]}"
     try:
-        with ModelStorage() as storage:
+        with default_storage().model_storage() as storage:
             storage.add_model(model_id, model_data)
     except Exception as exc:
         LOG.exception("Failed to save model to database")
@@ -1028,7 +1026,7 @@ async def _handle_upload_cog_file(file: UploadFile) -> list[str]:
 
         items = manifest.get("items", [])
 
-        with ModelStorage() as storage:
+        with default_storage().model_storage() as storage:
             for item in items:
                 model_file = item.get("model")
                 nesting_file = item.get("nesting")
@@ -1105,7 +1103,7 @@ def list_models() -> list[str]:
         A list of model IDs.
     """
     try:
-        with ModelStorage() as storage:
+        with default_storage().model_storage() as storage:
             return storage.list_models()
     except Exception as exc:
         LOG.exception("Failed to fetch models from database")
@@ -1132,7 +1130,7 @@ def delete_model(model_id: str) -> DeleteModelResponse:
         If the model is not found or cannot be deleted.
     """
     try:
-        with ModelStorage() as storage:
+        with default_storage().model_storage() as storage:
             storage.remove_model(model_id)
     except RequestedModelNotFound as exc:
         LOG.warning(f"Model {model_id} not found: {exc}")
@@ -1164,7 +1162,7 @@ def get_model(model_id: str):
         If the model is not found.
     """
     try:
-        with ModelStorage() as storage:
+        with default_storage().model_storage() as storage:
             model = storage.get_model(model_id)
     except RequestedModelNotFound:
         raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
@@ -1198,7 +1196,7 @@ def get_blueprint(blueprint_id: str):
         If the blueprint is not found.
     """
     try:
-        with BlueprintStorage() as storage:
+        with default_storage().blueprint_storage() as storage:
             blueprint = storage.get_blueprint(blueprint_id)
         return Response(content=json_dumps(blueprint), media_type="application/json")
     except RequestedBlueprintNotFound:
@@ -1210,7 +1208,7 @@ def get_blueprint(blueprint_id: str):
 
 @app.get("/sessions/{session_id}/blueprint")
 def get_session_root_blueprint(session_id: str):
-    with SessionStorage(session_id) as session_storage:
+    with default_storage().session_storage(session_id) as session_storage:
         session = session_storage.load_session()
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -1223,7 +1221,7 @@ def get_session_root_blueprint(session_id: str):
 
 @app.get("/sessions/{session_id}/blueprint/{blueprint_id}")
 def get_session_blueprint(session_id: str, blueprint_id: str):
-    with SessionStorage(session_id) as session_storage:
+    with default_storage().session_storage(session_id) as session_storage:
         session = session_storage.load_session()
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -1259,7 +1257,7 @@ def get_session_details(session_id: str):
         If the session is not found.
     """
     # Always load from storage
-    with SessionStorage(session_id) as session_storage:
+    with default_storage().session_storage(session_id) as session_storage:
         session = session_storage.load_session()
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -1290,7 +1288,7 @@ def get_blueprint_context(session_id: str, blueprint_id: str):
     HTTPException
         If the session or blueprint is not found.
     """
-    with SessionStorage(session_id) as storage:
+    with default_storage().session_storage(session_id) as storage:
         session = storage.load_session()
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -1341,7 +1339,7 @@ async def stream_session_events(session_id: str):
     session progresses.  The connection stays open until the session reaches a
     terminal state or the client disconnects.
     """
-    with SessionStorage(session_id) as storage:
+    with default_storage().session_storage(session_id) as storage:
         if storage.load_session() is None:
             raise HTTPException(status_code=404, detail="Session not found")
 

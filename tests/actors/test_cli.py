@@ -150,3 +150,10 @@ def test_describe_exits_zero_when_every_plugin_imports(monkeypatch, capsys):
     catalog = json.loads(capsys.readouterr().out)
     assert isinstance(catalog, list)
     assert "system" in {entry["actor"] for entry in catalog}
+
+
+def test_run_parses_nats_transport():
+    args = cli.build_parser().parse_args(["run", "--transport", "nats", "--nats-url", "nats://example:4222"])
+
+    assert args.transport == "nats"
+    assert args.nats_url == "nats://example:4222"

@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Actors can be put on the network without installing anything: `uvx --from antikythera-sdk antikythera-actors run --actor my_actor.py` runs only the actors defined in that file (or module). `--only` picks among installed actor plugins, and `--tls` and `--mqtt-transport` reach remote brokers. The broker defaults now come from `MQTT_BROKER_HOST` and `MQTT_BROKER_PORT`.
 - `antikythera_actors.run(*actors)`, so an actor file can start itself the way an MCP server does with `mcp.run()`; with an inline script header it runs with `uv run my_actor.py`. `ActorLauncher` takes `actor_types` and `discover` to choose which actors it runs.
 - Guides for running actors and for embedding the orchestrator in an application.
+- NATS backend, in the new `nats` extra: `antikythera.transports.nats.NatsTransport`, a compas_eve transport over NATS (kept in Antikythera until it moves to compas_eve), and `NatsStorage`, a storage backend on JetStream object stores. One NATS server with JetStream can replace both the MQTT broker and Redis. Topic names map to subjects the way the NATS server's MQTT support maps them, so MQTT actors work with a NATS orchestrator through it. See the "Running on NATS" guide.
+- `ANTIKYTHERA_TRANSPORT` (`mqtt`, `nats`) and `ANTIKYTHERA_STORAGE` (`redis`, `nats`, `memory`) choose the transport and storage of the service and the actors; `antikythera-actors run` also takes `--transport` and `--nats-url`. The HTTP API now goes through the configured storage backend instead of the Redis classes, and `StorageBackend` gained `list_sessions`.
 - `examples/embedded.py`, `examples/greeter_actor.py` and `examples/README.md`, an index of what each example shows and needs. `tests/test_examples.py` runs every example blueprint in-process, so they keep working.
 
 ### Changed
@@ -30,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The Redis backend kept a model's nesting result after the model was removed.
 - An actor launcher could claim a task for the wrong actor: claims matched the tool name only, so any actor with a tool of the same name (say `notify` or `double`) took tasks meant for another actor type. Tasks now go only to actors of the type in their `type`.
 - `Orchestrator.stop()` raised `KeyError` over MQTT when called right after a session completed, because the session end calls it on the transport's thread at the same time. It is now serialized.
 - Example blueprints that did not run: `scope_skip.json` always failed because its condition read a value nothing set (an `init` task now seeds it); `toy_problem_6.json` used `blueprint` instead of `blueprint_id` and a sequencer that needs a nesting result (now `basic_sequencer`, one notification per model element); `toy_problem_12_notification.json` had the same id as `toy_problem_10_competitive.json`, so uploading one replaced the other; examples 10, 12 and 13 declared a `start_time` output that `system.start` never produces. Every example now has a name and description saying what it shows.

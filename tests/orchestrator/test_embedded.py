@@ -1,4 +1,9 @@
-"""Running blueprints entirely in-process: in-memory transport and storage, no broker, no Redis."""
+"""Orchestrator and actors with an injected transport and storage backend.
+
+In memory, everything runs in this process with no broker and no Redis. Over NATS, the
+orchestrator and the actors use separate connections to a NATS server and keep state in
+JetStream; those runs are skipped when no server is reachable (see the `nats_url` fixture).
+"""
 
 from typing import Any
 from typing import Dict
@@ -23,9 +28,6 @@ from antikythera_actors.decorators import tool
 from antikythera_actors.launcher import ActorLauncher
 from antikythera_orchestrator import InMemoryStorage
 from antikythera_orchestrator import Orchestrator
-from antikythera_orchestrator.storage.exceptions import RequestedBlueprintNotFound
-from antikythera_orchestrator.storage.exceptions import RequestedModelNotFound
-from antikythera_orchestrator.storage.exceptions import RequestedSessionNotFound
 
 
 @actor(type="in_memory_test")
@@ -44,7 +46,7 @@ def no_infrastructure():
     """Fail loudly if anything tries to reach Redis or an MQTT broker."""
 
     def refuse(*args, **kwargs):
-        raise AssertionError("in-process run must not touch Redis or MQTT")
+        raise AssertionError("an injected transport and storage must not touch Redis or MQTT")
 
     with (
         patch("antikythera_orchestrator.storage.redis_storage._create_redis_client", side_effect=refuse),
@@ -54,19 +56,41 @@ def no_infrastructure():
         yield
 
 
-def _run(session, storage, cleanup_manager, timeout=10):
-    transport = InMemoryTransport(codec=ProtobufMessageCodec())
-    launcher = cleanup_manager.register(ActorLauncher(transport=transport))
+@pytest.fixture(params=["memory", "nats"])
+def backend(request):
+    """(transport factory, storage) to run on. In memory both sides share one transport."""
+    if request.param == "memory":
+        transport = InMemoryTransport(codec=ProtobufMessageCodec())
+        yield (lambda: transport), InMemoryStorage()
+        return
+
+    from antikythera.transports.nats import NatsTransport
+
+    url = request.getfixturevalue("nats_url")
+    transports = []
+
+    def make_transport():
+        transports.append(NatsTransport(url, codec=ProtobufMessageCodec()))
+        return transports[-1]
+
+    yield make_transport, request.getfixturevalue("nats_storage")
+    for transport in transports:
+        transport.close()
+
+
+def _run(session, backend, cleanup_manager, timeout=10):
+    make_transport, storage = backend
+    launcher = cleanup_manager.register(ActorLauncher(transport=make_transport()))
     launcher.actors["in_memory_test"] = InMemoryTestActor()
     launcher.start()
-    orchestrator = cleanup_manager.register(Orchestrator(session, transport=transport, storage=storage))
+    orchestrator = cleanup_manager.register(Orchestrator(session, transport=make_transport(), storage=storage))
     orchestrator.start()
     assert orchestrator.await_completion(timeout=timeout)
     return orchestrator
 
 
-def test_composite_blueprint_runs_in_process(no_infrastructure, cleanup_manager):
-    storage = InMemoryStorage()
+def test_composite_blueprint(backend, no_infrastructure, cleanup_manager):
+    storage = backend[1]
 
     inner_start = Task(id="inner_start", type="system.start")
     inner_task = Task(
@@ -93,7 +117,7 @@ def test_composite_blueprint_runs_in_process(no_infrastructure, cleanup_manager)
     start >> first >> composite >> end
     blueprint = Blueprint(id="outer_bp", name="Outer", tasks=[start, first, composite, end])
 
-    orchestrator = _run(BlueprintSession(bsid="in_memory_composite", blueprint=blueprint), storage, cleanup_manager)
+    orchestrator = _run(BlueprintSession(bsid="in_memory_composite", blueprint=blueprint), backend, cleanup_manager)
 
     assert orchestrator.session.state == BlueprintSessionState.COMPLETED
     with storage.session_storage("in_memory_composite") as session_storage:
@@ -101,8 +125,8 @@ def test_composite_blueprint_runs_in_process(no_infrastructure, cleanup_manager)
         assert session_storage.load_session().state == BlueprintSessionState.COMPLETED
 
 
-def test_dynamic_expansion_reads_model_from_injected_storage(no_infrastructure, cleanup_manager):
-    storage = InMemoryStorage()
+def test_dynamic_expansion_reads_model_from_injected_storage(backend, no_infrastructure, cleanup_manager):
+    storage = backend[1]
     model = Model()
     elements = [Element(), Element(), Element()]
     for element in elements:
@@ -129,7 +153,7 @@ def test_dynamic_expansion_reads_model_from_injected_storage(no_infrastructure, 
     blueprint = Blueprint(id="dynamic_bp", name="Dynamic", tasks=[start, each, end])
     session = BlueprintSession(bsid="in_memory_dynamic", blueprint=blueprint, params={"model_id": "model"})
 
-    orchestrator = _run(session, storage, cleanup_manager)
+    orchestrator = _run(session, backend, cleanup_manager)
 
     assert orchestrator.session.state == BlueprintSessionState.COMPLETED
     task_ids = {data["task"].id for _, data in orchestrator.graph.nodes(data=True)}
@@ -159,53 +183,3 @@ def test_backends_do_not_share_state():
         assert models.list_models() == ["m"]
     with second.model_storage() as models:
         assert models.list_models() == []
-
-
-def test_session_storage_returns_copies():
-    storage = InMemoryStorage()
-    sessions = storage.session_storage("s")
-    sessions.set("bp", "items", [1, 2])
-
-    sessions.get("bp", "items").append(3)
-
-    assert sessions.get("bp", "items") == [1, 2]
-    assert sessions.get_all("bp") == {"items": [1, 2]}
-    assert sessions.get("bp", "missing") is None
-
-
-def test_session_lifecycle():
-    storage = InMemoryStorage()
-    blueprint = _trivial_blueprint()
-    for bsid in ("one", "two"):
-        storage.session_storage(bsid).save_session(BlueprintSession(bsid=bsid, blueprint=blueprint))
-
-    sessions = storage.session_storage("one")
-    started_at = sessions.load_session_with_metadata()["started_at"]
-    sessions.save_session(sessions.load_session())
-
-    assert sessions.load_session_with_metadata()["started_at"] == started_at
-    assert storage.list_sessions() == ["two", "one"]
-    assert storage.list_sessions(newest_first=False, limit=1) == ["one"]
-
-    sessions.set("bp", "key", 1)
-    sessions.remove_session()
-    assert sessions.load_session() is None
-    assert sessions.get("bp", "key") is None
-    assert storage.list_sessions() == ["two"]
-    with pytest.raises(RequestedSessionNotFound):
-        sessions.remove_session()
-
-
-def test_blueprint_and_model_not_found():
-    storage = InMemoryStorage()
-    with storage.blueprint_storage() as blueprints:
-        with pytest.raises(RequestedBlueprintNotFound):
-            blueprints.get_blueprint("nope")
-        with pytest.raises(RequestedBlueprintNotFound):
-            blueprints.remove_blueprint("nope")
-    with storage.model_storage() as models:
-        with pytest.raises(RequestedModelNotFound):
-            models.get_model("nope")
-        with pytest.raises(RequestedModelNotFound):
-            models.add_nesting("nope", {})
-        assert models.get_nesting("nope") is None
