@@ -401,7 +401,7 @@ class Orchestrator:
     from compas_eve.codecs import ProtobufMessageCodec
     from compas_eve.memory import InMemoryTransport
 
-    from antikythera_actors.launcher import ActorLauncher
+    from antikythera_actors import ActorLauncher
     from antikythera_orchestrator import InMemoryStorage
     from antikythera_orchestrator import Orchestrator
 
@@ -458,6 +458,9 @@ class Orchestrator:
         self.session: BlueprintSession = session
         self.graph: Graph = None
         self._completion_event = threading.Event()
+        # stop() runs both on the caller's thread and on the transport's thread when a
+        # session ends; unsubscribing from MQTT twice at once fails, so it is serialized.
+        self._stop_lock = threading.Lock()
         self._task_state_callbacks: list = []
         self._session_state_callbacks: list = []
         self._datastore_update_callbacks: list = []
@@ -779,6 +782,10 @@ class Orchestrator:
 
     def stop(self) -> None:
         """Stops the orchestrator."""
+        with self._stop_lock:
+            self._stop()
+
+    def _stop(self) -> None:
         # these are idempotent, so safer to always call.
         self.task_completion_subscriber.unsubscribe()
         self.task_claim_subscriber.unsubscribe()

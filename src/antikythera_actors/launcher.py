@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from typing import Iterable
 from typing import Optional
 
 import coolname
@@ -69,6 +70,13 @@ class ActorLauncher:
         The MQTT socket transport, ``"tcp"`` or ``"websockets"``. Ignored when ``transport`` is given.
     tls : bool, optional
         Connect to the MQTT broker over TLS. Ignored when ``transport`` is given.
+    actor_types : iterable of str, optional
+        Only run the actors of these types. Defaults to every registered actor. Raises
+        ``ValueError`` if one of them is not registered.
+    discover : bool, optional
+        Discover actors installed as plugins (the ``antikythera.actors`` entry point group)
+        before starting. Turn it off to run only actors already imported, for example
+        the ones defined in the running script.
     transport : compas_eve.Transport, optional
         The transport to exchange messages with the orchestrator over. It must use
         ``ProtobufMessageCodec``. For example a
@@ -84,10 +92,14 @@ class ActorLauncher:
         mqtt_transport: str = "tcp",
         tls: bool = False,
         *,
+        actor_types: Optional[Iterable[str]] = None,
+        discover: bool = True,
         transport: Optional[Transport] = None,
     ):
         self.launcher_id = coolname.generate_slug(4)
         self.sys_only = sys_only
+        self.actor_types = None if actor_types is None else set(actor_types)
+        self.discover = discover
         self.pending_claims = {}  # task_id -> Task
         self.active_contexts = {}  # task_id -> ExecutionContext
 
@@ -151,12 +163,19 @@ class ActorLauncher:
     def _initialize_actors(self):
         from antikythera_actors.decorators import list_registered_actors
 
-        _ensure_actors()
+        if self.discover:
+            _ensure_actors()
 
         registered_actors = list_registered_actors()
         if self.sys_only:
             registered_actors = {k: v for k, v in registered_actors.items() if k == "system"}
             LOG.info(f"{Colors.WARNING}--sys-only: restricting to system actors only.{Colors.ENDC}")
+        if self.actor_types is not None:
+            missing = self.actor_types - set(registered_actors)
+            if missing:
+                available = ", ".join(sorted(registered_actors)) or "none"
+                raise ValueError(f"Unknown actor type(s): {', '.join(sorted(missing))}. Registered: {available}.")
+            registered_actors = {k: v for k, v in registered_actors.items() if k in self.actor_types}
         for actor_type, actor_class in registered_actors.items():
             self.actors[actor_type] = actor_class()
             LOG.info(f"Initialized {actor_class.__name__} for type '{actor_type}' with {len(self.actors[actor_type].list_tools())} tools.")
