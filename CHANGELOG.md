@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Actors can be put on the network without installing anything: `uvx --from antikythera-sdk antikythera-actors run --actor my_actor.py` runs only the actors defined in that file (or module). `--only` picks among installed actor plugins, and `--tls` and `--mqtt-transport` reach remote brokers. The broker defaults now come from `MQTT_BROKER_HOST` and `MQTT_BROKER_PORT`.
 - `antikythera_actors.run(*actors)`, so an actor file can start itself the way an MCP server does with `mcp.run()`; with an inline script header it runs with `uv run my_actor.py`. `ActorLauncher` takes `actor_types` and `discover` to choose which actors it runs.
 - Guides for running actors and for embedding the orchestrator in an application.
+- `examples/embedded.py`, `examples/greeter_actor.py` and `examples/README.md`, an index of what each example shows and needs. `tests/test_examples.py` runs every example blueprint in-process, so they keep working.
 
 ### Changed
 
@@ -30,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `Orchestrator.stop()` raised `KeyError` over MQTT when called right after a session completed, because the session end calls it on the transport's thread at the same time. It is now serialized.
+- Example blueprints that did not run: `scope_skip.json` always failed because its condition read a value nothing set (an `init` task now seeds it); `toy_problem_6.json` used `blueprint` instead of `blueprint_id` and a sequencer that needs a nesting result (now `basic_sequencer`, one notification per model element); `toy_problem_12_notification.json` had the same id as `toy_problem_10_competitive.json`, so uploading one replaced the other; examples 10, 12 and 13 declared a `start_time` output that `system.start` never produces. Every example now has a name and description saying what it shows.
 - `antikythera-actors` flushes its startup messages, so they show up when its output is piped or logged.
 - The `antikythera` Docker image sets `PYTHONUNBUFFERED=1`. The agent launcher prints to stdout, which Python block-buffers when it is not a terminal, so `docker compose logs agents` stayed empty for the life of the container.
 
@@ -37,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The `antikythera_ghpython` package and its single Grasshopper component (`AKT_Start_Blueprint`).
 - The unmaintained immudb storage backend (`antikythera_orchestrator.storage.immudb_storage`), its `IMMUDB_*` settings, the `immudb-py` dependency and `scripts/dump_session_data.py`. Redis has been the active backend since 0.1.0.
+- Example blueprints that depended on actors from other projects: `toy_problem_2.json` (`fall_demonstrator`) and `toy_problem_5.json` with its inner blueprint (`compas_fab.moveit`).
 - The leftover Sphinx `docs/conf.py`, and the unused `attrs`, `black` and `wheel` development dependencies.
 
 ## [0.5.1] 2026-08-24

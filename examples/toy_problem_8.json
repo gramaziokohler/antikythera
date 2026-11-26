@@ -1,8 +1,8 @@
 {
     "version": "1.0",
     "id": "toy-problem-8",
-    "name": "Toy Problem 8",
-    "description": "Conditional execution based on previous result",
+    "name": "Toy Problem 8: Conditional task",
+    "description": "A second confirmation runs only if the first answer was Yes (condition). The final task depends on it finish-to-start, so it runs either way, and falls back to the literal value N/A when the second question was skipped.",
     "tasks": [
         {
             "id": "start",

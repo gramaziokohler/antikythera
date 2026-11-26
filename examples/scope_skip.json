@@ -2,11 +2,34 @@
     "version": "1.0",
     "id": "scope_skip_example",
     "name": "Scope – Skip Policy",
-    "description": "Demonstrates the skip-scope policy. The scope runs only when the condition on scope_open evaluates to True. If the condition is False the orchestrator marks every task inside the scope as SKIPPED and execution continues past scope_close without interruption.",
+    "description": "Demonstrates the skip-scope policy. The scope runs only when the condition on scope_open evaluates to True. If the condition is False the orchestrator marks every task inside the scope as SKIPPED and execution continues past scope_close without interruption. The condition reads needs_processing, which init seeds as a declared output: it is false, so the scope is skipped. Set it to true to run the scope.",
     "tasks": [
         {
             "id": "start",
             "type": "system.start"
+        },
+        {
+            "id": "init",
+            "type": "system.sleep",
+            "description": "Seed the flag the scope condition reads. Set its value to true to run the scope instead of skipping it.",
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ],
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 0
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "needs_processing",
+                    "value": false,
+                    "type_hint": "bool"
+                }
+            ]
         },
         {
             "id": "scope_open",
@@ -22,7 +45,7 @@
             ],
             "depends_on": [
                 {
-                    "id": "start"
+                    "id": "init"
                 }
             ]
         },

@@ -1,8 +1,8 @@
 {
     "version": "1.0",
     "id": "toy-problem-1",
-    "name": "Toy Problem 1",
-    "description": "A sample fabrication process definition",
+    "name": "Toy Problem 1: Parallel branches",
+    "description": "Two branches run in parallel after start: one asks for a value on the terminal of the user_interaction actor, the other sleeps. The output task waits for both and prints the value next to a COMPAS frame given as a literal input.",
     "tasks": [
         {
             "id": "start",

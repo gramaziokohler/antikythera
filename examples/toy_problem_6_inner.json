@@ -1,8 +1,8 @@
 {
     "version": "1.0",
     "id": "TP6-inner",
-    "name": "Toy Problem 6 Inner",
-    "description": "Inner blueprint for Toy Problem 6 to print element guids",
+    "name": "Toy Problem 6: Inner blueprint",
+    "description": "Inner blueprint of Toy Problem 6, run once per model element: shows a notification with the element_id from the expansion context.",
     "tasks": [
         {
             "id": "start",
@@ -16,23 +16,21 @@
         },
         {
             "id": "A1",
-            "type": "user_interaction.user_output",
-            "description": "Print element ID",
-            "inputs": [
-                {
-                    "name": "element",
-                    "type_hint": "dict"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "result",
-                    "type_hint": "str"
-                }
-            ],
+            "type": "user_interaction.notify",
+            "description": "Show which element this run is for",
             "depends_on": [
                 {
                     "id": "start"
+                }
+            ],
+            "params": [
+                {
+                    "name": "title",
+                    "value": "Element"
+                },
+                {
+                    "name": "message",
+                    "value": "Processing element {element_id}"
                 }
             ]
         },
