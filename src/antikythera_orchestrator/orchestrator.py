@@ -19,6 +19,7 @@ from compas.datastructures import Graph
 from compas_eve import Publisher
 from compas_eve import Subscriber
 from compas_eve import Topic
+from compas_eve import Transport
 from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
 from compas_model.models import Model
@@ -40,14 +41,14 @@ from antikythera.models import TaskError
 from antikythera.models import TaskState
 from antikythera.models.conversions import outputs_to_keys
 from antikythera.models.conversions import params_to_dict
+from antikythera.transport import check_transport
 
 from .conditionals import safe_eval_condition
 from .scopes import ScopeConditionError
 from .scopes import ScopeRegistry
 from .sequencers import SequencerRegistry
-from .storage import BlueprintStorage
-from .storage import ModelStorage
-from .storage import SessionStorage
+from .storage import RedisStorage
+from .storage import StorageBackend
 
 LOG = logging.getLogger(__name__)
 
@@ -392,17 +393,67 @@ class Orchestrator:
     The orchestrator is responsible for managing the state of a blueprint session,
     and coordinating the execution of tasks by agents.
 
+    By default it talks to agents over MQTT and keeps its state in Redis. Pass a
+    ``transport`` and a ``storage`` backend to run it somewhere else, for example
+    entirely inside the current process:
+
+    ```python
+    from compas_eve.codecs import ProtobufMessageCodec
+    from compas_eve.memory import InMemoryTransport
+
+    from antikythera_agents.launcher import AgentLauncher
+    from antikythera_orchestrator import InMemoryStorage
+    from antikythera_orchestrator import Orchestrator
+
+    transport = InMemoryTransport(codec=ProtobufMessageCodec())
+    launcher = AgentLauncher(transport=transport)
+    launcher.start()
+
+    orchestrator = Orchestrator(session, transport=transport, storage=InMemoryStorage())
+    orchestrator.start()
+    orchestrator.await_completion()
+    ```
+
+    Parameters
+    ----------
+    session : BlueprintSession
+        The blueprint session to execute.
+    broker_host : str, optional
+        Host of the MQTT broker. Ignored when ``transport`` is given.
+    broker_port : int, optional
+        Port of the MQTT broker. Ignored when ``transport`` is given.
+    transport : compas_eve.Transport, optional
+        The transport to exchange messages with agents over. It must use
+        ``ProtobufMessageCodec``, and agent launchers must use the same transport, or one
+        connected to the same network. Defaults to MQTT on
+        ``broker_host``:``broker_port``.
+    storage : StorageBackend, optional
+        Where the session, blueprints and models are stored. Defaults to
+        [RedisStorage][antikythera_orchestrator.storage.backends.RedisStorage].
+
     Attributes
     ----------
     session : BlueprintSession
         The blueprint session to execute.
+    transport : compas_eve.Transport
+        The transport messages to agents go over.
+    storage : StorageBackend
+        The storage backend the orchestrator reads from and writes to.
 
     """
 
     _INSTANCES = []
     _LOCK = threading.Lock()
 
-    def __init__(self, session: BlueprintSession, broker_host="127.0.0.1", broker_port=1883) -> None:
+    def __init__(
+        self,
+        session: BlueprintSession,
+        broker_host: str = "127.0.0.1",
+        broker_port: int = 1883,
+        *,
+        transport: Optional[Transport] = None,
+        storage: Optional[StorageBackend] = None,
+    ) -> None:
         super(Orchestrator, self).__init__()
         self.session: BlueprintSession = session
         self.graph: Graph = None
@@ -411,7 +462,7 @@ class Orchestrator:
         self._session_state_callbacks: list = []
         self._datastore_update_callbacks: list = []
 
-        self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
+        self.transport = check_transport(transport) if transport else _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec())
         self.task_start = Topic("antikythera/task/start")
         self.task_completed = Topic("antikythera/task/completed")
         self.task_claim = Topic("antikythera/task/claim")
@@ -428,8 +479,9 @@ class Orchestrator:
 
         # Session data is namespaced on BSID
         # but also most operations add blueprint ID to the key
-        self.session_storage = SessionStorage(self.session.bsid)
-        self.blueprint_storage = BlueprintStorage()
+        self.storage: StorageBackend = storage or RedisStorage()
+        self.session_storage = self.storage.session_storage(self.session.bsid)
+        self.blueprint_storage = self.storage.blueprint_storage()
 
         existing_session = self.session_storage.load_session()
         if existing_session:
@@ -842,7 +894,7 @@ class Orchestrator:
         model: Optional[Model] = None
         nesting = None
         if model_id is not None:
-            with ModelStorage() as storage:
+            with self.storage.model_storage() as storage:
                 model = storage.get_model(model_id)
                 nesting = storage.get_nesting(model_id)
         return model, nesting
@@ -1238,7 +1290,7 @@ class Orchestrator:
                     dynamic_params = blueprint_params.get("dynamic") or {}
 
                     sequencer_name = dynamic_params["sequencer"]
-                    sequencer = SequencerRegistry.get_sequencer(sequencer_name, self.session)
+                    sequencer = SequencerRegistry.get_sequencer(sequencer_name, self.session, storage=self.storage)
 
                     blueprint = sequencer.expand(task, blueprint)
                     expanded_something = True

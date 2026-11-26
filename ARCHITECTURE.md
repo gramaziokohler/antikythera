@@ -60,6 +60,8 @@ The **orchestrator** is in charge of coordinating the execution of a **blueprint
 
 Each task is executed by an **agent**, either remote or local. The overall system has location transparency, so agents can be running in one or more machines in the same or different networks.
 
+The orchestrator and the agent launchers talk over a `compas_eve` transport, MQTT by default. Both accept any other transport whose codec is `ProtobufMessageCodec`, for example `InMemoryTransport` to run a whole blueprint in one process with no broker, or a Zenoh transport for brokerless networking.
+
 The orchestrator runs a single **blueprint** at a time. Each run of a blueprint is identified by a session identifier (`BSID`). A session has a state (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED`). Parallelism can be achieved inside the blueprint itself by using different agents. 
 
 The orchestrator loads a **blueprint** from a file or an API call, and will begin to execute it. The link between the JSON representation and the in-memory execution should not be lost during loading, because it is necessary to allow live modifications of the running graph. Modifications of the graph are append-only operations, so that the orchestrator can always keep track of the original graph. Edge-cases like the deletion of a node should be handled with care, to gracefully deal with loss of data dependency as well as case of a agent running a node while it is deleted.
@@ -284,6 +286,8 @@ Available sequencers:
 ### Data store
 
 The system uses [Redis](https://redis.io/) as persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
+
+The store is reached through a `StorageBackend` (`antikythera_orchestrator.storage.backends`), which hands out the session, blueprint and model storage objects. `RedisStorage` is the default and the one the HTTP API uses. `InMemoryStorage` keeps everything in the current process, for embedding the orchestrator in an application or in tests. Sequencers read models through the backend of the orchestrator that created them.
 
 The data store contains two types of data, internal and external:
 * Orchestrator data, considered internal.

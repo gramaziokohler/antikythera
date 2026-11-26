@@ -142,6 +142,7 @@ nav:
   - API Reference:
       - antikythera:
           - antikythera.io: reference/antikythera.io.md
+          - antikythera.transport: reference/antikythera.transport.md
           - antikythera.models: reference/antikythera.models.md
           - antikythera.models.blueprints: reference/antikythera.models.blueprints.md
           - antikythera.models.tasks: reference/antikythera.models.tasks.md
@@ -163,6 +164,8 @@ nav:
           - antikythera_orchestrator.conditionals: reference/antikythera_orchestrator.conditionals.md
           - antikythera_orchestrator.storage: reference/antikythera_orchestrator.storage.md
           - antikythera_orchestrator.storage.interfaces: reference/antikythera_orchestrator.storage.interfaces.md
+          - antikythera_orchestrator.storage.backends: reference/antikythera_orchestrator.storage.backends.md
+          - antikythera_orchestrator.storage.memory_storage: reference/antikythera_orchestrator.storage.memory_storage.md
           - antikythera_orchestrator.storage.redis_storage: reference/antikythera_orchestrator.storage.redis_storage.md
   - Other:
       - Changelog: changelog.md
