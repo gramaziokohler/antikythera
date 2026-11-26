@@ -1,7 +1,6 @@
 asteval
 fastapi >= 0.111,<1
 httpx
-immudb-py
 mcp[cli] >= 1.0,<2; python_version >= '3.10'
 python-multipart
 redis

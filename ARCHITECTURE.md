@@ -30,7 +30,7 @@
 * `compas`: Core framework, including the `DAG` implementation
 * `compas_pb`: Protocol Buffers integration for COMPAS used for serialization of messages in the Agent Communication Protocol.
 * `compas_model`: Model representation for fabricatable objects
-* `immudb`: Immutable database for persistent data storage, chosen for its append-only nature and data integrity guarantees
+* `Redis`: Persistent data store for sessions, blueprints and models
 * `FastAPI` + `uvicorn`: HTTP interface to the orchestrator service
 
 ### Integration Technologies
@@ -283,7 +283,7 @@ Available sequencers:
 
 ### Data store
 
-The system uses a [`ImmuDB`](https://immudb.io/) as persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
+The system uses [Redis](https://redis.io/) as persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
 
 The data store contains two types of data, internal and external:
 * Orchestrator data, considered internal.
@@ -865,7 +865,7 @@ a required and a defaulted `Param[T]`, a `Context[T]` value, an `Optional[T]` in
 - [ ] Create an AGENT CATALOG
   - [ ] We don't create our own Registry of agents, instead, we create a meta search aggregator to search over Pypi+Docker Hub+GHCR for python package and/or containers. This way we don't need to maintain a registry of agents, but we can still have a discoverability layer for users to find existing agents.
   - [ ] Agent catalog is the result of the aggregation of registry results
-- [ ] Benchmark latency of ImmuDB and/or network communication
+- [ ] Benchmark latency of the data store and/or network communication
 - [ ] AKT Yaml host file (`akt.yaml`) for defining what agents to launch on a specific machine and how to connect to broker
   - [ ] Support launching agents in containers
   - [ ] Support launching Python agents (via `uv run python` command in the same venv as `akt`)

@@ -161,7 +161,7 @@ def _make_scope_while_blueprint(condition: str, max_iterations: int = None) -> B
 # ---------------------------------------------------------------------------
 
 
-def test_scope_skip_when_condition_false(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_scope_skip_when_condition_false(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """When scope_start condition is False the entire scope is skipped."""
     blueprint = _make_scope_skip_blueprint(skip_condition="1 == 2")  # always False → skip
 
@@ -192,7 +192,7 @@ def test_scope_skip_when_condition_false(mock_immudb, mock_transport_orchestrato
     launcher.stop()
 
 
-def test_scope_skip_when_condition_true(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_scope_skip_when_condition_true(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """When scope_start condition is True the scope runs (no skip, no loop)."""
     blueprint = _make_scope_skip_blueprint(skip_condition="1 == 1")  # always True → run
 
@@ -226,7 +226,7 @@ def test_scope_skip_when_condition_true(mock_immudb, mock_transport_orchestrator
 # ---------------------------------------------------------------------------
 
 
-def test_scope_retry_policy(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_scope_retry_policy(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """Scope with retry_policy runs initial + retries times."""
     retries = 2
     blueprint = _make_scope_retry_blueprint(retries=retries)
@@ -253,7 +253,7 @@ def test_scope_retry_policy(mock_immudb, mock_transport_orchestrator, mock_trans
     launcher.stop()
 
 
-def test_scope_retry_zero(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_scope_retry_zero(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """Scope with retries=0 runs exactly once (no looping)."""
     blueprint = _make_scope_retry_blueprint(retries=0)
 
@@ -279,7 +279,7 @@ def test_scope_retry_zero(mock_immudb, mock_transport_orchestrator, mock_transpo
 # ---------------------------------------------------------------------------
 
 
-def test_scope_while_policy_condition(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_scope_while_policy_condition(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """Scope with while_policy loops while condition is True.
 
     The body task increments a counter stored in session storage.
@@ -307,7 +307,7 @@ def test_scope_while_policy_condition(mock_immudb, mock_transport_orchestrator, 
     launcher.stop()
 
 
-def test_scope_while_policy_max_iterations(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_scope_while_policy_max_iterations(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """max_iterations caps the while loop even if condition would remain True."""
     # condition is always True; max_iterations=3 → loop stops after 3 total runs
     blueprint = _make_scope_while_blueprint(condition="True", max_iterations=3)
@@ -331,7 +331,7 @@ def test_scope_while_policy_max_iterations(mock_immudb, mock_transport_orchestra
     launcher.stop()
 
 
-def test_scope_loop_announces_the_reset_of_scope_tasks(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_scope_loop_announces_the_reset_of_scope_tasks(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """Looping a scope reports its tasks back to PENDING.
 
     The reset happens inside the orchestrator, with no completion message
@@ -365,7 +365,7 @@ def test_scope_loop_announces_the_reset_of_scope_tasks(mock_immudb, mock_transpo
     launcher.stop()
 
 
-def test_scope_while_unevaluable_condition_fails_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_scope_while_unevaluable_condition_fails_session(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """A while condition that cannot be evaluated fails the session.
 
     Silently treating it as False would skip the loop entirely and let the
@@ -404,7 +404,7 @@ def test_scope_while_unevaluable_condition_fails_session(mock_immudb, mock_trans
 # ---------------------------------------------------------------------------
 
 
-def test_reset_scope_raises_for_unknown_scope(mock_immudb, mock_transport_orchestrator, cleanup_manager):
+def test_reset_scope_raises_for_unknown_scope(mock_storage, mock_transport_orchestrator, cleanup_manager):
     """reset_scope raises KeyError when the scope name does not exist."""
     blueprint = _make_scope_retry_blueprint(retries=1)
     session = BlueprintSession(bsid="test_reset_scope_unknown", blueprint=blueprint)
@@ -414,7 +414,7 @@ def test_reset_scope_raises_for_unknown_scope(mock_immudb, mock_transport_orches
         orchestrator.reset_scope("nonexistent")
 
 
-def test_reset_scope_restores_scope_to_initial_state(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_reset_scope_restores_scope_to_initial_state(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """After reset_scope all scope tasks are PENDING, outputs are cleared, and the
     iteration counter is removed — tasks outside the scope are unaffected."""
     retries = 2
@@ -461,7 +461,7 @@ def test_reset_scope_restores_scope_to_initial_state(mock_immudb, mock_transport
 
 
 @pytest.mark.parametrize("terminal_state", [BlueprintSessionState.FAILED, BlueprintSessionState.COMPLETED])
-def test_reset_scope_transitions_terminal_session_to_stopped(mock_immudb, mock_transport_orchestrator, cleanup_manager, terminal_state):
+def test_reset_scope_transitions_terminal_session_to_stopped(mock_storage, mock_transport_orchestrator, cleanup_manager, terminal_state):
     """reset_scope moves a FAILED or COMPLETED session back to STOPPED."""
     blueprint = _make_scope_retry_blueprint(retries=1)
     session = BlueprintSession(bsid=f"test_reset_scope_state_{terminal_state}", blueprint=blueprint)

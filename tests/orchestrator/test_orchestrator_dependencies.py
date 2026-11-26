@@ -8,7 +8,7 @@ from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 
-def test_parallel_execution(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
+def test_parallel_execution(mock_storage, mock_transport_orchestrator, mock_transport_launcher):
     # Blueprint: A and B run in parallel.
     # We use system.sleep
 

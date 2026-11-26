@@ -9,7 +9,7 @@ from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.orchestrator import _create_global_id
 
 
-def _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, session_id: str) -> Orchestrator:
+def _make_simple_orchestrator(mock_storage, mock_transport_orchestrator, session_id: str) -> Orchestrator:
     start = Task(id="start", type="system.start")
     end = Task(id="end", type="system.end")
     start >> end
@@ -19,8 +19,8 @@ def _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, session_
 
 
 class TestPersistOutputs:
-    def test_persist_outputs_writes_to_storage_and_fires_callback(self, mock_immudb, mock_transport_orchestrator):
-        orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-persist-1")
+    def test_persist_outputs_writes_to_storage_and_fires_callback(self, mock_storage, mock_transport_orchestrator):
+        orch = _make_simple_orchestrator(mock_storage, mock_transport_orchestrator, "sess-persist-1")
 
         received = []
         orch.register_datastore_update_callback(lambda bp, data: received.append((bp, data)))
@@ -31,8 +31,8 @@ class TestPersistOutputs:
         assert orch.session_storage.get("my-blueprint", "result") == 42
         assert orch.session_storage.get("my-blueprint", "name") == "hello"
 
-    def test_persist_outputs_does_not_fire_callback_for_empty_dict(self, mock_immudb, mock_transport_orchestrator):
-        orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-persist-2")
+    def test_persist_outputs_does_not_fire_callback_for_empty_dict(self, mock_storage, mock_transport_orchestrator):
+        orch = _make_simple_orchestrator(mock_storage, mock_transport_orchestrator, "sess-persist-2")
 
         received = []
         orch.register_datastore_update_callback(lambda bp, data: received.append((bp, data)))
@@ -41,8 +41,8 @@ class TestPersistOutputs:
 
         assert received == []
 
-    def test_persist_outputs_callback_exception_does_not_propagate(self, mock_immudb, mock_transport_orchestrator):
-        orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-persist-3")
+    def test_persist_outputs_callback_exception_does_not_propagate(self, mock_storage, mock_transport_orchestrator):
+        orch = _make_simple_orchestrator(mock_storage, mock_transport_orchestrator, "sess-persist-3")
 
         def bad_cb(bp, data):
             raise RuntimeError("boom")
@@ -54,8 +54,8 @@ class TestPersistOutputs:
 
 
 class TestMapOutputsToSession:
-    def test_fires_callback_with_correct_blueprint_id_and_outputs(self, mock_immudb, mock_transport_orchestrator):
-        orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-map-1")
+    def test_fires_callback_with_correct_blueprint_id_and_outputs(self, mock_storage, mock_transport_orchestrator):
+        orch = _make_simple_orchestrator(mock_storage, mock_transport_orchestrator, "sess-map-1")
 
         received = []
         orch.register_datastore_update_callback(lambda bp, data: received.append((bp, data)))
@@ -68,8 +68,8 @@ class TestMapOutputsToSession:
         assert bp_id == "test-bp"
         assert data == {"score": 99}
 
-    def test_no_callback_when_task_has_no_outputs(self, mock_immudb, mock_transport_orchestrator):
-        orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-map-2")
+    def test_no_callback_when_task_has_no_outputs(self, mock_storage, mock_transport_orchestrator):
+        orch = _make_simple_orchestrator(mock_storage, mock_transport_orchestrator, "sess-map-2")
 
         received = []
         orch.register_datastore_update_callback(lambda bp, data: received.append((bp, data)))
@@ -79,8 +79,8 @@ class TestMapOutputsToSession:
 
         assert received == []
 
-    def test_respects_set_to_mapping(self, mock_immudb, mock_transport_orchestrator):
-        orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-map-3")
+    def test_respects_set_to_mapping(self, mock_storage, mock_transport_orchestrator):
+        orch = _make_simple_orchestrator(mock_storage, mock_transport_orchestrator, "sess-map-3")
 
         received = []
         orch.register_datastore_update_callback(lambda bp, data: received.append((bp, data)))
@@ -96,8 +96,8 @@ class TestMapOutputsToSession:
 
 
 class TestMapOutputsToOuterSession:
-    def test_non_dynamic_composite_fires_callback_with_outer_blueprint_id(self, mock_immudb, mock_transport_orchestrator):
-        orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-outer-1")
+    def test_non_dynamic_composite_fires_callback_with_outer_blueprint_id(self, mock_storage, mock_transport_orchestrator):
+        orch = _make_simple_orchestrator(mock_storage, mock_transport_orchestrator, "sess-outer-1")
 
         received = []
         orch.register_datastore_update_callback(lambda bp, data: received.append((bp, data)))
@@ -126,8 +126,8 @@ class TestMapOutputsToOuterSession:
         assert bp_id == outer_bp_id
         assert data == {"result": "computed_value"}
 
-    def test_dynamic_composite_fires_callback_with_accumulated_dict(self, mock_immudb, mock_transport_orchestrator):
-        orch = _make_simple_orchestrator(mock_immudb, mock_transport_orchestrator, "sess-outer-2")
+    def test_dynamic_composite_fires_callback_with_accumulated_dict(self, mock_storage, mock_transport_orchestrator):
+        orch = _make_simple_orchestrator(mock_storage, mock_transport_orchestrator, "sess-outer-2")
 
         received = []
         orch.register_datastore_update_callback(lambda bp, data: received.append((bp, data)))

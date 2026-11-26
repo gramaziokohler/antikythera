@@ -9,7 +9,7 @@ from antikythera_orchestrator.sequencers import sequencer
 from antikythera_orchestrator.storage import BlueprintStorage
 
 
-def test_preprocess_blueprint_static_composite(mock_immudb, mock_transport_orchestrator):
+def test_preprocess_blueprint_static_composite(mock_storage, mock_transport_orchestrator):
     """
     Test that _preprocess_blueprint correctly expands static composite tasks
     and populates inner_blueprints and composite_map.
@@ -63,7 +63,7 @@ def test_preprocess_blueprint_static_composite(mock_immudb, mock_transport_orche
     assert orchestrator.session.composite_to_inner_blueprint_map[fqn] == expanded_id
 
 
-def test_preprocess_blueprint_nested_static_composite(mock_immudb, mock_transport_orchestrator):
+def test_preprocess_blueprint_nested_static_composite(mock_storage, mock_transport_orchestrator):
     """
     Test recursive expansion of nested composite tasks.
     Outer -> Middle -> Deep
@@ -131,7 +131,7 @@ def test_preprocess_blueprint_nested_static_composite(mock_immudb, mock_transpor
     assert orchestrator.session.composite_to_inner_blueprint_map[middle_fqn] == expanded_deep_id
 
 
-def test_preprocess_dynamic_expansion(mock_immudb, mock_transport_orchestrator):
+def test_preprocess_dynamic_expansion(mock_storage, mock_transport_orchestrator):
     """
     Test expansion using a mock sequencer.
     """

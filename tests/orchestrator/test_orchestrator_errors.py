@@ -26,7 +26,7 @@ class FailingAgent(Agent):
         return {"result": "success"}
 
 
-def test_task_failure_and_retry(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_task_failure_and_retry(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     # 1. Define Blueprint
     task_start = Task(id="start", type="system.start")
 
@@ -100,7 +100,7 @@ def test_task_failure_and_retry(mock_immudb, mock_transport_orchestrator, mock_t
     assert result == "success"
 
 
-def test_failed_task_does_not_overwrite_session_data(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_failed_task_does_not_overwrite_session_data(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """Verify that when a task fails, its (empty) outputs do not overwrite existing valid session data."""
 
     # 1. Define Blueprint
@@ -154,7 +154,7 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
         return session_storage.load_session()
 
 
-def test_task_failure_and_retry_revived_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+def test_task_failure_and_retry_revived_session(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """Test that a session with a failed task can be revived from storage and retried."""
 
     # 1. Define Blueprint

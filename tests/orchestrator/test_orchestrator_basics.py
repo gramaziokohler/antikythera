@@ -7,7 +7,7 @@ from antikythera_agents.launcher import AgentLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 
-def test_start_simple_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher):
+def test_start_simple_session(mock_storage, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define a simple blueprint
     task_start = Task(id="start", type="system.start")
     task_sleep = Task(id="sleep_task", type="system.sleep", params=[TaskParam(name="duration", value=0.1)])
@@ -22,7 +22,7 @@ def test_start_simple_session(mock_immudb, mock_transport_orchestrator, mock_tra
     session = BlueprintSession(bsid="test_session_1", blueprint=blueprint)
 
     # 3. Instantiate Orchestrator
-    # This will trigger storage initialization which uses our mock_immudb
+    # This will trigger storage initialization which uses our mock_storage
     orchestrator = Orchestrator(session)
 
     # 4. Instantiate and start Agent Launcher

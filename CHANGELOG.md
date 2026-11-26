@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - The `antikythera_ghpython` package and its single Grasshopper component (`AKT_Start_Blueprint`).
+- The unmaintained immudb storage backend (`antikythera_orchestrator.storage.immudb_storage`), its `IMMUDB_*` settings, the `immudb-py` dependency and `scripts/dump_session_data.py`. Redis has been the active backend since 0.1.0.
 
 ## [0.5.1] 2026-08-24
 

@@ -33,7 +33,7 @@ class DynamicExpansionTestAgent(Agent):
         return result
 
 
-def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_dynamic_expansion_basic_sequencer(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
     model = Model()
     element1 = Element()
     element2 = Element()
@@ -146,7 +146,7 @@ def test_dynamic_expansion_basic_sequencer(mock_immudb, mock_transport_orchestra
     assert session.state == BlueprintSessionState.COMPLETED
 
 
-def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_dynamic_expansion_pause_resume(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
     # Setup
     model = Model()
     element1 = Element()
@@ -231,7 +231,7 @@ def test_dynamic_expansion_pause_resume(mock_immudb, mock_transport_orchestrator
     assert session.state == BlueprintSessionState.COMPLETED
 
 
-def test_dynamic_expansion_context_annotation_binds_per_element(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_dynamic_expansion_context_annotation_binds_per_element(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
     """Each inner blueprint instance's `Context[str]`-annotated tool receives its own
     element's expansion context, verified against a genuinely dynamic blueprint (a sequencer
     expanding a composite task over a model's elements) rather than a hand-built task.
@@ -320,7 +320,7 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
         return session_storage.load_session()
 
 
-def test_dynamic_expansion_pause_resume_dead_session(mock_immudb, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
+def test_dynamic_expansion_pause_resume_dead_session(mock_storage, mock_transport_orchestrator, mock_transport_launcher, fast_system_agents, cleanup_manager):
     """Integration test for dynamic expanded blueprint session with pause mid-task execution.
     The task that was running when paused will finish. since the orcehstrator is still listening
     for completion event, it will be marked appropriatelymj.
