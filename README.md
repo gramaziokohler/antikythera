@@ -23,7 +23,7 @@ Antikythera is an distributed system for orchestration of fabrication processes 
 Stable releases can be installed from PyPI.
 
 ```bash
-pip install antikythera
+pip install antikythera-sdk
 ```
 
 To install the latest version for development, do:
@@ -32,6 +32,7 @@ To install the latest version for development, do:
 git clone https://github.com/gramaziokohler/antikythera.git
 cd antikythera
 pip install -e ".[dev]"
+invoke pre-build  # generates the protobuf bindings
 ```
 
 ## Documentation

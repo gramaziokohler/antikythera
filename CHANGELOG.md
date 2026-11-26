@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- All packaging metadata now lives in `pyproject.toml`; `requirements*.txt` are gone. The build backend switched from hatchling to setuptools, matching the other COMPAS packages.
+- The base install now covers running an orchestrator and agents from Python: `asteval` and `redis` moved into the core dependencies, and `compas_model`, which was imported but never declared, is now listed. The `deployment` extra is just the HTTP API service (FastAPI, uvicorn), and the MCP server's dependencies (`mcp`, `httpx`) moved to a new `mcp` extra. The Docker image installs both extras. `antikythera` and `antikythera-mcp` now say which extra to install when it is missing.
+- Requires `compas_eve >=2.4` and `compas_pb >=1.2`. `invoke` failed to start against the previously locked `compas_pb` 1.1.4, which lacks `create_proto_bundle`.
+- The packages ship `py.typed` markers, so type checkers use their inline annotations.
+- Dropped the `prepare-changelog` and `release` invoke tasks; releases go through the `prepare release` workflow.
+
 ### Fixed
 
 - The `antikythera` Docker image sets `PYTHONUNBUFFERED=1`. The agent launcher prints to stdout, which Python block-buffers when it is not a terminal, so `docker compose logs agents` stayed empty for the life of the container.
@@ -22,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The `antikythera_ghpython` package and its single Grasshopper component (`AKT_Start_Blueprint`).
 - The unmaintained immudb storage backend (`antikythera_orchestrator.storage.immudb_storage`), its `IMMUDB_*` settings, the `immudb-py` dependency and `scripts/dump_session_data.py`. Redis has been the active backend since 0.1.0.
+- The leftover Sphinx `docs/conf.py`, and the unused `attrs`, `black` and `wheel` development dependencies.
 
 ## [0.5.1] 2026-08-24
 

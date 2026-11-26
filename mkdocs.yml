@@ -3,6 +3,7 @@ site_url: https://gramaziokohler.github.io/antikythera/
 
 repo_name: gramaziokohler/antikythera
 repo_url: https://github.com/gramaziokohler/antikythera/
+edit_uri: blob/main/docs/
 
 copyright: Copyright &copy; 2026, ETH Zurich - Gramazio Kohler Research
 
@@ -70,7 +71,11 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets:
       check_paths: true
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - toc:
       permalink: "¤"
 
@@ -100,7 +105,7 @@ plugins:
             merge_init_into_class: true
             modernize_annotations: true
             parameter_headings: false
-            preload_modules: [mkdocstrings]
+            preload_modules: [mkdocstrings, compas]
             relative_crossrefs: true
             scoped_crossrefs: true
             separate_signature: true

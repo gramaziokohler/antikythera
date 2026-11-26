@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
 
-
 from compas_invocations2 import build
+from compas_invocations2 import docs
 from compas_invocations2 import mkdocs
 from compas_invocations2 import style
 from compas_invocations2 import tests
@@ -17,7 +17,7 @@ from compas_pb.invocations import generate_proto_classes
 
 @task
 def pre_build(ctx):
-    # Ensure proto classes are generated before building the package
+    """Generate the Python protobuf bindings the package imports at runtime."""
     generate_proto_classes(ctx, target_language="python")
 
 
@@ -50,6 +50,7 @@ def mcp(ctx, transport="stdio", host="0.0.0.0", port=8001, api_base=None):
 
 
 ns = Collection(
+    docs.help,
     style.check,
     style.lint,
     style.format,
@@ -57,9 +58,7 @@ ns = Collection(
     tests.test,
     tests.testdocs,
     tests.testcodeblocks,
-    build.prepare_changelog,
     build.clean,
-    build.release,
     generate_proto_classes,
     create_class_assets,
     create_proto_bundle,

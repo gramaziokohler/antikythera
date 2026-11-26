@@ -12,8 +12,13 @@ In short, this is how that works.
 3. Install development dependencies:
 
    ```bash
-   pip install -r requirements-dev.txt
+   pip install -e ".[dev]"
+   invoke pre-build
    ```
+
+   `invoke pre-build` generates the Python protobuf bindings (`antikythera_pb2.py`),
+   which are not checked in. With [uv](https://docs.astral.sh/uv/), `uv sync --extra dev`
+   followed by `uv run invoke pre-build` does the same.
 
 4. Make sure all tests pass:
 
@@ -21,7 +26,7 @@ In short, this is how that works.
    invoke test
    ```
 
-5. Start making your changes to the **master** branch (or branch off of it).
+5. Start making your changes to the **main** branch (or branch off of it).
 6. Make sure all tests still pass:
 
    ```bash
