@@ -1,15 +1,16 @@
 {
     "version": "1.0",
     "id": "toy-problem-skip-test",
-    "name": "Toy Problem 13 Skip test",
-    "description": "Test skip task behavior",
+    "name": "Toy Problem 13: Skipping tasks",
+    "description": "Three confirmations in a row, to try skipping tasks from the web UI: a task skipped before it is ready waits for its dependencies and is then marked skipped instead of running.",
     "tasks": [
         {
             "id": "start",
             "type": "system.start",
             "outputs": [
                 {
-                    "name": "start_time"
+                    "name": "process_start_time",
+                    "type_hint": "timestamp"
                 }
             ]
         },

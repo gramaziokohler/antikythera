@@ -22,8 +22,8 @@
                 {
                     "name": "elements_remaining",
                     "value": 3,
-                    "type": "int",
-                    "description": "How many elements are left to process. Declared with a value so the count exists in session data before the first evaluation of the while condition."
+                    "description": "How many elements are left to process. Declared with a value so the count exists in session data before the first evaluation of the while condition.",
+                    "type_hint": "int"
                 }
             ],
             "depends_on": [

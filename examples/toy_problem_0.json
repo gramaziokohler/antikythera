@@ -1,65 +1,65 @@
 {
-  "version": "1.0",
-  "id": "toy-problem-0",
-  "name": "Toy Problem 0",
-  "description": "Simplest possible blueprint",
-  "tasks": [
-    {
-      "id": "start",
-      "type": "system.start",
-      "outputs": [
+    "version": "1.0",
+    "id": "toy-problem-0",
+    "name": "Toy Problem 0: Hello",
+    "description": "The smallest useful blueprint: sleep, then print the time the process started. Needs only the built-in actors.",
+    "tasks": [
         {
-          "name": "process_start_time",
-          "type_hint": "timestamp"
-        }
-      ]
-    },
-    {
-      "id": "A1",
-      "type": "system.sleep",
-      "description": "Sleep for 5 seconds",
-      "params": [
+            "id": "start",
+            "type": "system.start",
+            "outputs": [
+                {
+                    "name": "process_start_time",
+                    "type_hint": "timestamp"
+                }
+            ]
+        },
         {
-          "name": "duration",
-          "value": 5
-        }
-      ],
-      "depends_on": [
+            "id": "A1",
+            "type": "system.sleep",
+            "description": "Sleep for 5 seconds",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 5
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ]
+        },
         {
-          "id": "start"
-        }
-      ]
-    },
-    {
-      "id": "A2",
-      "type": "user_interaction.user_output",
-      "description": "Print result",
-      "inputs": [
+            "id": "A2",
+            "type": "user_interaction.user_output",
+            "description": "Print result",
+            "inputs": [
+                {
+                    "name": "process_start_time",
+                    "type_hint": "timestamp"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "A1"
+                }
+            ]
+        },
         {
-          "name": "process_start_time",
-          "type_hint": "timestamp"
+            "id": "end",
+            "type": "system.end",
+            "outputs": [
+                {
+                    "name": "process_end_time",
+                    "type_hint": "timestamp"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "A2"
+                }
+            ]
         }
-      ],
-      "depends_on": [
-        {
-          "id": "A1"
-        }
-      ]
-    },
-    {
-      "id": "end",
-      "type": "system.end",
-      "outputs": [
-        {
-          "name": "process_end_time",
-          "type_hint": "timestamp"
-        }
-      ],
-      "depends_on": [
-        {
-          "id": "A2"
-        }
-      ]
-    }
-  ]
+    ]
 }

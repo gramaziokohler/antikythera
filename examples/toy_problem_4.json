@@ -1,8 +1,8 @@
 {
     "version": "1.0",
     "id": "TP4",
-    "name": "Toy Problem 4",
-    "description": "Inner blueprints using composite",
+    "name": "Toy Problem 4: Composite task",
+    "description": "A composite task runs the inner blueprint TP4_PnP as one step. Upload toy_problem_4_inner.json first. The value the inner blueprint asks for comes back as result1 and is stored here as something_else.",
     "tasks": [
         {
             "id": "start",

@@ -1,122 +1,122 @@
 {
-  "version": "1.0",
-  "id": "toy-problem-7",
-  "name": "Toy Problem 7",
-  "description": "A sample fabrication process definition with user prompt",
-  "tasks": [
-    {
-      "id": "start",
-      "type": "system.start",
-      "outputs": [
+    "version": "1.0",
+    "id": "toy-problem-7",
+    "name": "Toy Problem 7: Prompt in the browser",
+    "description": "Asks for confirmation through the user_prompt actor of the web UI while a sleep runs in parallel, then prints the answer.",
+    "tasks": [
         {
-          "name": "process_start_time",
-          "type_hint": "timestamp"
-        }
-      ]
-    },
-    {
-      "id": "A1-ask-user",
-      "type": "user_prompt.confirm",
-      "params": [
-        {
-          "name": "message",
-          "value": "Do you want to proceed?"
+            "id": "start",
+            "type": "system.start",
+            "outputs": [
+                {
+                    "name": "process_start_time",
+                    "type_hint": "timestamp"
+                }
+            ]
         },
         {
-          "name": "options",
-          "value": [
-            "Yes",
-            "No"
-          ]
-        }
-      ],
-      "outputs": [
-        {
-          "name": "result",
-          "type_hint": "str"
-        }
-      ],
-      "depends_on": [
-        {
-          "id": "start"
-        }
-      ]
-    },
-    {
-      "id": "A2",
-      "type": "system.sleep",
-      "description": "Sleep for 5 seconds",
-      "params": [
-        {
-          "name": "duration",
-          "value": 5
-        }
-      ],
-      "depends_on": [
-        {
-          "id": "start"
-        }
-      ]
-    },
-    {
-      "id": "B1",
-      "type": "user_interaction.user_output",
-      "description": "Print result",
-      "inputs": [
-        {
-          "name": "result",
-          "type_hint": "str"
+            "id": "A1-ask-user",
+            "type": "user_prompt.confirm",
+            "params": [
+                {
+                    "name": "message",
+                    "value": "Do you want to proceed?"
+                },
+                {
+                    "name": "options",
+                    "value": [
+                        "Yes",
+                        "No"
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "result",
+                    "type_hint": "str"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ]
         },
         {
-          "name": "frame_world_xy",
-          "value": {
-            "dtype": "compas.geometry/Frame",
-            "data": {
-              "point": [
-                0.0,
-                0.0,
-                0.0
-              ],
-              "xaxis": [
-                1.0,
-                0.0,
-                0.0
-              ],
-              "yaxis": [
-                0.0,
-                1.0,
-                0.0
-              ]
-            },
-            "guid": "55982853-464f-49f0-a85a-f5a4a8b11de7"
-          }
-        }
-      ],
-      "depends_on": [
-        {
-          "id": "A1-ask-user",
-          "type": "FS"
+            "id": "A2",
+            "type": "system.sleep",
+            "description": "Sleep for 5 seconds",
+            "params": [
+                {
+                    "name": "duration",
+                    "value": 5
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "start"
+                }
+            ]
         },
         {
-          "id": "A2",
-          "type": "FS"
-        }
-      ]
-    },
-    {
-      "id": "end",
-      "type": "system.end",
-      "outputs": [
+            "id": "B1",
+            "type": "user_interaction.user_output",
+            "description": "Print result",
+            "inputs": [
+                {
+                    "name": "result",
+                    "type_hint": "str"
+                },
+                {
+                    "name": "frame_world_xy",
+                    "value": {
+                        "dtype": "compas.geometry/Frame",
+                        "data": {
+                            "point": [
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "xaxis": [
+                                1.0,
+                                0.0,
+                                0.0
+                            ],
+                            "yaxis": [
+                                0.0,
+                                1.0,
+                                0.0
+                            ]
+                        },
+                        "guid": "55982853-464f-49f0-a85a-f5a4a8b11de7"
+                    }
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "A1-ask-user",
+                    "type": "FS"
+                },
+                {
+                    "id": "A2",
+                    "type": "FS"
+                }
+            ]
+        },
         {
-          "name": "process_end_time",
-          "type_hint": "timestamp"
+            "id": "end",
+            "type": "system.end",
+            "outputs": [
+                {
+                    "name": "process_end_time",
+                    "type_hint": "timestamp"
+                }
+            ],
+            "depends_on": [
+                {
+                    "id": "B1"
+                }
+            ]
         }
-      ],
-      "depends_on": [
-        {
-          "id": "B1"
-        }
-      ]
-    }
-  ]
+    ]
 }

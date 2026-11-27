@@ -1,15 +1,16 @@
 {
     "version": "1.0",
-    "id": "toy-problem-competitive",
-    "name": "Toy Problem 12 Notification",
-    "description": "Showcase notification actor",
+    "id": "toy-problem-12-notification",
+    "name": "Toy Problem 12: Notifications",
+    "description": "Notifications at each step of a short process. They are COMPETITIVE, so the Python user_interaction actor prints them and the web UI shows them at the same time. Ends with a confirmation in the web UI.",
     "tasks": [
         {
             "id": "start",
             "type": "system.start",
             "outputs": [
                 {
-                    "name": "start_time"
+                    "name": "process_start_time",
+                    "type_hint": "timestamp"
                 }
             ]
         },

@@ -1,15 +1,16 @@
 {
     "version": "1.0",
     "id": "toy-problem-competitive",
-    "name": "Toy Problem 10 Competitive",
-    "description": "Showcase competitive execution mode",
+    "name": "Toy Problem 10: Competitive execution",
+    "description": "A COMPETITIVE task is offered to every actor that can run it, and the first to finish wins. Open the web UI in two browsers: both show the prompt, and the first click completes the task.",
     "tasks": [
         {
             "id": "start",
             "type": "system.start",
             "outputs": [
                 {
-                    "name": "start_time"
+                    "name": "process_start_time",
+                    "type_hint": "timestamp"
                 }
             ]
         },

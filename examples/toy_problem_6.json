@@ -1,8 +1,8 @@
 {
     "version": "1.0",
     "id": "TP6",
-    "name": "Toy Problem 6",
-    "description": "Model and basic element sequencer",
+    "name": "Toy Problem 6: One task per model element",
+    "description": "Dynamic expansion: the basic_sequencer reads the model given by the model_id session parameter and runs the inner blueprint TP6-inner once per element. Upload a compas_model model and toy_problem_6_inner.json first, then start with params {\"model_id\": \"<id>\"}.",
     "tasks": [
         {
             "id": "start",
@@ -17,32 +17,16 @@
         {
             "id": "X1",
             "type": "system.composite",
-            "description": "Process element",
+            "description": "Run TP6-inner once per element of the model",
             "params": [
                 {
                     "name": "blueprint",
                     "value": {
                         "dynamic": {
-                            "blueprint": "TP6-inner",
-                            "sequencer": "basic_element_sequencer"
+                            "blueprint_id": "TP6-inner",
+                            "sequencer": "basic_sequencer"
                         }
                     }
-                },
-                {
-                    "name": "execution_mode",
-                    "value": "COMPETITIVE"
-                }
-            ],
-            "inputs": [
-                {
-                    "name": "model_id",
-                    "type_hint": "str"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "result",
-                    "type_hint": "str"
                 }
             ],
             "depends_on": [

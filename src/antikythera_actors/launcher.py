@@ -203,7 +203,12 @@ class ActorLauncher:
             context=message.context,
         )
 
+        # A task of type "<actor type>.<tool>" is only for actors of that type, even if an
+        # actor of another type happens to have a tool with the same name.
+        task_actor_type = task.type.rpartition(".")[0]
         for actor_type, actor in self.actors.items():
+            if task_actor_type and actor_type != task_actor_type:
+                continue
             if actor.can_claim_task(task):
                 # We have an actor for this task, claim it!
                 self.pending_claims[task.id] = (task, actor_type)
