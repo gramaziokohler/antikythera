@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation for running Antikythera rather than developing it: `docs/deployment/docker.md` (the recommended path) and `docs/deployment/bare-metal.md` (systemd units, nginx and TLS on Ubuntu, cross-checked against the ETH Zurich deployment). The docs landing page now opens with the Docker quick start, and `docs/installation.md` is scoped to the Python package.
 - `Orchestrator` and `AgentLauncher` take a `transport` keyword, so they can talk over any `compas_eve` transport instead of always creating an MQTT one. Combined with `InMemoryStorage`, a blueprint runs entirely inside one Python process, with no broker and no Redis. A transport whose codec is not `ProtobufMessageCodec` is rejected up front instead of failing on the first message.
 - `Orchestrator` takes a `storage` keyword with a `StorageBackend`: `RedisStorage` (the default, as before) or the new `InMemoryStorage`. Sequencers receive the orchestrator's backend, so dynamic expansion reads models from the same store.
+- Actors can be put on the network without installing anything: `uvx --from antikythera-sdk antikythera-actors run --actor my_actor.py` runs only the actors defined in that file (or module). `--only` picks among installed actor plugins, and `--tls` and `--mqtt-transport` reach remote brokers. The broker defaults now come from `MQTT_BROKER_HOST` and `MQTT_BROKER_PORT`.
+- `antikythera_actors.run(*actors)`, so an actor file can start itself the way an MCP server does with `mcp.run()`; with an inline script header it runs with `uv run my_actor.py`. `ActorLauncher` takes `actor_types` and `discover` to choose which actors it runs.
+- Guides for running actors and for embedding the orchestrator in an application.
 
 ### Changed
 
@@ -26,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Orchestrator.stop()` raised `KeyError` over MQTT when called right after a session completed, because the session end calls it on the transport's thread at the same time. It is now serialized.
+- `antikythera-actors` flushes its startup messages, so they show up when its output is piped or logged.
 - The `antikythera` Docker image sets `PYTHONUNBUFFERED=1`. The agent launcher prints to stdout, which Python block-buffers when it is not a terminal, so `docker compose logs agents` stayed empty for the life of the container.
 
 ### Removed

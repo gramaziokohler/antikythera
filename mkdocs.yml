@@ -136,6 +136,9 @@ nav:
   - Get Started:
       - Introduction: introduction.md
       - Installation: installation.md
+  - Guides:
+      - Running actors: actors.md
+      - Embedding the orchestrator: embedding.md
   - Deployment:
       - Run with Docker: deployment/docker.md
       - Run on bare metal: deployment/bare-metal.md
@@ -151,6 +154,7 @@ nav:
           - antikythera_actors.base_actor: reference/antikythera_actors.base_actor.md
           - antikythera_actors.decorators: reference/antikythera_actors.decorators.md
           - antikythera_actors.launcher: reference/antikythera_actors.launcher.md
+          - antikythera_actors.serve: reference/antikythera_actors.serve.md
           - antikythera_actors.context: reference/antikythera_actors.context.md
           - antikythera_actors.io_actor: reference/antikythera_actors.io_actor.md
           - antikythera_actors.user_interaction: reference/antikythera_actors.user_interaction.md
