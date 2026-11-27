@@ -4,7 +4,7 @@ An actor is a Python class that does tasks. Its methods marked with `@tool` are 
 A task of type `greeter.hello` is done by the `hello` tool of the actor of type `greeter`:
 
 ```python
-from antikythera_actors import Actor, actor, tool
+from antikythera import Actor, actor, tool
 
 
 @actor(type="greeter")
@@ -15,12 +15,29 @@ class Greeter(Actor):
         return {"greeting": f"Hello, {name}!"}
 ```
 
+An actor with a single tool can be a plain function. Give `@tool` the full task type,
+actor type and tool name, and Antikythera creates the actor for you:
+
+```python
+from antikythera import tool
+
+
+@tool("greeter.hello")
+def hello(name: str) -> dict:
+    """Greet someone by name."""
+    return {"greeting": f"Hello, {name}!"}
+```
+
+Functions with the same actor type, like `saw.cut` and `saw.measure`, become tools of one
+actor. Write a class instead when the tools share something, like a connection to a
+machine: open it in `__init__` and close it in `dispose`.
+
 ## Inputs, params and outputs
 
 Antikythera looks at the arguments of a tool to know what to give it:
 
 ```python
-from antikythera_actors.annotations import Param
+from antikythera import Param
 
 
 @tool(name="drill")
@@ -87,18 +104,16 @@ and call `run()`:
 # /// script
 # dependencies = ["antikythera-sdk"]
 # ///
-from antikythera_actors import Actor, actor, run, tool
+from antikythera import run, tool
 
 
-@actor(type="greeter")
-class Greeter(Actor):
-    @tool(name="hello")
-    def hello(self, name: str) -> dict:
-        return {"greeting": f"Hello, {name}!"}
+@tool("greeter.hello")
+def hello(name: str) -> dict:
+    return {"greeting": f"Hello, {name}!"}
 
 
 if __name__ == "__main__":
-    run(Greeter)
+    run(hello)
 ```
 
 ```bash

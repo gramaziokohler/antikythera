@@ -44,21 +44,35 @@ def actor(type: str):
 
 
 def tool(name: Optional[str] = None):
-    """Decorator to mark a method as a tool within an actor.
+    """Decorator to mark a method as a tool within an actor, or a function as a tool on its own.
 
     Parameters
     ----------
     name : str, optional
-        Optional tool name. If not provided, uses the method name.
+        The tool name. If not provided, uses the method name. On a plain function (not a
+        method), a name with a dot, like ``"greeter.hello"``, makes the function a tool of
+        its own: the actor of type ``greeter`` is created for it, and functions that share
+        the type share the actor.
 
     Examples
     --------
+    A tool as a method of an actor class:
+
     >>> @tool(name="start_process")
     ... def start(self, task: Task) -> dict:
     ...     return {"result": "started"}
+
+    A tool as a plain function:
+
+    >>> @tool("greeter.hello")
+    ... def hello(name: str) -> dict:
+    ...     return {"greeting": f"Hello, {name}!"}
     """
 
     def decorator(func: Callable):
+        if name and "." in name and not _defined_in_class(func):
+            return _function_tool(func, name)
+
         tool_name = name or func.__name__
 
         @wraps(func)
@@ -73,6 +87,50 @@ def tool(name: Optional[str] = None):
         return wrapper
 
     return decorator
+
+
+def _defined_in_class(func: Callable) -> bool:
+    """Whether ``func`` is defined in a class body, which makes it a method.
+
+    Its qualified name then ends in ``<Class>.<name>``. A function at module level has no
+    dot in its qualified name, and one defined in another function ends in ``<locals>.<name>``.
+    """
+    parts = func.__qualname__.split(".")
+    return len(parts) > 1 and parts[-2] != "<locals>"
+
+
+def _function_tool(func: Callable, qualified_name: str) -> Callable:
+    """Make the plain function ``func`` the tool ``qualified_name`` (``"<actor_type>.<tool>"``).
+
+    Each actor type gets one actor class, created the first time a function names it.
+    The function itself is returned unchanged, so it can still be called and tested directly.
+    """
+    from antikythera_actors.base_actor import Actor
+
+    actor_type, tool_name = qualified_name.split(".", 1)
+    cls = _ACTOR_REGISTRY.get(actor_type)
+    if cls is None:
+        class_name = "".join(part.capitalize() for part in actor_type.replace("-", "_").split("_")) + "Actor"
+        cls = type(class_name, (Actor,), {"_actor_type": actor_type, "_from_functions": True, "__module__": func.__module__})
+        _ACTOR_REGISTRY[actor_type] = cls
+        _TOOL_REGISTRY[cls] = {}
+    elif not getattr(cls, "_from_functions", False):
+        raise ValueError(f"The actor type '{actor_type}' is already defined by the class {cls.__name__}: add the tool to that class instead.")
+
+    def method(self, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    descriptor = ToolDescriptor(func=func, name=tool_name)
+    method.__name__ = tool_name
+    method.__doc__ = func.__doc__
+    method._is_tool = True
+    method._tool_name = tool_name
+    method._descriptor = descriptor
+    setattr(cls, tool_name, method)
+    _TOOL_REGISTRY[cls][tool_name] = descriptor
+
+    func._actor_type = actor_type
+    return func
 
 
 def get_actor_class(actor_type: str) -> Optional[type]:

@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zenoh backend, in the new `zenoh` extra: `antikythera.transports.zenoh.ZenohTransport` and `ZenohStorage`, a storage backend on Zenoh storages, chosen with `ANTIKYTHERA_TRANSPORT=zenoh` and `ANTIKYTHERA_STORAGE=zenoh` and configured with `ZENOH_CONNECT`, `ZENOH_MODE`, `ZENOH_CONFIG` and `ZENOH_STORAGE_PREFIX`. One Zenoh router with a storage can replace both the MQTT broker and Redis, and messages can go peer to peer. compas_eve's own `ZenohTransport` silences every subscriber of a topic when one unsubscribes, does not map MQTT wildcards and drops messages under congestion, so Antikythera carries its own until compas_eve's is fixed. Zenoh storages are eventually consistent, so `ZenohStorage` confirms each write before returning. `antikythera-actors run` takes `--transport zenoh` and `--zenoh-connect`. See the "Running on Zenoh" guide.
 - A CI job runs the test suite against a NATS server and a Zenoh router, with `NATS_TEST_REQUIRED` and `ZENOH_TEST_REQUIRED` set so those tests fail rather than skip if a server is missing.
 - Documentation for beginners: a hello world on the home page (`examples/hello_world.py`, run by the tests), a Concepts page that defines blueprints, tasks, actors, tools, sessions and session data, new "Writing blueprints" and "Writing actors" guides, and an Examples page. The other pages are rewritten in plain English.
+- `from antikythera import ...` (or `import antikythera as akt`) gives the public API from one place: `Blueprint`, `Task`, `TaskInput`, `TaskOutput`, `tool`, `actor`, `Param`, `Orchestrator`, `ActorLauncher`, `InMemoryStorage` and more. Names load on first use, so a program that only runs actors does not import the orchestrator. `Param`, `Input`, `Context` and `ExecutionContext` are also exported from `antikythera_actors`.
+- A tool can be a plain function: `@tool("greeter.hello")` on a function creates the `greeter` actor for it, and functions with the same actor type share the actor. The function stays callable as before. `antikythera-actors run --actor` and `run()` accept them.
+- `Orchestrator.from_blueprint(blueprint, ...)` creates the session itself, with a random id. `Orchestrator` and `ActorLauncher` are context managers that start on entry and stop on exit.
+- `antikythera.InMemoryTransport`, compas_eve's in-memory transport with the protobuf codec Antikythera needs, so it takes no arguments.
 - `examples/embedded.py`, `examples/greeter_actor.py` and `examples/README.md`, an index of what each example shows and needs. `tests/test_examples.py` runs every example blueprint in-process, so they keep working.
 
 ### Changed
@@ -38,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An input's `value` is now its default also when the input has a `get_from`. It was ignored then, so the input got `None` when the key was missing: in `toy_problem_8.json`, the final task printed `None` instead of `N/A` when the second question was skipped.
 - The Redis backend kept a model's nesting result after the model was removed.
 - An actor launcher could claim a task for the wrong actor: claims matched the tool name only, so any actor with a tool of the same name (say `notify` or `double`) took tasks meant for another actor type. Tasks now go only to actors of the type in their `type`.
 - `Orchestrator.stop()` raised `KeyError` over MQTT when called right after a session completed, because the session end calls it on the transport's thread at the same time. It is now serialized.

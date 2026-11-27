@@ -30,7 +30,7 @@ This is the [hello world](index.md#hello-world) blueprint in JSON:
 And the same in Python:
 
 ```python
-from antikythera.models import Blueprint, Task, TaskInput, TaskOutput
+from antikythera import Blueprint, Task, TaskInput, TaskOutput
 
 start = Task(id="start", type="system.start")
 hello = Task(
@@ -86,8 +86,9 @@ different name, set `set_to` on the output or `get_from` on the input:
 The first saves the tool's `result` as `left`. The second gives the tool the value of
 `left` as its argument `a`.
 
-An input with a `value` and no `get_from` uses that value when the session data has
-nothing by its name. This is how you give a task a fixed input, like `"world"` above.
+An input's `value` is its default: the task uses it when the session data has nothing
+under the input's name, or under its `get_from`. This is how you give a task a fixed input,
+like `"world"` above, or a fallback for a value that a skipped task did not produce.
 
 ## Params
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from queue import Empty
 from queue import LifoQueue
@@ -512,6 +513,46 @@ class Orchestrator:
 
         self.register_instance(self)
 
+    @classmethod
+    def from_blueprint(
+        cls,
+        blueprint: Blueprint,
+        *,
+        bsid: Optional[str] = None,
+        params: Optional[Dict[str, Any]] = None,
+        transport: Optional[Transport] = None,
+        storage: Optional[StorageBackend] = None,
+    ) -> Orchestrator:
+        """Create an orchestrator for a new session of ``blueprint``.
+
+        Parameters
+        ----------
+        blueprint : Blueprint
+            The blueprint to run.
+        bsid : str, optional
+            The id of the new session. Defaults to the blueprint id followed by a random suffix.
+        params : dict, optional
+            The session params.
+        transport : compas_eve.Transport, optional
+            The transport messages to actors go over. Defaults to MQTT, as configured.
+        storage : StorageBackend, optional
+            The storage backend. Defaults to the configured one.
+
+        Returns
+        -------
+        Orchestrator
+        """
+        bsid = bsid or f"{blueprint.id}-{uuid.uuid4().hex[:8]}"
+        session = BlueprintSession(bsid=bsid, blueprint=blueprint, params=params)
+        return cls(session, transport=transport, storage=storage)
+
+    def __enter__(self) -> Orchestrator:
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.stop()
+
     @property
     def state(self) -> BlueprintSessionState:
         return self.session.state
@@ -831,10 +872,9 @@ class Orchestrator:
 
             inputs_value = self.session_storage.get(blueprint_id, mapped_key)
 
-            # Static inputs: If not found in session and map is implicit, use static value
-            # This is to support things like the `test_orchestrator_composite` tests that
-            # set static inputs directly in the programmatic definition of the task
-            if inputs_value is None and not inp.get_from and inp.value is not None:
+            # An input's literal value is its default: used when nothing is found in the
+            # session data, whether under its own name or under `get_from`.
+            if inputs_value is None and inp.value is not None:
                 inputs[key] = inp.value
                 continue
 

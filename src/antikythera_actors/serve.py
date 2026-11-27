@@ -73,7 +73,7 @@ def run(
         for cls in actors:
             actor_type = getattr(cls, "_actor_type", None)
             if actor_type is None:
-                raise TypeError(f"{cls!r} is not an actor: decorate it with @actor(type=...)")
+                raise TypeError(f"{cls!r} is not an actor: decorate it with @actor(type=...), or a function with @tool('<actor_type>.<tool>')")
             actor_types.append(actor_type)
 
     launcher = ActorLauncher(

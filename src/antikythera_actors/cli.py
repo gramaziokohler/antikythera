@@ -51,11 +51,12 @@ def _load_actors(specs: list[str]) -> list[str]:
     for spec in specs:
         module = _import_actor_module(spec)
         for value in vars(module).values():
-            if isinstance(value, type) and getattr(value, "__module__", None) == module.__name__ and hasattr(value, "_actor_type"):
+            # Actor classes, and functions made tools with @tool("<actor_type>.<tool>")
+            if getattr(value, "__module__", None) == module.__name__ and hasattr(value, "_actor_type"):
                 loaded.add(value._actor_type)
     loaded = sorted(loaded)
     if not loaded:
-        raise SystemExit(f"No actors found in: {', '.join(specs)}. Actors are classes decorated with @actor(type=...).")
+        raise SystemExit(f"No actors found in: {', '.join(specs)}. Actors are classes decorated with @actor(type=...), or functions decorated with @tool('<actor_type>.<tool>').")
     return loaded
 
 

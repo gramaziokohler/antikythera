@@ -120,6 +120,13 @@ class ActorLauncher:
         self._initialize_actors()
         LOG.info(f"Actor Launcher initialized with ID: {Colors.HEADER}{self.launcher_id}{Colors.ENDC}")
 
+    def __enter__(self) -> "ActorLauncher":
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.stop()
+
     def start(self):
         """Subscribe to all MQTT topics and begin accepting tasks."""
         self.task_start_subscriber.subscribe()

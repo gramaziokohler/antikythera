@@ -42,9 +42,9 @@ $ python hello_world.py
 Hello, world!
 ```
 
-The blueprint has three tasks: `start`, `hello` and `end`. Every blueprint begins with a
+The blueprint has three tasks: `start`, `greet` and `end`. Every blueprint begins with a
 `system.start` task and finishes with a `system.end` task; Antikythera runs both itself.
-The `hello` task has the type `greeter.hello`, so the `hello` tool of the `greeter` actor
+The `greet` task has the type `greeter.hello`, so the `hello` tool of the `greeter` actor
 runs it. The tool's return value is saved as the task's `greeting` output, and the
 program reads it back at the end.
 

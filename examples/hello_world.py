@@ -1,44 +1,41 @@
-from compas_eve.codecs import ProtobufMessageCodec
-from compas_eve.memory import InMemoryTransport
+from antikythera import (
+    ActorLauncher,
+    Blueprint,
+    InMemoryStorage,
+    InMemoryTransport,
+    Orchestrator,
+    Task,
+    TaskInput,
+    TaskOutput,
+    tool,
+)
 
-from antikythera.models import Blueprint, BlueprintSession, Task, TaskInput, TaskOutput
-from antikythera_actors import Actor, ActorLauncher, actor, tool
-from antikythera_orchestrator import InMemoryStorage, Orchestrator
 
-
-# An actor does the work. Each of its tools is one job it can do.
-@actor(type="greeter")
-class Greeter(Actor):
-    @tool(name="hello")
-    def hello(self, name: str) -> dict:
-        return {"greeting": f"Hello, {name}!"}
+# A tool is one job an actor can do. This one is the "hello" tool of the "greeter" actor.
+@tool("greeter.hello")
+def hello(name: str) -> dict:
+    return {"greeting": f"Hello, {name}!"}
 
 
 # A blueprint lists the tasks to do, and their order.
 start = Task(id="start", type="system.start")
-hello = Task(
-    id="hello",
-    type="greeter.hello",  # run by the "hello" tool of the "greeter" actor
+greet = Task(
+    id="greet",
+    type="greeter.hello",
     inputs=[TaskInput(name="name", value="world")],
     outputs=[TaskOutput(name="greeting")],
 )
 end = Task(id="end", type="system.end")
-start >> hello >> end
-tasks = [start, hello, end]
-blueprint = Blueprint(id="hello-world", name="Hello, world", tasks=tasks)
+start >> greet >> end
+blueprint = Blueprint(id="hello-world", name="Hello, world", tasks=[start, greet, end])
 
 # Run it all in this Python process: no message broker, no database.
-transport = InMemoryTransport(codec=ProtobufMessageCodec())
+transport = InMemoryTransport()
 storage = InMemoryStorage()
 
-actors = ActorLauncher(transport=transport)
-actors.start()
+with ActorLauncher(transport=transport):
+    with Orchestrator.from_blueprint(blueprint, transport=transport, storage=storage) as orchestrator:
+        orchestrator.await_completion(timeout=10)
 
-session = BlueprintSession(bsid="hello-1", blueprint=blueprint)
-orchestrator = Orchestrator(session, transport=transport, storage=storage)
-orchestrator.start()
-orchestrator.await_completion(timeout=10)
-actors.stop()
-
-with storage.session_storage("hello-1") as data:
+with storage.session_storage(orchestrator.session.bsid) as data:
     print(data.get("hello-world", "greeting"))  # Hello, world!

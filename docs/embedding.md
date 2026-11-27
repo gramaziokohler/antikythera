@@ -15,24 +15,29 @@ The [hello world](index.md#hello-world) runs everything in one process, with an 
 transport and an in-memory storage:
 
 ```python
-transport = InMemoryTransport(codec=ProtobufMessageCodec())
+from antikythera import ActorLauncher, InMemoryStorage, InMemoryTransport, Orchestrator
+
+transport = InMemoryTransport()
 storage = InMemoryStorage()
 
-actors = ActorLauncher(transport=transport)
-actors.start()
-
-session = BlueprintSession(bsid="hello-1", blueprint=blueprint)
-orchestrator = Orchestrator(session, transport=transport, storage=storage)
-orchestrator.start()
-orchestrator.await_completion(timeout=10)
+with ActorLauncher(transport=transport):
+    with Orchestrator.from_blueprint(blueprint, transport=transport, storage=storage) as orchestrator:
+        orchestrator.await_completion(timeout=10)
 ```
 
 `ActorLauncher` starts the actors defined in your program and the ones installed as
-plugins, including the `system` actor that runs the start and end tasks. `await_completion` waits until the session has finished, and
-returns `False` if the time ran out first.
+plugins, including the `system` actor that runs the start and end tasks.
+`Orchestrator.from_blueprint` creates a new session of the blueprint, with a random id.
+Each `with` block starts its part when it begins, and stops it when it ends.
+`await_completion` waits until the session has finished, and returns `False` if the time
+ran out first.
 
-The transport must use `ProtobufMessageCodec`, because that is the message format of
-the orchestrator and the actors. Both refuse a transport with another codec.
+Without the `with` blocks, call `start()` and `stop()` yourself. To choose the session id,
+or to resume a session, create the `BlueprintSession` and pass it to `Orchestrator`.
+
+The transport must use `ProtobufMessageCodec`, because that is the message format of the
+orchestrator and the actors. Both refuse a transport with another codec.
+`antikythera.InMemoryTransport` uses it already; the other transports take it as `codec=`.
 
 ## Actors on other machines
 
@@ -64,7 +69,7 @@ with storage.model_storage() as models:
 To read the results, open the session data. Values are stored per blueprint id:
 
 ```python
-with storage.session_storage("hello-1") as data:
+with storage.session_storage(orchestrator.session.bsid) as data:
     print(data.get("hello-world", "greeting"))
 ```
 
