@@ -12,10 +12,14 @@ Stable releases are available on PyPI and can be installed with pip.
 pip install antikythera-sdk
 ```
 
-To include the orchestrator deployment dependencies (FastAPI, Redis, MQTT, etc.):
+This is enough to run an orchestrator and agents from your own Python code. Two extras
+add the network services:
+
+* `deployment`: the HTTP API service (`antikythera` command) that the web UI talks to.
+* `mcp`: the MCP server (`antikythera-mcp` command).
 
 ```bash
-pip install antikythera-sdk[deployment]
+pip install "antikythera-sdk[deployment,mcp]"
 ```
 
 ## Latest
@@ -35,7 +39,8 @@ To install `antikythera` for development, install from local source with the "de
 ```bash
 git clone https://github.com/gramaziokohler/antikythera.git
 cd antikythera
-pip install -e .[dev]
+pip install -e ".[dev]"
+invoke pre-build  # generates the protobuf bindings
 ```
 
 To bring up the full stack from your clone — both images built from local source, the

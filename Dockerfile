@@ -5,7 +5,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /build
 
 # Copy only the files required to build the package
-COPY pyproject.toml requirements.txt requirements-dev.txt requirements-orchestrator.txt README.md LICENSE tasks.py ./
+COPY pyproject.toml README.md LICENSE tasks.py ./
 COPY src/ src/
 
 # Install tools needed to generate proto classes
@@ -33,7 +33,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 
 COPY --from=builder /dist /dist
-RUN WHL=$(ls /dist/*.whl) && uv pip install --system "${WHL}[deployment]" && rm -rf /dist
+RUN WHL=$(ls /dist/*.whl) && uv pip install --system "${WHL}[deployment,mcp]" && rm -rf /dist
 
 # Default: run the orchestrator. Override `command:` in docker-compose for agents.
 CMD ["antikythera", "--host", "0.0.0.0", "--port", "8000"]

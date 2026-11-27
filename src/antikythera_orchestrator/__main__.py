@@ -2,8 +2,11 @@ import argparse
 import copy
 import logging
 
-import uvicorn
-from uvicorn.config import LOGGING_CONFIG
+try:
+    import uvicorn
+    from uvicorn.config import LOGGING_CONFIG
+except ImportError as e:  # pragma: no cover
+    raise ImportError("The Antikythera API service needs the 'deployment' extra: pip install 'antikythera-sdk[deployment]'") from e
 
 
 def main() -> None:

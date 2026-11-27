@@ -19,8 +19,11 @@ from typing import Any
 from typing import List
 from typing import Optional
 
-import httpx
-from mcp.server.fastmcp import FastMCP
+try:
+    import httpx
+    from mcp.server.fastmcp import FastMCP
+except ImportError as e:  # pragma: no cover
+    raise ImportError("The Antikythera MCP server needs the 'mcp' extra: pip install 'antikythera-sdk[mcp]'") from e
 
 # ---------------------------------------------------------------------------
 # Global configuration – can be overridden via env var or CLI flag
