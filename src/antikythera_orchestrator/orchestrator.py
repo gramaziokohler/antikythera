@@ -21,7 +21,6 @@ from compas_eve import Subscriber
 from compas_eve import Topic
 from compas_eve import Transport
 from compas_eve.codecs import ProtobufMessageCodec
-from compas_eve.mqtt import MqttTransport
 from compas_model.models import Model
 
 from antikythera import config
@@ -42,19 +41,20 @@ from antikythera.models import TaskState
 from antikythera.models.conversions import outputs_to_keys
 from antikythera.models.conversions import params_to_dict
 from antikythera.transport import check_transport
+from antikythera.transport import create_transport
 
 from .conditionals import safe_eval_condition
 from .scopes import ScopeConditionError
 from .scopes import ScopeRegistry
 from .sequencers import SequencerRegistry
-from .storage import RedisStorage
 from .storage import StorageBackend
+from .storage import default_storage
 
 LOG = logging.getLogger(__name__)
 
 
 def _get_eve_transport(host, port, codec):
-    return MqttTransport(host=host, port=port, codec=codec)
+    return create_transport(broker_host=host, broker_port=port)
 
 
 def _create_global_id(blueprint_id: str, task: Task) -> str:
@@ -425,11 +425,12 @@ class Orchestrator:
     transport : compas_eve.Transport, optional
         The transport to exchange messages with actors over. It must use
         ``ProtobufMessageCodec``, and actor launchers must use the same transport, or one
-        connected to the same network. Defaults to MQTT on
-        ``broker_host``:``broker_port``.
+        connected to the same network. Defaults to the transport configured by
+        ``ANTIKYTHERA_TRANSPORT``: MQTT on ``broker_host``:``broker_port``, or NATS at ``NATS_URL``.
     storage : StorageBackend, optional
-        Where the session, blueprints and models are stored. Defaults to
-        [RedisStorage][antikythera_orchestrator.storage.backends.RedisStorage].
+        Where the session, blueprints and models are stored. Defaults to the backend
+        configured by ``ANTIKYTHERA_STORAGE``, see
+        [default_storage][antikythera_orchestrator.storage.backends.default_storage].
 
     Attributes
     ----------
@@ -482,7 +483,7 @@ class Orchestrator:
 
         # Session data is namespaced on BSID
         # but also most operations add blueprint ID to the key
-        self.storage: StorageBackend = storage or RedisStorage()
+        self.storage: StorageBackend = storage or default_storage()
         self.session_storage = self.storage.session_storage(self.session.bsid)
         self.blueprint_storage = self.storage.blueprint_storage()
 

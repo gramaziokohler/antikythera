@@ -12,7 +12,6 @@ from compas_eve import Subscriber
 from compas_eve import Topic
 from compas_eve import Transport
 from compas_eve.codecs import ProtobufMessageCodec
-from compas_eve.mqtt import MqttTransport
 
 from antikythera.models import Task
 from antikythera.models import TaskAllocationMessage
@@ -26,6 +25,7 @@ from antikythera.models.conversions import dict_to_inputs
 from antikythera.models.conversions import dict_to_params
 from antikythera.models.conversions import keys_to_outputs
 from antikythera.transport import check_transport
+from antikythera.transport import create_transport
 from antikythera_actors.cli import Colors
 from antikythera_actors.context import ExecutionContext
 from antikythera_actors.descriptor import ToolBindingError
@@ -36,7 +36,7 @@ LOG = logging.getLogger(__name__)
 
 
 def _get_eve_transport(host, port, codec, transport, tls):
-    return MqttTransport(host=host, port=port, codec=codec, tls=tls, transport=transport)
+    return create_transport(broker_host=host, broker_port=port, mqtt_transport=transport, tls=tls)
 
 
 def _ensure_actors():
@@ -81,7 +81,8 @@ class ActorLauncher:
         The transport to exchange messages with the orchestrator over. It must use
         ``ProtobufMessageCodec``. For example a
         ``compas_eve.memory.InMemoryTransport`` shared with an orchestrator in the same
-        process. Defaults to MQTT on ``broker_host``:``broker_port``.
+        process. Defaults to the transport configured by ``ANTIKYTHERA_TRANSPORT``: MQTT on
+        ``broker_host``:``broker_port``, or NATS at ``NATS_URL``.
     """
 
     def __init__(

@@ -518,7 +518,7 @@ class ModelStorage(BaseModelStorage):
 
         pipe = self.client.pipeline()
         pipe.set(index_key, index_value)
-        pipe.delete(key)
+        pipe.delete(key, f"nesting:{model_id}")
         pipe.execute()
 
         LOG.info(f"Model {model_id} deleted")

@@ -26,6 +26,13 @@ In short, this is how that works.
    invoke test
    ```
 
+   The NATS tests skip unless a NATS server with JetStream is running at
+   `nats://127.0.0.1:4222` (or at `NATS_TEST_URL`). CI starts one and runs them:
+
+   ```bash
+   docker run --rm -p 4222:4222 nats:2.10 -js
+   ```
+
 5. Start making your changes to the **main** branch (or branch off of it).
 6. Make sure all tests still pass:
 

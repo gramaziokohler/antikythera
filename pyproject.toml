@@ -66,8 +66,12 @@ mcp = [
     "httpx",
     "mcp[cli] >=1.0,<2; python_version >= '3.10'",
 ]
+# NATS transport and storage backend, an alternative to MQTT + Redis.
+nats = [
+    "nats-py >=2.6",
+]
 dev = [
-    "antikythera-sdk[deployment,mcp]",
+    "antikythera-sdk[deployment,mcp,nats]",
     "build",
     "bump-my-version",
     "compas_invocations2[mkdocs] >=1.3",

@@ -60,7 +60,7 @@ The **orchestrator** is in charge of coordinating the execution of a **blueprint
 
 Each task is executed by an **actor**, either remote or local. The overall system has location transparency, so actors can be running in one or more machines in the same or different networks.
 
-The orchestrator and the actor launchers talk over a `compas_eve` transport, MQTT by default. Both accept any other transport whose codec is `ProtobufMessageCodec`, for example `InMemoryTransport` to run a whole blueprint in one process with no broker, or a Zenoh transport for brokerless networking.
+The orchestrator and the actor launchers talk over a `compas_eve` transport, MQTT by default. Both accept any other transport whose codec is `ProtobufMessageCodec`, for example `InMemoryTransport` to run a whole blueprint in one process with no broker, or `NatsTransport` (`antikythera.transports.nats`, chosen with `ANTIKYTHERA_TRANSPORT=nats`). A single NATS server with JetStream can then replace both the MQTT broker and Redis.
 
 The orchestrator runs a single **blueprint** at a time. Each run of a blueprint is identified by a session identifier (`BSID`). A session has a state (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED`). Parallelism can be achieved inside the blueprint itself by using different actors. 
 
@@ -287,7 +287,7 @@ Available sequencers:
 
 The system uses [Redis](https://redis.io/) as persistent data store to keep track of state. The data store is used to store the state of the **orchestrator** itself, and the state of the **blueprint**.
 
-The store is reached through a `StorageBackend` (`antikythera_orchestrator.storage.backends`), which hands out the session, blueprint and model storage objects. `RedisStorage` is the default and the one the HTTP API uses. `InMemoryStorage` keeps everything in the current process, for embedding the orchestrator in an application or in tests. Sequencers read models through the backend of the orchestrator that created them.
+The store is reached through a `StorageBackend` (`antikythera_orchestrator.storage.backends`), which hands out the session, blueprint and model storage objects. `RedisStorage` is the default. `NatsStorage` keeps everything in NATS JetStream object stores. `InMemoryStorage` keeps everything in the current process, for embedding the orchestrator in an application or in tests. The HTTP API service uses the backend chosen by `ANTIKYTHERA_STORAGE`. Sequencers read models through the backend of the orchestrator that created them.
 
 The data store contains two types of data, internal and external:
 * Orchestrator data, considered internal.
