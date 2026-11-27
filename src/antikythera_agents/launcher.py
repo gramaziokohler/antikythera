@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from typing import Optional
 
 import coolname
 from compas_eve import Publisher
 from compas_eve import Subscriber
 from compas_eve import Topic
+from compas_eve import Transport
 from compas_eve.codecs import ProtobufMessageCodec
 from compas_eve.mqtt import MqttTransport
 
@@ -22,6 +24,7 @@ from antikythera.models import TaskState
 from antikythera.models.conversions import dict_to_inputs
 from antikythera.models.conversions import dict_to_params
 from antikythera.models.conversions import keys_to_outputs
+from antikythera.transport import check_transport
 from antikythera_agents.cli import Colors
 from antikythera_agents.context import ExecutionContext
 from antikythera_agents.descriptor import ToolBindingError
@@ -53,9 +56,36 @@ class AgentLauncher:
     new task assignment, all running launchers compete to claim it; the orchestrator picks
     one winner and broadcasts an allocation message.  Only the winning launcher executes
     the task; any others that started work cancel themselves on receipt of the ACK.
+
+    Parameters
+    ----------
+    broker_host : str, optional
+        Host of the MQTT broker. Ignored when ``transport`` is given.
+    broker_port : int, optional
+        Port of the MQTT broker. Ignored when ``transport`` is given.
+    sys_only : bool, optional
+        Only run the system agents.
+    mqtt_transport : str, optional
+        The MQTT socket transport, ``"tcp"`` or ``"websockets"``. Ignored when ``transport`` is given.
+    tls : bool, optional
+        Connect to the MQTT broker over TLS. Ignored when ``transport`` is given.
+    transport : compas_eve.Transport, optional
+        The transport to exchange messages with the orchestrator over. It must use
+        ``ProtobufMessageCodec``. For example a
+        ``compas_eve.memory.InMemoryTransport`` shared with an orchestrator in the same
+        process. Defaults to MQTT on ``broker_host``:``broker_port``.
     """
 
-    def __init__(self, broker_host="127.0.0.1", broker_port=1883, sys_only=False, mqtt_transport="tcp", tls=False):
+    def __init__(
+        self,
+        broker_host: str = "127.0.0.1",
+        broker_port: int = 1883,
+        sys_only: bool = False,
+        mqtt_transport: str = "tcp",
+        tls: bool = False,
+        *,
+        transport: Optional[Transport] = None,
+    ):
         self.launcher_id = coolname.generate_slug(4)
         self.sys_only = sys_only
         self.pending_claims = {}  # task_id -> Task
@@ -63,7 +93,10 @@ class AgentLauncher:
 
         self.threads = []
         self.thread_lock = threading.Lock()
-        self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec(), transport=mqtt_transport, tls=tls)
+        if transport is not None:
+            self.transport = check_transport(transport)
+        else:
+            self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec(), transport=mqtt_transport, tls=tls)
         self.task_start_subscriber = Subscriber(Topic("antikythera/task/start"), self.on_task_start, transport=self.transport)
         self.task_completion_publisher = Publisher(Topic("antikythera/task/completed"), transport=self.transport)
         self.task_claim_publisher = Publisher(Topic("antikythera/task/claim"), transport=self.transport)

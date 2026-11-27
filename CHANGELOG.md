@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `deploy/docker-compose.yml`, a self-contained compose file that runs Antikythera from the images published on Docker Hub — no clone, no build. The mosquitto config is inlined so it is the only file to fetch, Redis stays off the host network, host ports are `AKT_*_PORT` variables, and the MCP server sits behind an opt-in `mcp` profile. It runs the agents without the development stack's `--sys-only`, which leaves the example blueprints stalled on their first `user_interaction` task.
 - Documentation for running Antikythera rather than developing it: `docs/deployment/docker.md` (the recommended path) and `docs/deployment/bare-metal.md` (systemd units, nginx and TLS on Ubuntu, cross-checked against the ETH Zurich deployment). The docs landing page now opens with the Docker quick start, and `docs/installation.md` is scoped to the Python package.
+- `Orchestrator` and `AgentLauncher` take a `transport` keyword, so they can talk over any `compas_eve` transport instead of always creating an MQTT one. Combined with `InMemoryStorage`, a blueprint runs entirely inside one Python process, with no broker and no Redis. A transport whose codec is not `ProtobufMessageCodec` is rejected up front instead of failing on the first message.
+- `Orchestrator` takes a `storage` keyword with a `StorageBackend`: `RedisStorage` (the default, as before) or the new `InMemoryStorage`. Sequencers receive the orchestrator's backend, so dynamic expansion reads models from the same store.
 
 ### Changed
 

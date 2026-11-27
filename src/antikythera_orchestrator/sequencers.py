@@ -5,11 +5,13 @@ from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
 from typing import List
+from typing import Optional
 
 from antikythera.models import Blueprint
 from antikythera.models import Dependency
 from antikythera.models import Task
-from antikythera_orchestrator.storage import ModelStorage
+from antikythera_orchestrator.storage import RedisStorage
+from antikythera_orchestrator.storage import StorageBackend
 
 if TYPE_CHECKING:
     from antikythera.models import BlueprintSession
@@ -44,8 +46,20 @@ def sequencer(name: str):
 
 
 class Sequencer(ABC):
-    def __init__(self, session: "BlueprintSession"):
+    """Expands a dynamic task into one task per fabrication item.
+
+    Parameters
+    ----------
+    session : BlueprintSession
+        The session the dynamic task belongs to.
+    storage : StorageBackend, optional
+        Where to read models and nesting results from. The orchestrator passes its own
+        backend; defaults to [RedisStorage][antikythera_orchestrator.storage.backends.RedisStorage].
+    """
+
+    def __init__(self, session: "BlueprintSession", storage: Optional[StorageBackend] = None):
         self.session = session
+        self.storage: StorageBackend = storage or RedisStorage()
 
     @abstractmethod
     def expand(self, task: Task, blueprint: Blueprint) -> Blueprint:
@@ -66,7 +80,7 @@ class BasicSequencer(Sequencer):
         if not model_id:
             raise ValueError("model_id not found in session params or task params")
 
-        with ModelStorage() as storage:
+        with self.storage.model_storage() as storage:
             model = storage.get_model(model_id)
 
         return list(model.elements())
@@ -126,7 +140,7 @@ class BasicStockSequencer(BasicSequencer):
         if not model_id:
             raise ValueError("model_id not found in session params or task params")
 
-        with ModelStorage() as storage:
+        with self.storage.model_storage() as storage:
             nesting_result = storage.get_nesting(model_id)
             if not nesting_result:
                 raise ValueError(f"Nesting result not found for model_id: {model_id}")
@@ -141,7 +155,7 @@ class BasicStockSequencer(BasicSequencer):
 
         slab_name = None
 
-        with ModelStorage() as storage:
+        with self.storage.model_storage() as storage:
             model = storage.get_model(model_id)
             slab_name = model.slabs[0].name
             for stock_index, task in enumerate(new_tasks):
@@ -168,7 +182,7 @@ class BasicElementSequencer(BasicSequencer):
 
         stock_id = self.session.blueprint_contexts[blueprint_id]["element_id"]
 
-        with ModelStorage() as storage:
+        with self.storage.model_storage() as storage:
             nesting_result = storage.get_nesting(model_id)
             model = storage.get_model(model_id)
             if not nesting_result:
