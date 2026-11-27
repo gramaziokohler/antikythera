@@ -179,15 +179,15 @@ class RedispatchPoller:
                     continue
 
                 if attempts >= self._max_redispatches:
-                    LOG.warning(f"Task {fqn_task_id} was not claimed after {attempts} re-dispatches; failing with NO_AGENT_CLAIMED.")
+                    LOG.warning(f"Task {fqn_task_id} was not claimed after {attempts} re-dispatches; failing with NO_ACTOR_CLAIMED.")
                     self.untrack(fqn_task_id)
                     self._fail(
                         TaskCompletionMessage(
                             id=fqn_task_id,
                             state=TaskState.FAILED,
                             outputs={},
-                            agent_id="orchestrator",
-                            error=TaskError(code="NO_AGENT_CLAIMED", message=f"No agent claimed task {fqn_task_id} after {attempts} re-dispatches"),
+                            actor_id="orchestrator",
+                            error=TaskError(code="NO_ACTOR_CLAIMED", message=f"No actor claimed task {fqn_task_id} after {attempts} re-dispatches"),
                         )
                     )
                 else:
@@ -391,9 +391,9 @@ class Orchestrator:
     """Coordinates the execution of a blueprint.
 
     The orchestrator is responsible for managing the state of a blueprint session,
-    and coordinating the execution of tasks by agents.
+    and coordinating the execution of tasks by actors.
 
-    By default it talks to agents over MQTT and keeps its state in Redis. Pass a
+    By default it talks to actors over MQTT and keeps its state in Redis. Pass a
     ``transport`` and a ``storage`` backend to run it somewhere else, for example
     entirely inside the current process:
 
@@ -401,12 +401,12 @@ class Orchestrator:
     from compas_eve.codecs import ProtobufMessageCodec
     from compas_eve.memory import InMemoryTransport
 
-    from antikythera_agents.launcher import AgentLauncher
+    from antikythera_actors.launcher import ActorLauncher
     from antikythera_orchestrator import InMemoryStorage
     from antikythera_orchestrator import Orchestrator
 
     transport = InMemoryTransport(codec=ProtobufMessageCodec())
-    launcher = AgentLauncher(transport=transport)
+    launcher = ActorLauncher(transport=transport)
     launcher.start()
 
     orchestrator = Orchestrator(session, transport=transport, storage=InMemoryStorage())
@@ -423,8 +423,8 @@ class Orchestrator:
     broker_port : int, optional
         Port of the MQTT broker. Ignored when ``transport`` is given.
     transport : compas_eve.Transport, optional
-        The transport to exchange messages with agents over. It must use
-        ``ProtobufMessageCodec``, and agent launchers must use the same transport, or one
+        The transport to exchange messages with actors over. It must use
+        ``ProtobufMessageCodec``, and actor launchers must use the same transport, or one
         connected to the same network. Defaults to MQTT on
         ``broker_host``:``broker_port``.
     storage : StorageBackend, optional
@@ -436,7 +436,7 @@ class Orchestrator:
     session : BlueprintSession
         The blueprint session to execute.
     transport : compas_eve.Transport
-        The transport messages to agents go over.
+        The transport messages to actors go over.
     storage : StorageBackend
         The storage backend the orchestrator reads from and writes to.
 
@@ -614,7 +614,7 @@ class Orchestrator:
 
         Tasks in FAILED, RUNNING, or READY state are reset to PENDING so that
         they can be re-scheduled when the session resumes. Tasks that were RUNNING
-        or READY at the time of a stop are no longer being worked on by any agent,
+        or READY at the time of a stop are no longer being worked on by any actor,
         so they need to be re-dispatched.
         """
         for node, data in self.graph.nodes(data=True):
@@ -957,7 +957,7 @@ class Orchestrator:
             if scope:
                 scope.skip_tasks(self.graph, excluded_fqn=fqn_task_id)
 
-        completion_msg = TaskCompletionMessage(id=fqn_task_id, state=TaskState.SKIPPED, outputs={}, agent_id="system")
+        completion_msg = TaskCompletionMessage(id=fqn_task_id, state=TaskState.SKIPPED, outputs={}, actor_id="system")
 
         self.on_task_completed(completion_msg)
 
@@ -1170,7 +1170,7 @@ class Orchestrator:
 
         # Drop messages that arrive after the session has already terminated.
         # This can happen when the re-dispatch poller injects a failure for a
-        # task that actually succeeded, or when stale agent messages arrive
+        # task that actually succeeded, or when stale actor messages arrive
         # after stop().
         if self.state in (BlueprintSessionState.COMPLETED, BlueprintSessionState.FAILED):
             LOG.debug(f"Dropping completion for {message.id}: session already in terminal state {self.state}.")
@@ -1213,7 +1213,7 @@ class Orchestrator:
                     return
 
         # Send ACK
-        ack = TaskCompletionAckMessage(id=message.id, state=TaskState(message.state), accepted_agent_id=message.agent_id)
+        ack = TaskCompletionAckMessage(id=message.id, state=TaskState(message.state), accepted_actor_id=message.actor_id)
         self.task_ack_publisher.publish(ack)
 
         # Persist the updated session state
@@ -1244,9 +1244,9 @@ class Orchestrator:
             task.state = TaskState.RUNNING
             self._redispatch_poller.untrack(task_id)
 
-            allocation = TaskAllocationMessage(task_id=task_id, assigned_agent_id=message.agent_id)
+            allocation = TaskAllocationMessage(task_id=task_id, assigned_actor_id=message.actor_id)
             self.task_allocation_publisher.publish(allocation)
-            LOG.info(f"Allocated task {task_id} to agent {message.agent_id} (Mode: {execution_mode})")
+            LOG.info(f"Allocated task {task_id} to actor {message.actor_id} (Mode: {execution_mode})")
 
             blueprint_id = self.graph.node_attribute(task_id, "blueprint_id")
             self._notify_task_state_change(blueprint_id, task.id, task.state.value)
@@ -1254,7 +1254,7 @@ class Orchestrator:
             # Persist the updated session state
             self.session_storage.save_session(self.session)
         else:
-            LOG.info(f"Rejected claim for task {task_id} from agent {message.agent_id}. Task state is {task.state}")
+            LOG.info(f"Rejected claim for task {task_id} from actor {message.actor_id}. Task state is {task.state}")
 
     def _flush_scheduler_queue(self) -> None:
         # Drains the scheduler queue and resets pending tasks to PENDING state

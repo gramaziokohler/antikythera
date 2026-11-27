@@ -37,29 +37,29 @@ class TaskDefinition:
 
 
 ###########################################
-# Sample agents
+# Sample actors
 ###########################################
 
-class SystemAgent:
-    agent_type = "system"
+class SystemActor:
+    actor_type = "system"
     tools = ["start", "end", "sleep"]
 
 
-class UserInteractionAgent:
-    agent_type = "user_interaction"
+class UserInteractionActor:
+    actor_type = "user_interaction"
     tools = ["user_input", "user_output"]
 
 
-def get_agent_classes():
-    return [SystemAgent, UserInteractionAgent]
+def get_actor_classes():
+    return [SystemActor, UserInteractionActor]
 
 
-def get_full_tool_name(agent_class, tool_name):
-    if agent_class is None:
+def get_full_tool_name(actor_class, tool_name):
+    if actor_class is None:
         return None
 
-    agent_type = agent_class.agent_type
-    return f"{agent_type}.{tool_name}"
+    actor_type = actor_class.actor_type
+    return f"{actor_type}.{tool_name}"
 
 
 ###########################################
@@ -70,7 +70,7 @@ class GrasshopperNodeCreator:
     def __init__(self):
         pass
 
-    def convert_node_to_task_definition(self, ghenv, agent_class, tool_name) -> TaskDefinition:
+    def convert_node_to_task_definition(self, ghenv, actor_class, tool_name) -> TaskDefinition:
         composer = None
         task_definitions = self.get_task_definition_inputs(ghenv)
 
@@ -92,7 +92,7 @@ class GrasshopperNodeCreator:
 
         task = Task(
             id=ghenv.Component.NickName,
-            type=get_full_tool_name(agent_class, tool_name) or "Undefined",
+            type=get_full_tool_name(actor_class, tool_name) or "Undefined",
             description="TODO!",
             inputs=self.collect_input_params(ghenv),
             outputs=self.collect_output_params(ghenv),

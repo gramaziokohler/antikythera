@@ -8,10 +8,10 @@ from antikythera.models import TaskInput
 from antikythera.models import TaskOutput
 from antikythera.models import TaskParam
 from antikythera.models import TaskState
-from antikythera_agents.base_agent import Agent
-from antikythera_agents.decorators import agent
-from antikythera_agents.decorators import tool
-from antikythera_agents.launcher import AgentLauncher
+from antikythera_actors.base_actor import Actor
+from antikythera_actors.decorators import actor
+from antikythera_actors.decorators import tool
+from antikythera_actors.launcher import ActorLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.storage import BlueprintStorage
 
@@ -19,13 +19,13 @@ from antikythera_orchestrator.storage import BlueprintStorage
 def test_composite_task_execution(mock_storage, mock_transport_orchestrator, mock_transport_launcher):
     # 1. Define Inner Blueprint
     # Inner Task: Multiplies input by 2
-    # We'll use a custom agent or reuse TestDataAgent if I can import it or redefine it.
-    # Since TestDataAgent is in test_orchestrator_data_flow.py, I can't easily import it if it's not in a module.
-    # I'll define a simple agent here as well or move TestDataAgent to conftest or a shared file.
-    # For simplicity, I'll redefine a similar agent here with a different type name.
+    # We'll use a custom actor or reuse TestDataActor if I can import it or redefine it.
+    # Since TestDataActor is in test_orchestrator_data_flow.py, I can't easily import it if it's not in a module.
+    # I'll define a simple actor here as well or move TestDataActor to conftest or a shared file.
+    # For simplicity, I'll redefine a similar actor here with a different type name.
 
-    @agent(type="composite_test_agent")
-    class CompositeTestAgent(Agent):
+    @actor(type="composite_test_actor")
+    class CompositeTestActor(Actor):
         @tool(name="multiplier")
         def multiplier(self, task: Task) -> Dict[str, Any]:
             val = task.get_input_value("val")
@@ -36,7 +36,7 @@ def test_composite_task_execution(mock_storage, mock_transport_orchestrator, moc
 
     inner_task = Task(
         id="inner_task",
-        type="composite_test_agent.multiplier",
+        type="composite_test_actor.multiplier",
         inputs=[TaskInput(name="val", get_from="inner_input")],
         outputs=[TaskOutput(name="result")],
     )
@@ -62,7 +62,7 @@ def test_composite_task_execution(mock_storage, mock_transport_orchestrator, moc
 
     task_start = Task(
         id="start",
-        type="composite_test_agent.multiplier",
+        type="composite_test_actor.multiplier",
         inputs=[TaskInput(name="val", value=5)],  # Static input 5
         outputs=[TaskOutput(name="result")],  # Output 'result' = 10. Mapped to session key 'result'
     )
@@ -93,7 +93,7 @@ def test_composite_task_execution(mock_storage, mock_transport_orchestrator, moc
     orchestrator = Orchestrator(session)
 
     # 5. Launcher
-    launcher = AgentLauncher()
+    launcher = ActorLauncher()
     launcher.start()
 
     # 6. Start

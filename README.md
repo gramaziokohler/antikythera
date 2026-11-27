@@ -42,7 +42,7 @@ please check out the online documentation here: [antikythera docs](https://grama
 
 ## Running Antikythera
 
-The orchestrator, the system agents and the web UI are published as Docker images, so a
+The orchestrator, the system actors and the web UI are published as Docker images, so a
 complete installation needs no clone and no build:
 
 ```bash
@@ -51,7 +51,7 @@ docker compose up -d
 ```
 
 Then open <http://localhost:8080>. See [Run with Docker](https://gramaziokohler.github.io/antikythera/deployment/docker/)
-for configuration, connecting your own agents, and updating, or
+for configuration, connecting your own actors, and updating, or
 [Run on bare metal](https://gramaziokohler.github.io/antikythera/deployment/bare-metal/)
 to run the services without Docker.
 

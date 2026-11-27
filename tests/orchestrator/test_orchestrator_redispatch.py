@@ -12,7 +12,7 @@ from antikythera.models import Task
 from antikythera.models import TaskAssignmentMessage
 from antikythera.models import TaskClaimRequest
 from antikythera.models import TaskState
-from antikythera_agents.launcher import AgentLauncher
+from antikythera_actors.launcher import ActorLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.orchestrator import RedispatchPoller
 
@@ -24,7 +24,7 @@ from antikythera_orchestrator.orchestrator import RedispatchPoller
 def test_dispatch_tracking_lifecycle(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
     """Tracking entries are populated on dispatch and cleared on claim and on both reset paths."""
     task_start = Task(id="start", type="system.start")
-    work_task = Task(id="work", type="agent.unclaimed")  # no agent registered for this type
+    work_task = Task(id="work", type="actor.unclaimed")  # no actor registered for this type
     task_end = Task(id="end", type="system.end")
     task_start >> work_task >> task_end
 
@@ -32,14 +32,14 @@ def test_dispatch_tracking_lifecycle(mock_storage, mock_transport_orchestrator, 
     session = BlueprintSession(bsid="tracking_lifecycle_test", blueprint=blueprint)
     orchestrator = cleanup_manager.register(Orchestrator(session))
 
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
     orchestrator.start()
 
     fqn = f"{blueprint.id}.{work_task.id}"
 
     # Wait for work_task to appear in the poller's tracking dict (system.start finishes
-    # via fast_system_agents mock, then work_task is scheduled READY with no agent to claim it)
+    # via fast_system_actors mock, then work_task is scheduled READY with no actor to claim it)
     deadline = time.time() + 5.0
     while time.time() < deadline:
         with orchestrator._redispatch_poller._lock:
@@ -52,7 +52,7 @@ def test_dispatch_tracking_lifecycle(mock_storage, mock_transport_orchestrator, 
         assert fqn in orchestrator._redispatch_poller._entries
 
     # --- claim path: on_task_claim should untrack the entry ---
-    orchestrator.on_task_claim(TaskClaimRequest(task_id=fqn, agent_id="test-agent"))
+    orchestrator.on_task_claim(TaskClaimRequest(task_id=fqn, actor_id="test-actor"))
     with orchestrator._redispatch_poller._lock:
         assert fqn not in orchestrator._redispatch_poller._entries
 
@@ -93,7 +93,7 @@ def test_redispatch_publishes_with_backoff():
         max_redispatches=5,
     )
 
-    message = TaskAssignmentMessage(id="bp.work", type="agent.do")
+    message = TaskAssignmentMessage(id="bp.work", type="actor.do")
     poller.start()
 
     try:
@@ -143,19 +143,19 @@ def test_redispatch_publishes_with_backoff():
 
 
 # ---------------------------------------------------------------------------
-# Test 3 — NO_AGENT_CLAIMED failure after MAX_REDISPATCHES
+# Test 3 — NO_ACTOR_CLAIMED failure after MAX_REDISPATCHES
 # ---------------------------------------------------------------------------
 
 
-def test_no_agent_claimed_session_fails(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
-    """Session transitions to FAILED with NO_AGENT_CLAIMED after MAX_REDISPATCHES unclaimed re-dispatches."""
+def test_no_actor_claimed_session_fails(mock_storage, mock_transport_orchestrator, mock_transport_launcher, cleanup_manager):
+    """Session transitions to FAILED with NO_ACTOR_CLAIMED after MAX_REDISPATCHES unclaimed re-dispatches."""
     task_start = Task(id="start", type="system.start")
-    work_task = Task(id="work", type="agent.unclaimed")
+    work_task = Task(id="work", type="actor.unclaimed")
     task_end = Task(id="end", type="system.end")
     task_start >> work_task >> task_end
 
     blueprint = Blueprint(id="no_claim_bp", name="No Claim BP", tasks=[task_start, work_task, task_end])
-    session = BlueprintSession(bsid="no_agent_claimed_test", blueprint=blueprint)
+    session = BlueprintSession(bsid="no_actor_claimed_test", blueprint=blueprint)
 
     # Use base_delay=0 so the delay formula gives 0 s for all attempts,
     # meaning every poller tick (1 s) immediately fires a re-dispatch or failure.
@@ -167,7 +167,7 @@ def test_no_agent_claimed_session_fails(mock_storage, mock_transport_orchestrato
     ):
         orchestrator = cleanup_manager.register(Orchestrator(session))
 
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
     orchestrator.start()
 

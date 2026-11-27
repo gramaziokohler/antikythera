@@ -12,7 +12,7 @@ def _isolated_plugin_manager_state():
     """Snapshot/restore the singleton's discovery state around each test.
 
     `PLUGIN_MANAGER` is a process-wide singleton (other test modules, e.g.
-    tests/agents/test_cli.py, trigger real discovery on it), so tests here must not leak
+    tests/actors/test_cli.py, trigger real discovery on it), so tests here must not leak
     state into it or inherit state from it.
     """
     saved_done = PLUGIN_MANAGER._auto_discovery_done
@@ -44,9 +44,22 @@ def _failing_entry_point(name, error):
     return ep
 
 
+def _only_current_group(plugins):
+    """A fake `entry_points` that returns `plugins` for the actors group and nothing for others."""
+
+    def fake(group):
+        return plugins if group == plugin_module._PLUGINS_GROUP else []
+
+    return MagicMock(side_effect=fake)
+
+
+def _current_group_calls(calls):
+    return [c for c in calls.call_args_list if c.kwargs.get("group") == plugin_module._PLUGINS_GROUP]
+
+
 def test_discover_plugins_strict_returns_no_failures_when_all_import(monkeypatch):
     entry_points = [_fake_module_entry_point("good_a"), _fake_module_entry_point("good_b")]
-    monkeypatch.setattr(plugin_module, "entry_points", lambda group: entry_points)
+    monkeypatch.setattr(plugin_module, "entry_points", _only_current_group(entry_points))
 
     failures = PLUGIN_MANAGER.discover_plugins_strict()
 
@@ -57,7 +70,7 @@ def test_discover_plugins_strict_returns_no_failures_when_all_import(monkeypatch
 
 def test_discover_plugins_strict_collects_failures_without_warning(monkeypatch, recwarn):
     error = RuntimeError("dependency missing")
-    monkeypatch.setattr(plugin_module, "entry_points", lambda group: [_failing_entry_point("broken", error)])
+    monkeypatch.setattr(plugin_module, "entry_points", _only_current_group([_failing_entry_point("broken", error)]))
 
     failures = PLUGIN_MANAGER.discover_plugins_strict()
 
@@ -68,7 +81,7 @@ def test_discover_plugins_strict_collects_failures_without_warning(monkeypatch, 
 def test_discover_plugins_strict_still_imports_successful_plugins_when_another_fails(monkeypatch):
     error = ImportError("no ROS")
     entry_points = [_fake_module_entry_point("good"), _failing_entry_point("broken", error)]
-    monkeypatch.setattr(plugin_module, "entry_points", lambda group: entry_points)
+    monkeypatch.setattr(plugin_module, "entry_points", _only_current_group(entry_points))
 
     failures = PLUGIN_MANAGER.discover_plugins_strict()
 
@@ -77,18 +90,18 @@ def test_discover_plugins_strict_still_imports_successful_plugins_when_another_f
 
 
 def test_discover_plugins_strict_always_reattempts_every_entry_point(monkeypatch):
-    calls = MagicMock(return_value=[_fake_module_entry_point("good")])
+    calls = _only_current_group([_fake_module_entry_point("good")])
     monkeypatch.setattr(plugin_module, "entry_points", calls)
 
     PLUGIN_MANAGER.discover_plugins_strict()
     PLUGIN_MANAGER.discover_plugins_strict()
 
-    assert calls.call_count == 2
+    assert len(_current_group_calls(calls)) == 2
 
 
 def test_discover_plugins_warns_and_continues_on_failure(monkeypatch):
     error = RuntimeError("boom")
-    monkeypatch.setattr(plugin_module, "entry_points", lambda group: [_failing_entry_point("broken", error)])
+    monkeypatch.setattr(plugin_module, "entry_points", _only_current_group([_failing_entry_point("broken", error)]))
 
     with pytest.warns(RuntimeWarning, match="broken"):
         PLUGIN_MANAGER.discover_plugins()
@@ -97,10 +110,25 @@ def test_discover_plugins_warns_and_continues_on_failure(monkeypatch):
 
 
 def test_discover_plugins_skips_second_call_once_done(monkeypatch):
-    calls = MagicMock(return_value=[])
+    calls = _only_current_group([])
     monkeypatch.setattr(plugin_module, "entry_points", calls)
 
     PLUGIN_MANAGER.discover_plugins()
     PLUGIN_MANAGER.discover_plugins()
 
-    assert calls.call_count == 1
+    assert len(_current_group_calls(calls)) == 1
+
+
+def test_plugins_under_the_legacy_group_are_reported_not_loaded(monkeypatch):
+    legacy = _fake_module_entry_point("old_style")
+
+    def fake(group):
+        return [legacy] if group == plugin_module._LEGACY_PLUGINS_GROUP else []
+
+    monkeypatch.setattr(plugin_module, "entry_points", fake)
+
+    with pytest.warns(RuntimeWarning, match="antikythera.actors"):
+        failures = PLUGIN_MANAGER.discover_plugins_strict()
+
+    assert failures == []
+    assert "old_style" not in PLUGIN_MANAGER._loaded_modules

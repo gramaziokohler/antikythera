@@ -3,7 +3,7 @@ from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
 from antikythera.models import Task
 from antikythera.models import TaskParam
-from antikythera_agents.launcher import AgentLauncher
+from antikythera_actors.launcher import ActorLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 
@@ -25,8 +25,8 @@ def test_start_simple_session(mock_storage, mock_transport_orchestrator, mock_tr
     # This will trigger storage initialization which uses our mock_storage
     orchestrator = Orchestrator(session)
 
-    # 4. Instantiate and start Agent Launcher
-    launcher = AgentLauncher()
+    # 4. Instantiate and start Actor Launcher
+    launcher = ActorLauncher()
     launcher.start()
 
     # 5. Start the session

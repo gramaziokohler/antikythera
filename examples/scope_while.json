@@ -11,7 +11,7 @@
         {
             "id": "init",
             "type": "system.sleep",
-            "description": "Initialisation step before the loop. Seeds the counter the while condition reads – a real agent would compute it from the model instead of declaring a fixed value.",
+            "description": "Initialisation step before the loop. Seeds the counter the while condition reads – a real actor would compute it from the model instead of declaring a fixed value.",
             "params": [
                 {
                     "name": "duration",
@@ -57,7 +57,7 @@
         {
             "id": "pick_element",
             "type": "system.sleep",
-            "description": "Pick the next element to process. A real agent would declare 'elements_remaining' as an output here too and return the decremented count, which is what ends the loop before max_iterations.",
+            "description": "Pick the next element to process. A real actor would declare 'elements_remaining' as an output here too and return the decremented count, which is what ends the loop before max_iterations.",
             "params": [
                 {
                     "name": "duration",

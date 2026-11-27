@@ -1,6 +1,6 @@
 # Protocol Buffer Definitions
 
-This directory contains the Protocol Buffer definitions for Antikythera's Agent Communication Protocol.
+This directory contains the Protocol Buffer definitions for Antikythera's Actor Communication Protocol.
 
 ## Files
 
@@ -25,4 +25,4 @@ These message definitions use `google.protobuf.Any` to support type-safe seriali
 - Full type safety for COMPAS geometry objects
 - Efficient binary serialization
 - Schema evolution and backwards compatibility
-- Language-agnostic agent implementations
+- Language-agnostic actor implementations

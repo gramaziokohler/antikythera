@@ -135,7 +135,7 @@ def create_blueprint(blueprint_json: str) -> dict:
 
     TASK FIELDS:
     • id          – unique within the blueprint
-    • type        – agent task type (see common types below)
+    • type        – actor task type (see common types below)
     • description – optional human-readable label
     • depends_on  – list of {id: "<task_id>"} objects
     • inputs      – list of {name, get_from?, type?, description?}

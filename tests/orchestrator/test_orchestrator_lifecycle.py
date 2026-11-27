@@ -6,7 +6,7 @@ from antikythera.models import BlueprintSessionState
 from antikythera.models import Task
 from antikythera.models import TaskParam
 from antikythera.models import TaskState
-from antikythera_agents.launcher import AgentLauncher
+from antikythera_actors.launcher import ActorLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 
@@ -32,8 +32,8 @@ def test_orchestrator_pause_resume(mock_storage, mock_transport_orchestrator, mo
     # 3. Instantiate Orchestrator
     orchestrator = Orchestrator(session)
 
-    # 4. Instantiate and start Agent Launcher
-    launcher = AgentLauncher()
+    # 4. Instantiate and start Actor Launcher
+    launcher = ActorLauncher()
     launcher.start()
 
     # 5. Start the session
@@ -109,8 +109,8 @@ def test_orchestrator_stop(mock_storage, mock_transport_orchestrator, mock_trans
     # 3. Instantiate Orchestrator
     orchestrator = Orchestrator(session)
 
-    # 4. Start Agent Launcher
-    launcher = AgentLauncher()
+    # 4. Start Actor Launcher
+    launcher = ActorLauncher()
     launcher.start()
 
     # 5. Start the session

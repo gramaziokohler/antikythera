@@ -4,7 +4,7 @@ from antikythera.models import Blueprint
 from antikythera.models import BlueprintSession
 from antikythera.models import Task
 from antikythera.models import TaskParam
-from antikythera_agents.launcher import AgentLauncher
+from antikythera_actors.launcher import ActorLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 
@@ -29,7 +29,7 @@ def test_parallel_execution(mock_storage, mock_transport_orchestrator, mock_tran
     session = BlueprintSession(bsid="test_session_parallel", blueprint=blueprint)
     orchestrator = Orchestrator(session)
 
-    launcher = AgentLauncher()
+    launcher = ActorLauncher()
     launcher.start()
 
     start_time = time.time()

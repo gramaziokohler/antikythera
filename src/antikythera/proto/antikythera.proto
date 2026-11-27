@@ -7,16 +7,16 @@ import "google/protobuf/timestamp.proto";
 import "compas_pb/generated/message.proto";
 
 enum ExecutionMode {
-  EXECUTION_MODE_EXCLUSIVE = 0;   // Default: Only one agent is allocated the task
-  EXECUTION_MODE_COMPETITIVE = 1; // Multiple agents can run, first to finish wins
+  EXECUTION_MODE_EXCLUSIVE = 0;   // Default: Only one actor is allocated the task
+  EXECUTION_MODE_COMPETITIVE = 1; // Multiple actors can run, first to finish wins
 }
 
-// Task assignment message sent by orchestrator to agents
+// Task assignment message sent by orchestrator to actors
 message TaskAssignmentMessage {
   // Required: unique task identifier
   string id = 1;
 
-  // Required: task type (determines which agent handles it)
+  // Required: task type (determines which actor handles it)
   string type = 2;
 
   // Optional: task inputs from blueprint session data
@@ -40,13 +40,13 @@ message TaskAssignmentMessage {
   map<string, compas_pb.data.AnyData> context = 8;
 }
 
-// Task claim request sent by agents to orchestrator
+// Task claim request sent by actors to orchestrator
 message TaskClaimRequest {
   // Required: task identifier
   string task_id = 1;
 
-  // Required: agent identifier
-  string agent_id = 2;
+  // Required: actor identifier
+  string actor_id = 2;
 
   // Optional: claim timestamp
   google.protobuf.Timestamp timestamp = 3;
@@ -57,14 +57,14 @@ message TaskAllocationMessage {
   // Required: task identifier
   string task_id = 1;
 
-  // Required: agent identifier allocated to the task
-  string assigned_agent_id = 2;
+  // Required: actor identifier allocated to the task
+  string assigned_actor_id = 2;
 
   // Optional: allocation timestamp
   google.protobuf.Timestamp timestamp = 3;
 }
 
-// Task status update sent by agents when they start executing a task
+// Task status update sent by actors when they start executing a task
 message TaskStatusUpdateMessage {
   // Required: task identifier
   string id = 1;
@@ -72,8 +72,8 @@ message TaskStatusUpdateMessage {
   // Required: current task state (typically TASK_STATE_RUNNING when execution starts)
   TaskState state = 2;
 
-  // Required: agent claiming or running the task
-  string agent_id = 3;
+  // Required: actor claiming or running the task
+  string actor_id = 3;
 
   // Optional: any additional status data (e.g., progress)
   compas_pb.data.AnyData data = 4;
@@ -82,7 +82,7 @@ message TaskStatusUpdateMessage {
   google.protobuf.Timestamp timestamp = 5;
 }
 
-// Task completion message sent by agents to orchestrator
+// Task completion message sent by actors to orchestrator
 message TaskCompletionMessage {
   // Required: unique task identifier
   string id = 1;
@@ -90,8 +90,8 @@ message TaskCompletionMessage {
   // Required: current task state
   TaskState state = 2;
 
-  // Required: agent identifier who completed the task
-  string agent_id = 3;
+  // Required: actor identifier who completed the task
+  string actor_id = 3;
 
   // Optional: task outputs (only for succeeded tasks)
   // Uses google.protobuf.Any to support type-safe COMPAS objects via compas_pb
@@ -115,8 +115,8 @@ message TaskCompletionAckMessage {
   // Optional: final recorded state (SUCCEEDED / FAILED)
   TaskState state = 2;
 
-  // Optional: agent whose completion was accepted
-  string accepted_agent_id = 3;
+  // Optional: actor whose completion was accepted
+  string accepted_actor_id = 3;
 
   // Optional: time the orchestrator processed the completion
   google.protobuf.Timestamp timestamp = 4;

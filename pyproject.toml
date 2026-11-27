@@ -35,7 +35,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
-# Everything needed to run an orchestrator and agents from Python code.
+# Everything needed to run an orchestrator and actors from Python code.
 dependencies = [
     "asteval",
     "compas >=2,<3",
@@ -44,6 +44,7 @@ dependencies = [
     "compas_pb >=1.2,<2",
     "compas_timber >=2.1.2",
     "coolname",
+    "importlib_metadata; python_version < '3.10'",
     "jsonschema",
     "mqtthandler",
     "packaging",
@@ -80,15 +81,15 @@ dev = [
     "twine",
 ]
 
-[project.entry-points.'antikythera.agents']
-system = 'antikythera_orchestrator.system_agents'
-interaction = 'antikythera_agents.user_interaction'
-io = 'antikythera_agents.io_agent'
-reference = 'antikythera_agents.reference_agent'
+[project.entry-points.'antikythera.actors']
+system = 'antikythera_orchestrator.system_actors'
+interaction = 'antikythera_actors.user_interaction'
+io = 'antikythera_actors.io_actor'
+reference = 'antikythera_actors.reference_actor'
 
 [project.scripts]
 antikythera = "antikythera_orchestrator.__main__:main"
-antikythera-agents = "antikythera_agents.__main__:main"
+antikythera-actors = "antikythera_actors.__main__:main"
 antikythera-mcp = "antikythera_orchestrator.mcp_server:main"
 
 [project.entry-points.'compas_pb.plugins']
@@ -187,7 +188,7 @@ select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
 force-single-line = true
-known-first-party = ["antikythera", "antikythera_agents", "antikythera_orchestrator"]
+known-first-party = ["antikythera", "antikythera_actors", "antikythera_orchestrator"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

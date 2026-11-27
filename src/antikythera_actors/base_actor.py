@@ -1,0 +1,193 @@
+import logging
+from abc import ABC
+from contextlib import contextmanager
+from typing import Any
+from typing import Dict
+from typing import Optional
+
+from antikythera.models import Task
+from antikythera_actors.context import ExecutionContext
+from antikythera_actors.decorators import get_actor_tools
+from antikythera_actors.decorators import get_tool_descriptor
+from antikythera_actors.descriptor import ToolDescriptor
+
+
+class Actor(ABC):
+    """Base class for all Antikythera actors.
+
+    An actor is responsible for executing tasks of a specific type.
+    Each actor can have multiple tools (methods) that handle different operations.
+    """
+
+    def __init__(self):
+        """Initialize the actor and allocate any required resources.
+
+        Notes
+        -----
+        Override this method to set up connections, load models, etc.
+        """
+        self._tools = get_actor_tools(self.__class__)
+        self._initialized = True
+        self.logger = logging.getLogger(f"{self.__class__.__module__}.{self.__class__.__name__}")
+
+    def dispose(self):
+        """Clean up resources and perform shutdown operations.
+
+        Notes
+        -----
+        Override this method to close connections, save state, etc.
+        """
+        self._initialized = False
+
+    @contextmanager
+    def managed_execution(self):
+        """Context manager for safe actor execution with proper resource management."""
+        try:
+            if not hasattr(self, "_initialized") or not self._initialized:
+                raise RuntimeError("Actor not properly initialized")
+            yield self
+        except Exception as e:
+            # Log or handle execution errors
+            raise e
+        finally:
+            # Could add cleanup logic here if needed
+            pass
+
+    def can_claim_task(self, task: Task) -> bool:
+        """Check if this actor can handle the given task.
+
+        Parameters
+        ----------
+        task : Task
+            The task to check
+
+        Returns
+        -------
+        bool
+            True if the actor can handle the task, False otherwise
+        """
+        try:
+            tool_name = self._get_tool_for_task(task)
+            return self.has_tool(tool_name)
+        except Exception:
+            return False
+
+    def execute_task(self, task: Task, context: Optional[ExecutionContext] = None) -> Dict[str, Any]:
+        """Execute a task using the appropriate tool.
+
+        Parameters
+        ----------
+        task : Task
+            The task to execute
+        context : ExecutionContext, optional
+            The runtime context for the execution
+
+        Returns
+        -------
+        dict
+            Dictionary of outputs from the tool execution
+
+        Raises
+        ------
+        ValueError
+            If no tool is found for the task type
+        RuntimeError
+            If task execution fails
+        """
+        with self.managed_execution():
+            # Determine which tool to use
+            # For now, we'll use a simple mapping: task.type -> tool_name
+            # Later this could be more sophisticated
+            tool_name = self._get_tool_for_task(task)
+
+            if tool_name not in self._tools:
+                available_tools = list(self._tools.keys())
+                raise ValueError(f"No tool '{tool_name}' found for task type '{task.type}'. Available tools: {available_tools}")
+
+            tool_method = self._tools[tool_name]
+
+            # `@tool` attaches the descriptor straight to the method, per ADR-0002. Fall back
+            # to the snapshot taken at `@actor` decoration time (see decorators.py) only when
+            # `tool_method` isn't a genuine descriptor-carrying tool — e.g. a test replaced it
+            # with a Mock, which auto-creates a `._descriptor` attribute that isn't one.
+            descriptor = getattr(tool_method, "_descriptor", None)
+            if not isinstance(descriptor, ToolDescriptor):
+                descriptor = get_tool_descriptor(self.__class__, tool_name)
+            if descriptor is None:
+                raise RuntimeError(f"No tool descriptor found for '{tool_name}' on {self.__class__.__name__}.")
+            kwargs = descriptor.bind(task=task, context=context)
+
+            # Execute the tool
+            try:
+                result = tool_method(self, **kwargs)
+            except Exception as e:
+                self.logger.exception(f"Tool '{tool_name}' execution failed")
+                raise RuntimeError(f"Tool '{tool_name}' execution failed: {str(e)}") from e
+
+            result = result or {}
+            # Outside the try/except above: validate_output raises ToolBindingError
+            # (issue-td-06), which must reach the launcher unwrapped, not as a RuntimeError.
+            descriptor.validate_output(result)
+            return result
+
+    def _get_tool_for_task(self, task: Task) -> str:
+        """Determine which tool should handle a given task.
+
+        Default implementation extracts the tool name from the task type.
+        For example: "system.start" -> "start", "user_interaction.input" -> "input"
+
+        Parameters
+        ----------
+        task : Task
+            The task to analyze
+
+        Returns
+        -------
+        str
+            The tool name to use
+
+        Notes
+        -----
+        Override this method for custom tool selection logic.
+        """
+        if "." in task.type:
+            return task.type.split(".", 1)[1]
+        return task.type
+
+    def list_tools(self) -> Dict[str, str]:
+        """List all available tools for this actor.
+
+        Returns
+        -------
+        dict
+            Dictionary mapping tool names to their method names
+        """
+        return {name: method.__name__ for name, method in self._tools.items()}
+
+    def has_tool(self, tool_name: str) -> bool:
+        """Check if this actor has a specific tool.
+
+        Parameters
+        ----------
+        tool_name : str
+            Name of the tool to check for
+
+        Returns
+        -------
+        bool
+            True if the tool exists, False otherwise
+        """
+        return tool_name in self._tools
+
+    def __enter__(self):
+        """Support for context manager usage."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Clean up when used as context manager."""
+        self.dispose()
+
+    def __repr__(self):
+        actor_type = getattr(self.__class__, "_actor_type", "unknown")
+        tool_count = len(self._tools)
+        return f"<{self.__class__.__name__}(type='{actor_type}', tools={tool_count})>"

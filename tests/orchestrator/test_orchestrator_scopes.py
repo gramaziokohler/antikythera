@@ -12,42 +12,42 @@ from antikythera.models import Task
 from antikythera.models import TaskOutput
 from antikythera.models import TaskParam
 from antikythera.models import TaskState
-from antikythera_agents.base_agent import Agent
-from antikythera_agents.decorators import agent
-from antikythera_agents.decorators import tool
-from antikythera_agents.launcher import AgentLauncher
+from antikythera_actors.base_actor import Actor
+from antikythera_actors.decorators import actor
+from antikythera_actors.decorators import tool
+from antikythera_actors.launcher import ActorLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 # ---------------------------------------------------------------------------
-# Custom agents for scope tests
+# Custom actors for scope tests
 # ---------------------------------------------------------------------------
 
 
-@agent(type="scope_test")
-class ScopeTestAgent(Agent):
-    """Agent whose tools track how many times they have been called."""
+@actor(type="scope_test")
+class ScopeTestActor(Actor):
+    """Actor whose tools track how many times they have been called."""
 
     call_counts: Dict[str, int] = {}
 
     @tool(name="counted_task")
     def counted_task(self, task: Task) -> Dict[str, Any]:
-        ScopeTestAgent.call_counts[task.id] = ScopeTestAgent.call_counts.get(task.id, 0) + 1
+        ScopeTestActor.call_counts[task.id] = ScopeTestActor.call_counts.get(task.id, 0) + 1
         return {}
 
     @tool(name="increment_counter")
     def increment_counter(self, task: Task) -> Dict[str, Any]:
         """Increment a counter stored in the task's outputs and return the new value."""
-        current = ScopeTestAgent.call_counts.get("global_counter", 0) + 1
-        ScopeTestAgent.call_counts["global_counter"] = current
+        current = ScopeTestActor.call_counts.get("global_counter", 0) + 1
+        ScopeTestActor.call_counts["global_counter"] = current
         return {"counter": current}
 
 
 @pytest.fixture(autouse=True)
 def reset_call_counts():
     """Ensure the shared call counter is zeroed before every test."""
-    ScopeTestAgent.call_counts.clear()
+    ScopeTestActor.call_counts.clear()
     yield
-    ScopeTestAgent.call_counts.clear()
+    ScopeTestActor.call_counts.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ def test_scope_skip_when_condition_false(mock_storage, mock_transport_orchestrat
 
     session = BlueprintSession(bsid="test_scope_skip_false", blueprint=blueprint)
     orchestrator = cleanup_manager.register(Orchestrator(session))
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     orchestrator.start()
@@ -186,7 +186,7 @@ def test_scope_skip_when_condition_false(mock_storage, mock_transport_orchestrat
     assert scope_close_state == TaskState.SKIPPED, f"scope_close should be SKIPPED, got {scope_close_state}"
 
     # Body task never ran
-    assert sum(ScopeTestAgent.call_counts.values()) == 0
+    assert sum(ScopeTestActor.call_counts.values()) == 0
 
     orchestrator.stop()
     launcher.stop()
@@ -198,7 +198,7 @@ def test_scope_skip_when_condition_true(mock_storage, mock_transport_orchestrato
 
     session = BlueprintSession(bsid="test_scope_skip_true", blueprint=blueprint)
     orchestrator = cleanup_manager.register(Orchestrator(session))
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     orchestrator.start()
@@ -213,7 +213,7 @@ def test_scope_skip_when_condition_true(mock_storage, mock_transport_orchestrato
     assert graph.node[f"{blueprint.id}.scope_close"]["task"].state == TaskState.SUCCEEDED
 
     # Body ran exactly once (no loop, just the skip-policy variant which is skip OR run once)
-    assert sum(ScopeTestAgent.call_counts.values()) == 1
+    assert sum(ScopeTestActor.call_counts.values()) == 1
     # No loop iterations recorded
     assert orchestrator.session.scope_iterations.get("scope_open", 0) == 0
 
@@ -233,7 +233,7 @@ def test_scope_retry_policy(mock_storage, mock_transport_orchestrator, mock_tran
 
     session = BlueprintSession(bsid="test_scope_retry", blueprint=blueprint)
     orchestrator = cleanup_manager.register(Orchestrator(session))
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     orchestrator.start()
@@ -247,7 +247,7 @@ def test_scope_retry_policy(mock_storage, mock_transport_orchestrator, mock_tran
 
     # The body task ran 1 (initial) + retries times
     expected_count = 1 + retries
-    assert sum(ScopeTestAgent.call_counts.values()) == expected_count
+    assert sum(ScopeTestActor.call_counts.values()) == expected_count
 
     orchestrator.stop()
     launcher.stop()
@@ -259,7 +259,7 @@ def test_scope_retry_zero(mock_storage, mock_transport_orchestrator, mock_transp
 
     session = BlueprintSession(bsid="test_scope_retry_zero", blueprint=blueprint)
     orchestrator = cleanup_manager.register(Orchestrator(session))
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     orchestrator.start()
@@ -267,7 +267,7 @@ def test_scope_retry_zero(mock_storage, mock_transport_orchestrator, mock_transp
 
     assert completed
     assert orchestrator.state == BlueprintSessionState.COMPLETED
-    assert sum(ScopeTestAgent.call_counts.values()) == 1
+    assert sum(ScopeTestActor.call_counts.values()) == 1
     assert orchestrator.session.scope_iterations.get("scope_open", 0) == 0
 
     orchestrator.stop()
@@ -289,7 +289,7 @@ def test_scope_while_policy_condition(mock_storage, mock_transport_orchestrator,
 
     session = BlueprintSession(bsid="test_scope_while", blueprint=blueprint)
     orchestrator = cleanup_manager.register(Orchestrator(session))
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     orchestrator.start()
@@ -299,7 +299,7 @@ def test_scope_while_policy_condition(mock_storage, mock_transport_orchestrator,
     assert orchestrator.state == BlueprintSessionState.COMPLETED
 
     # Counter incremented 3 times → 3 total loop iterations
-    assert ScopeTestAgent.call_counts.get("global_counter") == 3
+    assert ScopeTestActor.call_counts.get("global_counter") == 3
     # scope_iterations = number of loops after initial run = 2
     assert orchestrator.session.scope_iterations.get("scope_open") == 2
 
@@ -314,7 +314,7 @@ def test_scope_while_policy_max_iterations(mock_storage, mock_transport_orchestr
 
     session = BlueprintSession(bsid="test_scope_while_max", blueprint=blueprint)
     orchestrator = cleanup_manager.register(Orchestrator(session))
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     orchestrator.start()
@@ -323,7 +323,7 @@ def test_scope_while_policy_max_iterations(mock_storage, mock_transport_orchestr
     assert completed, "Session did not complete in time"
     assert orchestrator.state == BlueprintSessionState.COMPLETED
 
-    assert ScopeTestAgent.call_counts.get("global_counter") == 3
+    assert ScopeTestActor.call_counts.get("global_counter") == 3
     # 3 total runs → 2 loops after initial
     assert orchestrator.session.scope_iterations.get("scope_open") == 2
 
@@ -347,7 +347,7 @@ def test_scope_loop_announces_the_reset_of_scope_tasks(mock_storage, mock_transp
     observed = []
     orchestrator.register_task_state_callback(lambda bp_id, task_id, state: observed.append((task_id, state)))
 
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     orchestrator.start()
@@ -376,7 +376,7 @@ def test_scope_while_unevaluable_condition_fails_session(mock_storage, mock_tran
 
     session = BlueprintSession(bsid="test_scope_while_bad_condition", blueprint=blueprint)
     orchestrator = cleanup_manager.register(Orchestrator(session))
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     orchestrator.start()
@@ -386,7 +386,7 @@ def test_scope_while_unevaluable_condition_fails_session(mock_storage, mock_tran
     assert orchestrator.state == BlueprintSessionState.FAILED
 
     # The scope body ran exactly once, and nothing downstream of the scope ran.
-    assert ScopeTestAgent.call_counts.get("global_counter") == 1
+    assert ScopeTestActor.call_counts.get("global_counter") == 1
     assert orchestrator.graph.node[f"{blueprint.id}.end"]["task"].state != TaskState.SUCCEEDED
 
     # The reason is recorded on the session so clients can display it.
@@ -421,7 +421,7 @@ def test_reset_scope_restores_scope_to_initial_state(mock_storage, mock_transpor
     blueprint = _make_scope_retry_blueprint(retries=retries)
     session = BlueprintSession(bsid="test_reset_scope_full", blueprint=blueprint)
     orchestrator = cleanup_manager.register(Orchestrator(session))
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     orchestrator.start()

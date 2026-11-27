@@ -8,15 +8,15 @@ from antikythera.models import Task
 from antikythera.models import TaskInput
 from antikythera.models import TaskOutput
 from antikythera.models import TaskState
-from antikythera_agents.base_agent import Agent
-from antikythera_agents.decorators import agent
-from antikythera_agents.decorators import tool
-from antikythera_agents.launcher import AgentLauncher
+from antikythera_actors.base_actor import Actor
+from antikythera_actors.decorators import actor
+from antikythera_actors.decorators import tool
+from antikythera_actors.launcher import ActorLauncher
 from antikythera_orchestrator.orchestrator import Orchestrator
 
 
-@agent(type="failing_agent")
-class FailingAgent(Agent):
+@actor(type="failing_actor")
+class FailingActor(Actor):
     @tool(name="fail_sometimes")
     def fail_sometimes(self, task: Task) -> Dict[str, Any]:
         print(f"Task Inputs: {task.inputs}")
@@ -38,7 +38,7 @@ def test_task_failure_and_retry(mock_storage, mock_transport_orchestrator, mock_
 
     task = Task(
         id="failable_task",
-        type="failing_agent.fail_sometimes",
+        type="failing_actor.fail_sometimes",
         inputs=[TaskInput(name="should_fail", get_from="fail_flag")],
         outputs=[TaskOutput(name="result", set_to="result")],
     )
@@ -60,7 +60,7 @@ def test_task_failure_and_retry(mock_storage, mock_transport_orchestrator, mock_
     assert orchestrator.session_storage.get(blueprint.id, "fail_flag") is True
 
     # 3. Launcher
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     # 4. Start
@@ -109,7 +109,7 @@ def test_failed_task_does_not_overwrite_session_data(mock_storage, mock_transpor
     # Task will fail, but declares an output mapped to "result" — same key we pre-populate
     task = Task(
         id="failing_task",
-        type="failing_agent.fail_sometimes",
+        type="failing_actor.fail_sometimes",
         inputs=[TaskInput(name="should_fail", value=True)],
         outputs=[TaskOutput(name="result", set_to="result")],
     )
@@ -132,7 +132,7 @@ def test_failed_task_does_not_overwrite_session_data(mock_storage, mock_transpor
     orchestrator.session_storage.set(blueprint.id, "result", "pre_existing_valid_data")
 
     # 3. Launcher
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     # 4. Start and wait for failure
@@ -162,7 +162,7 @@ def test_task_failure_and_retry_revived_session(mock_storage, mock_transport_orc
 
     task = Task(
         id="failable_task",
-        type="failing_agent.fail_sometimes",
+        type="failing_actor.fail_sometimes",
         inputs=[TaskInput(name="should_fail", get_from="fail_flag")],
         outputs=[TaskOutput(name="result", set_to="result")],
     )
@@ -181,7 +181,7 @@ def test_task_failure_and_retry_revived_session(mock_storage, mock_transport_orc
     orchestrator.session_storage.set(blueprint.id, "fail_flag", True)
 
     # 3. Launcher
-    launcher = cleanup_manager.register(AgentLauncher())
+    launcher = cleanup_manager.register(ActorLauncher())
     launcher.start()
 
     # 4. Start and wait for failure

@@ -168,8 +168,8 @@ def taskcompletion_to_pb(
         pb.timestamp.FromDatetime(message.timestamp)
     if message.duration_ms is not None:
         pb.duration_ms = message.duration_ms
-    if message.agent_id:
-        pb.agent_id = message.agent_id
+    if message.actor_id:
+        pb.actor_id = message.actor_id
     return pb
 
 
@@ -190,7 +190,7 @@ def taskcompletion_from_pb(
     return TaskCompletionMessage(
         id=pb.id,
         state=_task_state_from_pb(pb.state),
-        agent_id=pb.agent_id,
+        actor_id=pb.actor_id,
         outputs=outputs if outputs else None,
         error=error,
         timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,
@@ -204,7 +204,7 @@ def taskclaimrequest_to_pb(
 ) -> antikythera_pb2.TaskClaimRequest:
     pb = antikythera_pb2.TaskClaimRequest()
     pb.task_id = message.task_id
-    pb.agent_id = message.agent_id
+    pb.actor_id = message.actor_id
     if message.timestamp:
         pb.timestamp.FromDatetime(message.timestamp)
     return pb
@@ -214,7 +214,7 @@ def taskclaimrequest_to_pb(
 def taskclaimrequest_from_pb(pb: antikythera_pb2.TaskClaimRequest) -> TaskClaimRequest:
     return TaskClaimRequest(
         task_id=pb.task_id,
-        agent_id=pb.agent_id,
+        actor_id=pb.actor_id,
         timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,
     )
 
@@ -225,7 +225,7 @@ def taskallocation_to_pb(
 ) -> antikythera_pb2.TaskAllocationMessage:
     pb = antikythera_pb2.TaskAllocationMessage()
     pb.task_id = message.task_id
-    pb.assigned_agent_id = message.assigned_agent_id
+    pb.assigned_actor_id = message.assigned_actor_id
     if message.timestamp:
         pb.timestamp.FromDatetime(message.timestamp)
     return pb
@@ -237,7 +237,7 @@ def taskallocation_from_pb(
 ) -> TaskAllocationMessage:
     return TaskAllocationMessage(
         task_id=pb.task_id,
-        assigned_agent_id=pb.assigned_agent_id,
+        assigned_actor_id=pb.assigned_actor_id,
         timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,
     )
 
@@ -249,7 +249,7 @@ def taskcompletionack_to_pb(
     pb = antikythera_pb2.TaskCompletionAckMessage()
     pb.id = message.id
     pb.state = _task_state_to_pb(message.state)
-    pb.accepted_agent_id = message.accepted_agent_id
+    pb.accepted_actor_id = message.accepted_actor_id
     if message.timestamp:
         pb.timestamp.FromDatetime(message.timestamp)
     return pb
@@ -262,6 +262,6 @@ def taskcompletionack_from_pb(
     return TaskCompletionAckMessage(
         id=pb.id,
         state=_task_state_from_pb(pb.state),
-        accepted_agent_id=pb.accepted_agent_id,
+        accepted_actor_id=pb.accepted_actor_id,
         timestamp=pb.timestamp.ToDatetime() if pb.HasField("timestamp") else None,
     )

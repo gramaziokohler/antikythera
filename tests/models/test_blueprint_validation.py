@@ -106,7 +106,7 @@ def test_check_dataflow_flags_unproduced_while_condition_name():
 
 def test_check_dataflow_does_not_raise_from_validate():
     bp = _scope_blueprint(while_condition="elements_remaining > 0")
-    # An unresolved name is a warning, not a validation error: agents may write
+    # An unresolved name is a warning, not a validation error: actors may write
     # outputs the blueprint never declares.
     bp.validate()
 

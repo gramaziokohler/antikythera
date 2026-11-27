@@ -1,7 +1,7 @@
 # Installation
 
 This page covers installing the Python package — the SDK, and optionally the orchestrator
-itself. To *run* Antikythera (orchestrator, agents and web UI) you do not need any of it:
+itself. To *run* Antikythera (orchestrator, actors and web UI) you do not need any of it:
 see [Run with Docker](deployment/docker.md).
 
 ## Stable
@@ -12,7 +12,7 @@ Stable releases are available on PyPI and can be installed with pip.
 pip install antikythera-sdk
 ```
 
-This is enough to run an orchestrator and agents from your own Python code. Two extras
+This is enough to run an orchestrator and actors from your own Python code. Two extras
 add the network services:
 
 * `deployment`: the HTTP API service (`antikythera` command) that the web UI talks to.

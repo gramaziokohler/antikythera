@@ -17,10 +17,10 @@ from antikythera.models import Task
 from antikythera.models import TaskInput
 from antikythera.models import TaskOutput
 from antikythera.models import TaskParam
-from antikythera_agents.base_agent import Agent
-from antikythera_agents.decorators import agent
-from antikythera_agents.decorators import tool
-from antikythera_agents.launcher import AgentLauncher
+from antikythera_actors.base_actor import Actor
+from antikythera_actors.decorators import actor
+from antikythera_actors.decorators import tool
+from antikythera_actors.launcher import ActorLauncher
 from antikythera_orchestrator import InMemoryStorage
 from antikythera_orchestrator import Orchestrator
 from antikythera_orchestrator.storage.exceptions import RequestedBlueprintNotFound
@@ -28,8 +28,8 @@ from antikythera_orchestrator.storage.exceptions import RequestedModelNotFound
 from antikythera_orchestrator.storage.exceptions import RequestedSessionNotFound
 
 
-@agent(type="in_memory_test")
-class InMemoryTestAgent(Agent):
+@actor(type="in_memory_test")
+class InMemoryTestActor(Actor):
     @tool(name="double")
     def double(self, task: Task) -> Dict[str, Any]:
         return {"result": task.get_input_value("val") * 2}
@@ -49,15 +49,15 @@ def no_infrastructure():
     with (
         patch("antikythera_orchestrator.storage.redis_storage._create_redis_client", side_effect=refuse),
         patch("antikythera_orchestrator.orchestrator._get_eve_transport", side_effect=refuse),
-        patch("antikythera_agents.launcher._get_eve_transport", side_effect=refuse),
+        patch("antikythera_actors.launcher._get_eve_transport", side_effect=refuse),
     ):
         yield
 
 
 def _run(session, storage, cleanup_manager, timeout=10):
     transport = InMemoryTransport(codec=ProtobufMessageCodec())
-    launcher = cleanup_manager.register(AgentLauncher(transport=transport))
-    launcher.agents["in_memory_test"] = InMemoryTestAgent()
+    launcher = cleanup_manager.register(ActorLauncher(transport=transport))
+    launcher.actors["in_memory_test"] = InMemoryTestActor()
     launcher.start()
     orchestrator = cleanup_manager.register(Orchestrator(session, transport=transport, storage=storage))
     orchestrator.start()
@@ -141,7 +141,7 @@ def test_transport_without_protobuf_codec_is_rejected():
     with pytest.raises(ValueError, match="ProtobufMessageCodec"):
         Orchestrator(session, transport=InMemoryTransport(), storage=InMemoryStorage())
     with pytest.raises(ValueError, match="ProtobufMessageCodec"):
-        AgentLauncher(transport=InMemoryTransport())
+        ActorLauncher(transport=InMemoryTransport())
 
 
 def _trivial_blueprint():
