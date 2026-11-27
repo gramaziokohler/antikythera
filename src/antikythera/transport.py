@@ -29,10 +29,7 @@ def check_transport(transport: Transport) -> Transport:
         If the transport does not use a protobuf codec.
     """
     if not isinstance(getattr(transport, "codec", None), ProtobufMessageCodec):
-        raise ValueError(
-            "Antikythera exchanges protobuf messages: create the transport with codec=ProtobufMessageCodec(), "
-            "e.g. InMemoryTransport(codec=ProtobufMessageCodec())."
-        )
+        raise ValueError("Antikythera exchanges protobuf messages: create the transport with codec=ProtobufMessageCodec(), e.g. InMemoryTransport(codec=ProtobufMessageCodec()).")
     return transport
 
 

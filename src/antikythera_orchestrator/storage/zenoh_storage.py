@@ -190,8 +190,7 @@ class ZenohStorage(StorageBackend):
                 return
             if time.monotonic() > deadline:
                 raise StorageTimeout(
-                    f"No Zenoh storage confirmed the write of {sorted(pending)[0]} within {self.timeout}s. "
-                    f"Is a storage covering '{self.prefix}/**' configured on the router?"
+                    f"No Zenoh storage confirmed the write of {sorted(pending)[0]} within {self.timeout}s. Is a storage covering '{self.prefix}/**' configured on the router?"
                 )
             time.sleep(0.002)
 

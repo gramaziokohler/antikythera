@@ -8,7 +8,7 @@ flowchart LR
     UI[Web UI] -- HTTP --> O[Orchestrator]
     O <-- messages --> A1[Robot actor]
     O <-- messages --> A2[CNC actor]
-    O <-- messages --> A3[Person in the browser]
+    O <-- messages --> A3[Human]
     O --- S[(Storage)]
 ```
 

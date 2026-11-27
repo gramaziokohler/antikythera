@@ -30,8 +30,7 @@ def _warn_about_legacy_plugins() -> None:
     legacy = [plugin.name for plugin in entry_points(group=_LEGACY_PLUGINS_GROUP)]
     if legacy:
         warnings.warn(
-            f"Ignoring plugins registered under the old entry point group '{_LEGACY_PLUGINS_GROUP}': {', '.join(legacy)}. "
-            f"Register them under '{_PLUGINS_GROUP}' instead.",
+            f"Ignoring plugins registered under the old entry point group '{_LEGACY_PLUGINS_GROUP}': {', '.join(legacy)}. Register them under '{_PLUGINS_GROUP}' instead.",
             RuntimeWarning,
             stacklevel=3,
         )
