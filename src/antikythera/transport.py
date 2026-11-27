@@ -41,6 +41,7 @@ def create_transport(
     broker_host: Optional[str] = None,
     broker_port: Optional[int] = None,
     nats_url: Optional[str] = None,
+    zenoh_connect: Optional[str] = None,
     mqtt_transport: str = "tcp",
     tls: bool = False,
 ) -> Transport:
@@ -49,7 +50,7 @@ def create_transport(
     Parameters
     ----------
     kind : str, optional
-        ``"mqtt"`` or ``"nats"``. Defaults to the ``ANTIKYTHERA_TRANSPORT`` environment
+        ``"mqtt"``, ``"nats"`` or ``"zenoh"``. Defaults to the ``ANTIKYTHERA_TRANSPORT`` environment
         variable, or ``"mqtt"``.
     broker_host : str, optional
         MQTT broker host. Defaults to ``MQTT_BROKER_HOST``.
@@ -57,6 +58,9 @@ def create_transport(
         MQTT broker port. Defaults to ``MQTT_BROKER_PORT``.
     nats_url : str, optional
         NATS server URL. Defaults to ``NATS_URL``.
+    zenoh_connect : str, optional
+        Zenoh endpoint(s) to connect to, separated by commas. Defaults to ``ZENOH_CONNECT``;
+        ``ZENOH_MODE`` and ``ZENOH_CONFIG`` configure the rest.
     mqtt_transport : str, optional
         The MQTT socket transport, ``"tcp"`` or ``"websockets"``.
     tls : bool, optional
@@ -73,6 +77,10 @@ def create_transport(
         from antikythera.transports.nats import NatsTransport
 
         return NatsTransport(nats_url or config.NATS_URL, codec=codec)
+    if kind == "zenoh":
+        from antikythera.transports.zenoh import ZenohTransport
+
+        return ZenohTransport(configured_zenoh(zenoh_connect), codec=codec)
     if kind == "mqtt":
         from compas_eve.mqtt import MqttTransport
 
@@ -83,4 +91,13 @@ def create_transport(
             transport=mqtt_transport,
             tls=tls,
         )
-    raise ValueError(f"Unknown transport '{kind}': use 'mqtt' or 'nats'")
+    raise ValueError(f"Unknown transport '{kind}': use 'mqtt', 'nats' or 'zenoh'")
+
+
+def configured_zenoh(connect: Optional[str] = None):
+    """The Zenoh configuration set by ``ZENOH_CONFIG``, ``ZENOH_CONNECT`` and ``ZENOH_MODE``."""
+    from antikythera.transports.zenoh import zenoh_config
+
+    if config.ZENOH_CONFIG and not connect:
+        return zenoh_config(mode=config.ZENOH_MODE, config_file=config.ZENOH_CONFIG)
+    return zenoh_config(connect=connect or config.ZENOH_CONNECT, mode=config.ZENOH_MODE, config_file=config.ZENOH_CONFIG)

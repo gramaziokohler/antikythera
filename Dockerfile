@@ -35,7 +35,7 @@ WORKDIR /app
 COPY --from=builder /dist /dist
 # compas_timber is not a dependency of antikythera-sdk, but the models this image
 # receives are mostly timber models, and loading them needs it.
-RUN WHL=$(ls /dist/*.whl) && uv pip install --system "${WHL}[deployment,mcp,nats]" compas_timber && rm -rf /dist
+RUN WHL=$(ls /dist/*.whl) && uv pip install --system "${WHL}[deployment,mcp,nats,zenoh]" compas_timber && rm -rf /dist
 
 # Default: run the orchestrator. Override `command:` in docker-compose for actors.
 CMD ["antikythera", "--host", "0.0.0.0", "--port", "8000"]

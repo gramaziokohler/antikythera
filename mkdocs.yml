@@ -140,6 +140,7 @@ nav:
       - Running actors: actors.md
       - Embedding the orchestrator: embedding.md
       - Running on NATS: nats.md
+      - Running on Zenoh: zenoh.md
   - Deployment:
       - Run with Docker: deployment/docker.md
       - Run on bare metal: deployment/bare-metal.md
@@ -148,6 +149,7 @@ nav:
           - antikythera.io: reference/antikythera.io.md
           - antikythera.transport: reference/antikythera.transport.md
           - antikythera.transports.nats: reference/antikythera.transports.nats.md
+          - antikythera.transports.zenoh: reference/antikythera.transports.zenoh.md
           - antikythera.models: reference/antikythera.models.md
           - antikythera.models.blueprints: reference/antikythera.models.blueprints.md
           - antikythera.models.tasks: reference/antikythera.models.tasks.md
@@ -174,6 +176,7 @@ nav:
           - antikythera_orchestrator.storage.memory_storage: reference/antikythera_orchestrator.storage.memory_storage.md
           - antikythera_orchestrator.storage.nats_storage: reference/antikythera_orchestrator.storage.nats_storage.md
           - antikythera_orchestrator.storage.redis_storage: reference/antikythera_orchestrator.storage.redis_storage.md
+          - antikythera_orchestrator.storage.zenoh_storage: reference/antikythera_orchestrator.storage.zenoh_storage.md
   - Other:
       - Changelog: changelog.md
       - License: license.md

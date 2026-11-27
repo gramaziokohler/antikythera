@@ -1,8 +1,9 @@
 """Orchestrator and actors with an injected transport and storage backend.
 
-In memory, everything runs in this process with no broker and no Redis. Over NATS, the
-orchestrator and the actors use separate connections to a NATS server and keep state in
-JetStream; those runs are skipped when no server is reachable (see the `nats_url` fixture).
+In memory, everything runs in this process with no broker and no Redis. Over NATS and Zenoh,
+the orchestrator and the actors use separate connections to a server (a NATS server with
+JetStream, or a Zenoh router with a storage) and keep state there; those runs are skipped
+when no server is reachable (see the `nats_url` and `zenoh_endpoint` fixtures).
 """
 
 from typing import Any
@@ -56,7 +57,7 @@ def no_infrastructure():
         yield
 
 
-@pytest.fixture(params=["memory", "nats"])
+@pytest.fixture(params=["memory", "nats", "zenoh"])
 def backend(request):
     """(transport factory, storage) to run on. In memory both sides share one transport."""
     if request.param == "memory":
@@ -64,16 +65,27 @@ def backend(request):
         yield (lambda: transport), InMemoryStorage()
         return
 
-    from antikythera.transports.nats import NatsTransport
-
-    url = request.getfixturevalue("nats_url")
     transports = []
+    if request.param == "nats":
+        from antikythera.transports.nats import NatsTransport
 
-    def make_transport():
-        transports.append(NatsTransport(url, codec=ProtobufMessageCodec()))
-        return transports[-1]
+        url = request.getfixturevalue("nats_url")
 
-    yield make_transport, request.getfixturevalue("nats_storage")
+        def make_transport():
+            transports.append(NatsTransport(url, codec=ProtobufMessageCodec()))
+            return transports[-1]
+
+    else:
+        from antikythera.transports.zenoh import ZenohTransport
+        from tests.conftest import zenoh_test_config
+
+        endpoint = request.getfixturevalue("zenoh_endpoint")
+
+        def make_transport():
+            transports.append(ZenohTransport(zenoh_test_config(connect=endpoint), codec=ProtobufMessageCodec()))
+            return transports[-1]
+
+    yield make_transport, request.getfixturevalue(f"{request.param}_storage")
     for transport in transports:
         transport.close()
 

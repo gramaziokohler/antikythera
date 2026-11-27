@@ -18,6 +18,7 @@ the network services:
 * `deployment`: the HTTP API service (`antikythera` command) that the web UI talks to.
 * `mcp`: the MCP server (`antikythera-mcp` command).
 * `nats`: the NATS transport and storage, see [Running on NATS](nats.md).
+* `zenoh`: the Zenoh transport and storage, see [Running on Zenoh](zenoh.md).
 
 ```bash
 pip install "antikythera-sdk[deployment,mcp]"

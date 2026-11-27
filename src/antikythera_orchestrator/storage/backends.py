@@ -74,7 +74,8 @@ def default_storage() -> StorageBackend:
 
     ``"redis"`` (the default) is [RedisStorage][antikythera_orchestrator.storage.backends.RedisStorage],
     ``"nats"`` a [NatsStorage][antikythera_orchestrator.storage.nats_storage.NatsStorage] at
-    ``NATS_URL``, and ``"memory"`` an [InMemoryStorage][antikythera_orchestrator.storage.memory_storage.InMemoryStorage],
+    ``NATS_URL``, ``"zenoh"`` a [ZenohStorage][antikythera_orchestrator.storage.zenoh_storage.ZenohStorage]
+    configured by ``ZENOH_CONNECT``, and ``"memory"`` an [InMemoryStorage][antikythera_orchestrator.storage.memory_storage.InMemoryStorage],
     which forgets everything when the process ends.
     """
     global _DEFAULT_STORAGE
@@ -85,7 +86,7 @@ def default_storage() -> StorageBackend:
 
 
 def create_storage(kind: Optional[str] = None) -> StorageBackend:
-    """Create a storage backend: ``"redis"``, ``"nats"`` or ``"memory"``. Defaults to ``ANTIKYTHERA_STORAGE``."""
+    """Create a storage backend: ``"redis"``, ``"nats"``, ``"zenoh"`` or ``"memory"``. Defaults to ``ANTIKYTHERA_STORAGE``."""
     from antikythera import config
 
     kind = (kind or config.STORAGE).lower()
@@ -95,8 +96,13 @@ def create_storage(kind: Optional[str] = None) -> StorageBackend:
         from antikythera_orchestrator.storage.nats_storage import NatsStorage
 
         return NatsStorage(config.NATS_URL, prefix=config.NATS_STORAGE_PREFIX)
+    if kind == "zenoh":
+        from antikythera.transport import configured_zenoh
+        from antikythera_orchestrator.storage.zenoh_storage import ZenohStorage
+
+        return ZenohStorage(configured_zenoh(), prefix=config.ZENOH_STORAGE_PREFIX)
     if kind == "memory":
         from antikythera_orchestrator.storage.memory_storage import InMemoryStorage
 
         return InMemoryStorage()
-    raise ValueError(f"Unknown storage '{kind}': use 'redis', 'nats' or 'memory'")
+    raise ValueError(f"Unknown storage '{kind}': use 'redis', 'nats', 'zenoh' or 'memory'")

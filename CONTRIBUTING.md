@@ -33,6 +33,14 @@ In short, this is how that works.
    docker run --rm -p 4222:4222 nats:2.10 -js
    ```
 
+   The Zenoh storage and end-to-end tests likewise need a Zenoh router with a storage at
+   `tcp/127.0.0.1:7447` (or at `ZENOH_TEST_ENDPOINT`); the Zenoh transport tests run
+   without one:
+
+   ```bash
+   docker run --rm -p 7447:7447 -v "$PWD/tests/zenoh-router.json5:/zenoh.json5" eclipse/zenoh:1.10.2 -c /zenoh.json5
+   ```
+
 5. Start making your changes to the **main** branch (or branch off of it).
 6. Make sure all tests still pass:
 

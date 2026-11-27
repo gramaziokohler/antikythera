@@ -1,0 +1,13 @@
+// A Zenoh router for the tests (see CONTRIBUTING.md): a memory storage covering the key
+// prefix Antikythera keeps its state under.
+{
+  mode: "router",
+  listen: { endpoints: ["tcp/0.0.0.0:7447"] },
+  plugins: {
+    storage_manager: {
+      storages: {
+        antikythera: { key_expr: "antikythera/storage/**", volume: { id: "memory" } },
+      },
+    },
+  },
+}
