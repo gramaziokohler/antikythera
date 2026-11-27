@@ -1,4 +1,6 @@
 import asyncio
+import importlib.util
+import json
 import logging
 import re
 import tempfile
@@ -981,13 +983,51 @@ def skip_task(session_id: str, request: SkipTaskRequest) -> SessionActionRespons
     return SessionActionResponse(session_id=session_id, message="Skipped 1 task(s).")
 
 
+def _missing_packages(data: object) -> List[str]:
+    """Top-level packages named by the ``dtype`` fields of COMPAS JSON that cannot be imported here."""
+    packages = set()
+    stack = [data]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            dtype = item.get("dtype")
+            if isinstance(dtype, str) and "/" in dtype:
+                packages.add(dtype.split("/")[0].split(".")[0])
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+    return sorted(package for package in packages if importlib.util.find_spec(package) is None)
+
+
+def _load_model(text: str) -> Model:
+    """Deserialize an uploaded model, or answer 400 naming the packages it needs.
+
+    Models are COMPAS data: loading one imports the classes it was made of. Antikythera only
+    depends on compas_model, so domain packages such as compas_timber have to be installed
+    next to it for their models to load.
+    """
+    try:
+        return cast(Model, json_loads(text))
+    except Exception as exc:
+        try:
+            missing = _missing_packages(json.loads(text))
+        except ValueError:
+            missing = []
+        if missing:
+            names = ", ".join(missing)
+            detail = f"The model needs {names}, which is not installed on the server. Install it next to antikythera-sdk."
+        else:
+            detail = f"Failed to load the model: {exc}"
+        raise HTTPException(status_code=400, detail=detail)
+
+
 async def _handle_upload_json_file(file: UploadFile) -> list[str]:
     assert file.filename
 
     content = await file.read()
 
     # Parse JSON to ensure validity and extract ID
-    model_data: Model = cast(Model, json_loads(content.decode()))
+    model_data = _load_model(content.decode())
 
     model_id = f"{Path(file.filename).stem}_{str(model_data.guid)[0:8]}"
     try:
@@ -1038,8 +1078,8 @@ async def _handle_upload_cog_file(file: UploadFile) -> list[str]:
                     LOG.warning(f"Model file {model_file} listed in manifest but not found in archive.")
                     continue
 
+                model_data = _load_model(model_path.read_text())
                 try:
-                    model_data = cast(Model, json_loads(model_path.read_text()))
                     model_id = f"{Path(model_file).stem}_{str(model_data.guid)[0:8]}"
 
                     storage.add_model(model_id, model_data)

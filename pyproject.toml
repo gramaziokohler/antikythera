@@ -42,7 +42,6 @@ dependencies = [
     "compas_eve >=2.4,<3",
     "compas_model",
     "compas_pb >=1.2,<2",
-    "compas_timber >=2.1.2",
     "coolname",
     "importlib_metadata; python_version < '3.10'",
     "jsonschema",

@@ -12,15 +12,30 @@ Stable releases are available on PyPI and can be installed with pip.
 pip install antikythera-sdk
 ```
 
-This is enough to run an orchestrator and actors from your own Python code. Two extras
-add the network services:
+This is enough to run an orchestrator and actors from your own Python code. Extras add
+the network services:
 
 * `deployment`: the HTTP API service (`antikythera` command) that the web UI talks to.
 * `mcp`: the MCP server (`antikythera-mcp` command).
+* `nats`: the NATS transport and storage, see [Running on NATS](nats.md).
 
 ```bash
 pip install "antikythera-sdk[deployment,mcp]"
 ```
+
+### Domain models
+
+Antikythera works with any [compas_model](https://github.com/blockresearchgroup/compas_model)
+model, and only depends on that. Models made with a domain package, such as
+[compas_timber](https://github.com/gramaziokohler/compas_timber), can only be loaded where
+that package is installed, so install it next to Antikythera:
+
+```bash
+pip install antikythera-sdk compas_timber
+```
+
+Without it, uploading a timber model is rejected with a message naming the missing
+package. The Docker images include compas_timber.
 
 ## Latest
 
