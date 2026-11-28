@@ -6,7 +6,7 @@ in the web UI, or build it in Python. Read [Concepts](concepts.md) first if the 
 
 ## A first blueprint
 
-This is the [hello world](index.md#hello-world) blueprint in JSON:
+This blueprint greets the world, in JSON:
 
 ```json
 {
@@ -16,36 +16,33 @@ This is the [hello world](index.md#hello-world) blueprint in JSON:
   "tasks": [
     { "id": "start", "type": "system.start" },
     {
-      "id": "hello",
+      "id": "greet",
       "type": "greeter.hello",
       "inputs": [{ "name": "name", "value": "world" }],
       "outputs": [{ "name": "greeting" }],
       "depends_on": [{ "id": "start" }]
     },
-    { "id": "end", "type": "system.end", "depends_on": [{ "id": "hello" }] }
+    { "id": "end", "type": "system.end", "depends_on": [{ "id": "greet" }] }
   ]
 }
 ```
 
+A blueprint needs exactly one `system.start` task and one `system.end` task. Every other
+task must depend on at least one task.
+
 And the same in Python:
 
 ```python
-from antikythera import Blueprint, Task, TaskInput, TaskOutput
+from antikythera import Blueprint, Task
 
-start = Task(id="start", type="system.start")
-hello = Task(
-    id="hello",
-    type="greeter.hello",
-    inputs=[TaskInput(name="name", value="world")],
-    outputs=[TaskOutput(name="greeting")],
-)
-end = Task(id="end", type="system.end")
-start >> hello >> end
-blueprint = Blueprint(id="hello-world", name="Hello, world", tasks=[start, hello, end])
+with Blueprint("hello-world") as blueprint:
+    Task("greet", "greeter.hello", inputs={"name": "world"}, outputs=["greeting"])
 ```
 
-A blueprint needs exactly one `system.start` task and one `system.end` task. Every other
-task must depend on at least one task.
+Every task created inside the `with` block is added to the blueprint. When the block
+ends, the blueprint adds the `start` and `end` tasks, and connects them: a task that
+depends on nothing starts after `start`, and `end` waits for every task that nothing else
+waits for. To connect them yourself, use `blueprint.start` and `blueprint.end`.
 
 ## Order of tasks
 
@@ -53,7 +50,11 @@ task must depend on at least one task.
 `a`". A list runs tasks side by side:
 
 ```python
-start >> [left, right] >> join >> end  # left and right run at the same time
+with Blueprint("assembly") as blueprint:
+    left = Task("left", "robot.place")
+    right = Task("right", "robot.place")
+    join = Task("join", "robot.screw")
+    [left, right] >> join  # left and right run at the same time, then join
 ```
 
 By default a task starts when the tasks it depends on have **finished**. Other kinds of
@@ -89,6 +90,30 @@ The first saves the tool's `result` as `left`. The second gives the tool the val
 An input's `value` is its default: the task uses it when the session data has nothing
 under the input's name, or under its `get_from`. This is how you give a task a fixed input,
 like `"world"` above, or a fallback for a value that a skipped task did not produce.
+
+### Links, in Python
+
+In Python, link an input to the output of another task with `task.output(name)`:
+
+```python
+with Blueprint("stamping") as blueprint:
+    sheet = Task("cut", "press.cut", inputs={"number": 1})
+    stamp = Task("stamp", "stamper.stamp", inputs={"sheet": sheet.output("sheet")})
+```
+
+The link does two things: `stamp` reads the `sheet` output of `cut`, and `stamp` runs
+after `cut`. You don't need `>>` for tasks that are already linked.
+
+The linked output is saved as `cut.sheet` in the session data, the task id followed by the
+output name. So two tasks with the same tool, like `cut_1` and `cut_2`, don't overwrite
+each other's values:
+
+```python
+with Blueprint("stamping") as blueprint:
+    for number in range(1, 4):
+        sheet = Task(f"cut_{number}", "press.cut", inputs={"number": number})
+        Task(f"stamp_{number}", "stamper.stamp", inputs={"sheet": sheet.output("sheet")})
+```
 
 ## Params
 

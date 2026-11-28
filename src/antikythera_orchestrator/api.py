@@ -41,6 +41,7 @@ from antikythera.models import BlueprintSession
 from antikythera.models import BlueprintSessionState
 from antikythera.models import Task
 from antikythera.models import TaskState
+from antikythera_orchestrator import orchestrator as orchestrator_module
 from antikythera_orchestrator.orchestrator import Orchestrator
 from antikythera_orchestrator.storage import RequestedBlueprintNotFound
 from antikythera_orchestrator.storage import RequestedModelNotFound
@@ -371,7 +372,7 @@ def _start_blueprint_session(request: StartBlueprintRequest) -> str:
 
     session_id = _resolve_session_id(request)
     session = BlueprintSession(bsid=session_id, blueprint=blueprint, params=request.params)
-    orchestrator = Orchestrator(session, broker_host=request.broker_host, broker_port=request.broker_port)
+    orchestrator = Orchestrator(session, transport=_transport(request.broker_host, request.broker_port))
 
     # Not starting the orchestrator yet, just creating the session and storing it
     # The user can now inspect the session in "preview" mode and hit resume when it's time to run.
@@ -672,6 +673,11 @@ def _get_bp_session_from_storage(session_id: str) -> BlueprintSession:
         return session
 
 
+def _transport(broker_host: str, broker_port: int):
+    """The transport of a session: the configured one, with MQTT on this broker."""
+    return orchestrator_module._get_eve_transport(host=broker_host, port=broker_port, codec=None)
+
+
 def _revive_session(session_id: str, broker_host: str, broker_port: int) -> ActiveSession:
     """Revive a session from storage if it is not currently active in memory.
 
@@ -683,7 +689,7 @@ def _revive_session(session_id: str, broker_host: str, broker_port: int) -> Acti
 
     session = _get_bp_session_from_storage(session_id)
 
-    orchestrator = Orchestrator(session, broker_host=broker_host, broker_port=broker_port)
+    orchestrator = Orchestrator(session, transport=_transport(broker_host, broker_port))
 
     _register_sse_callbacks(session_id, orchestrator)
 

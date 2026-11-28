@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import builtins
+from contextvars import ContextVar
 from copy import deepcopy
 from enum import auto
 from typing import Any
@@ -18,6 +19,37 @@ from .tasks import DependencyType
 from .tasks import SystemTaskType
 from .tasks import TaskError
 from .tasks import TaskState
+
+# The blueprints of the `with Blueprint(...)` blocks currently open, innermost last.
+_OPEN_BLUEPRINTS: ContextVar[tuple] = ContextVar("antikythera_open_blueprints", default=())
+
+
+class OutputRef(str):
+    """A link to an output of a task, made with `Task.output`.
+
+    Use it as the value of another task's input, and that task reads the output and runs
+    after the task that produces it. It is also the key of the output in the session data,
+    so it reads the value back from `Orchestrator.load_outputs`.
+
+    Attributes
+    ----------
+    task_id : str
+        The id of the task that produces the output.
+    name : str
+        The name of the output.
+    """
+
+    task_id: str
+    name: str
+
+    def __new__(cls, key: str, task_id: str, name: str) -> OutputRef:
+        ref = super().__new__(cls, key)
+        ref.task_id = task_id
+        ref.name = name
+        return ref
+
+    def __getnewargs__(self):
+        return (str(self), self.task_id, self.name)
 
 
 class Dependency(Data):
@@ -134,13 +166,19 @@ class Task(Data):
     description : str, optional
         A human-readable description of the task.
     inputs : List[TaskInput], optional
-        A list of inputs for the task.
+        The inputs of the task. Also accepted as a ``{name: value}`` dict, where a value
+        is a literal or a link to another task's output, made with `Task.output`. A link
+        also makes this task depend on the other one.
     outputs : List[TaskOutput], optional
-        A list of outputs for the task.
+        The outputs of the task. Also accepted as a list of names.
     depends_on : List[Dependency], optional
-        A list of dependencies on other tasks.
+        A list of dependencies on other tasks. Also accepted as tasks or task ids.
     params : List[TaskParam], optional
-        A list of task-specific parameters.
+        A list of task-specific parameters. Also accepted as a ``{name: value}`` dict.
+
+    Notes
+    -----
+    A task created inside a ``with Blueprint(...)`` block is added to that blueprint.
 
     """
 
@@ -181,14 +219,58 @@ class Task(Data):
         self.type = type
         self.description = description
         self.condition = condition
-        self.inputs = inputs or []
-        self.outputs = outputs or []
-        self.params = params or []
-        self.depends_on = depends_on or []
+        self.depends_on = [_as_dependency(d) for d in depends_on or []]
+        self.inputs = [self._link_input(i) for i in _as_inputs(inputs)]
+        self.outputs = [TaskOutput(name=o) if isinstance(o, str) else o for o in outputs or []]
+        self.params = [TaskParam(name=k, value=v) for k, v in params.items()] if isinstance(params, dict) else list(params or [])
         self.state = TaskState(state)
         self.context = context or {}
         self.scope_start = scope_start
         self.scope_end = scope_end
+
+        open_blueprints = _OPEN_BLUEPRINTS.get()
+        if open_blueprints:
+            open_blueprints[-1].tasks.append(self)
+
+    def _link_input(self, task_input: TaskInput) -> TaskInput:
+        """Make this task depend on the task whose output ``task_input`` is linked to."""
+        link = task_input.get_from
+        if isinstance(link, OutputRef):
+            task_input.get_from = str(link)
+            if not any(d.id == link.task_id for d in self.depends_on):
+                self.depends_on.append(Dependency(id=link.task_id))
+        return task_input
+
+    def output(self, name: str) -> OutputRef:
+        """A link to the output ``name`` of this task, to use as another task's input.
+
+        The output is added to the task if it does not have it yet. Unless the output has a
+        ``set_to``, it is stored under ``"<task id>.<name>"`` in the session data, so tasks
+        of the same type do not overwrite each other's values.
+
+        Parameters
+        ----------
+        name : str
+            The name of the output.
+
+        Returns
+        -------
+        OutputRef
+
+        Examples
+        --------
+        >>> sheet = Task("cut", "press.cut")
+        >>> stamp = Task("stamp", "stamper.stamp", inputs={"sheet": sheet.output("sheet")})
+        >>> stamp.depends_on
+        [Dependency(id=cut, type=FS)]
+        """
+        task_output = self.get_output(name)
+        if task_output is None:
+            task_output = TaskOutput(name=name)
+            self.outputs.append(task_output)
+        if task_output.set_to is None:
+            task_output.set_to = f"{self.id}.{name}"
+        return OutputRef(task_output.set_to, self.id, name)
 
     def get_input(self, name: str) -> Optional[TaskInput]:
         for task_input in self.inputs:
@@ -254,7 +336,8 @@ class Task(Data):
         """
         targets = task if isinstance(task, list) else [task]
         for t in targets:
-            t.depends_on.append(Dependency(id=self.id, type=type))
+            if not any(d.id == self.id and d.type == type for d in t.depends_on):
+                t.depends_on.append(Dependency(id=self.id, type=type))
         return task
 
     def __rshift__(self, other: Union[Task, List[Task]]) -> Union[Task, List[Task]]:
@@ -263,7 +346,7 @@ class Task(Data):
     def __rrshift__(self, other: Union[Task, List[Task]]) -> Task:
         sources = other if isinstance(other, list) else [other]
         for source in sources:
-            self.depends_on.append(Dependency(id=source.id))
+            source.then(self)
         return self
 
     @property
@@ -354,6 +437,27 @@ class Task(Data):
         return None
 
 
+def _as_dependency(dependency: Union[Dependency, Task, str]) -> Dependency:
+    if isinstance(dependency, Dependency):
+        return dependency
+    if isinstance(dependency, Task):
+        return Dependency(id=dependency.id)
+    return Dependency(id=dependency)
+
+
+def _as_inputs(inputs: Union[None, Dict[str, Any], List[TaskInput]]) -> List[TaskInput]:
+    """Inputs given as ``{name: value}``: a literal value, or a link from `Task.output`."""
+    if not isinstance(inputs, dict):
+        return list(inputs or [])
+    result = []
+    for name, value in inputs.items():
+        if isinstance(value, OutputRef):
+            result.append(TaskInput(name=name, get_from=value))
+        else:
+            result.append(TaskInput(name=name, value=value))
+    return result
+
+
 class Scope(Data):
     """A scope spanning a contiguous region of a blueprint's task DAG.
 
@@ -424,6 +528,16 @@ class Blueprint(Data):
     scopes : List[Scope]
         Scope definitions derived from scope_start/scope_end task pairs.
 
+    Examples
+    --------
+    In a ``with`` block, every task created in the block is added to the blueprint, and
+    the start and end tasks are added and connected when the block ends:
+
+    >>> with Blueprint("greeting") as blueprint:
+    ...     greet = Task("greet", "greeter.hello", inputs={"name": "world"})
+    >>> [task.id for task in blueprint.tasks]
+    ['start', 'greet', 'end']
+
     """
 
     @property
@@ -440,7 +554,7 @@ class Blueprint(Data):
     def __init__(
         self,
         id: str,
-        name: str,
+        name: Optional[str] = None,
         version: Optional[str] = "1.0",
         description: Optional[str] = None,
         tasks: List[Task] = None,
@@ -448,13 +562,67 @@ class Blueprint(Data):
     ) -> None:
         super().__init__()
         self.id = id
-        self.name = name
+        self.name = name or id
         self.version = version
         self.description = description
         self.tasks = tasks or []
         if self.tasks:
             self.validate()
         self.scopes = self._build_scopes() if self.tasks else []
+        self._open_tokens = []
+
+    def __enter__(self) -> Blueprint:
+        self._open_tokens.append(_OPEN_BLUEPRINTS.set(_OPEN_BLUEPRINTS.get() + (self,)))
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        _OPEN_BLUEPRINTS.reset(self._open_tokens.pop())
+        if exc_type is None:
+            self.wire_start_and_end()
+            self.validate()
+            self.scopes = self._build_scopes()
+
+    @property
+    def start(self) -> Task:
+        """The ``system.start`` task, created with the id ``"start"`` if the blueprint has none."""
+        return self._system_task(SystemTaskType.START, "start")
+
+    @property
+    def end(self) -> Task:
+        """The ``system.end`` task, created with the id ``"end"`` if the blueprint has none."""
+        return self._system_task(SystemTaskType.END, "end")
+
+    def _system_task(self, type: SystemTaskType, id: str) -> Task:
+        for task in self.tasks:
+            if task.type == type:
+                return task
+        token = _OPEN_BLUEPRINTS.set(())  # added below, not to whichever blueprint is open
+        try:
+            task = Task(id=id, type=type)
+        finally:
+            _OPEN_BLUEPRINTS.reset(token)
+        self.tasks.append(task)
+        return task
+
+    def wire_start_and_end(self) -> None:
+        """Connect the tasks to the start and end tasks, adding those if missing.
+
+        Every task without dependencies starts after the start task, and the end task
+        waits for every task that no other task depends on. Dependencies that are already
+        there are kept. A ``with Blueprint(...)`` block calls this when it ends.
+        """
+        start, end = self.start, self.end
+        others = [t for t in self.tasks if t is not start and t is not end]
+        for task in others:
+            if not task.depends_on:
+                task.depends_on.append(Dependency(id=start.id))
+        depended_on = {d.id for t in self.tasks for d in t.depends_on}
+        for task in others:
+            if task.id not in depended_on:
+                end.depends_on.append(Dependency(id=task.id))
+        if not end.depends_on:
+            end.depends_on.append(Dependency(id=start.id))
+        self.tasks = [start] + others + [end]
 
     def validate(self) -> None:
         """Validates the blueprint structure.

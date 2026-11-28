@@ -79,7 +79,7 @@ def create_transport(
 
         return ZenohTransport(configured_zenoh(zenoh_connect), codec=codec)
     if kind == "mqtt":
-        from compas_eve.mqtt import MqttTransport
+        from antikythera.transports.mqtt import MqttTransport
 
         return MqttTransport(
             host=broker_host or config.MQTT_BROKER_HOST,

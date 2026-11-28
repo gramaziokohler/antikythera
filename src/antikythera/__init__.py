@@ -16,6 +16,7 @@ _EXPORTS = {
     "TaskOutput": "antikythera.models",
     "TaskParam": "antikythera.models",
     "Dependency": "antikythera.models",
+    "OutputRef": "antikythera.models",
     "DependencyType": "antikythera.models",
     # Actors
     "Actor": "antikythera_actors",
@@ -31,6 +32,7 @@ _EXPORTS = {
     "Orchestrator": "antikythera_orchestrator",
     "InMemoryStorage": "antikythera_orchestrator",
     "InMemoryTransport": "antikythera.transports.memory",
+    "MqttTransport": "antikythera.transports.mqtt",
 }
 
 __all__ = list(_EXPORTS)

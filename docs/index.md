@@ -42,11 +42,11 @@ $ python hello_world.py
 Hello, world!
 ```
 
-The blueprint has three tasks: `start`, `greet` and `end`. Every blueprint begins with a
-`system.start` task and finishes with a `system.end` task; Antikythera runs both itself.
-The `greet` task has the type `greeter.hello`, so the `hello` tool of the `greeter` actor
-runs it. The tool's return value is saved as the task's `greeting` output, and the
-program reads it back at the end.
+`@tool("greeter.hello")` makes the function `hello` the `hello` tool of the `greeter`
+**actor**. The **blueprint** has one task, `greet`, of type `greeter.hello`, so that tool
+does it. The `with` block also adds a `start` and an `end` task: every blueprint begins and
+finishes with them, and Antikythera runs both itself. The tool's return value is saved as
+the task's `greeting` output, and the program reads it back at the end.
 
 Here, everything runs in one Python process. In a real setup, the orchestrator runs as a
 service with a web UI, and actors connect to it from other machines.

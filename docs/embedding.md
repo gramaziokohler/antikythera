@@ -42,11 +42,18 @@ orchestrator and the actors. Both refuse a transport with another codec.
 ## Actors on other machines
 
 To let actors on other machines take part, use a network transport instead. With MQTT,
-pass the broker address:
+give it the broker address:
 
 ```python
-orchestrator = Orchestrator(session, broker_host="mqtt.example.org", storage=InMemoryStorage())
+from antikythera import MqttTransport
+
+transport = MqttTransport("mqtt.example.org", 1883)
+orchestrator = Orchestrator.from_blueprint(blueprint, transport=transport, storage=InMemoryStorage())
 ```
+
+Without a transport, the orchestrator uses the one set by the environment variables:
+MQTT on `MQTT_BROKER_HOST` by default. The `broker_host` and `broker_port` arguments of
+`Orchestrator` and `ActorLauncher` still work, but are deprecated.
 
 The actors then connect to the same broker, for example with `uvx` as described in
 [Writing actors](actors.md#running-actors). [NATS](nats.md) and [Zenoh](zenoh.md) work as
@@ -66,12 +73,23 @@ with storage.model_storage() as models:
     models.add_model("my-model", model)
 ```
 
-To read the results, open the session data. Values are stored per blueprint id:
+## Results
+
+`orchestrator.load_outputs()` loads the session data of the blueprint from the storage:
+every output the tasks have produced, by name. It reads the storage on every call, so keep
+the result if you need it more than once:
 
 ```python
-with storage.session_storage(orchestrator.session.bsid) as data:
-    print(data.get("hello-world", "greeting"))
+outputs = orchestrator.load_outputs()
+print(outputs["greeting"])
 ```
+
+An output linked with `task.output(name)` is saved under the link, so the link reads it
+back: `outputs[stamp.output("stamped")]`. Make the link before the session runs, since only
+the outputs a task declares are saved.
+
+## Storage backends
+
 
 `RedisStorage` keeps everything when the program restarts. It is the default, and what the
 HTTP service uses. To keep data somewhere else, implement

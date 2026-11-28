@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import warnings
 from typing import Iterable
 from typing import Optional
 
@@ -13,6 +14,7 @@ from compas_eve import Topic
 from compas_eve import Transport
 from compas_eve.codecs import ProtobufMessageCodec
 
+from antikythera.models import ExecutionMode
 from antikythera.models import Task
 from antikythera.models import TaskAllocationMessage
 from antikythera.models import TaskAssignmentMessage
@@ -61,15 +63,15 @@ class ActorLauncher:
     Parameters
     ----------
     broker_host : str, optional
-        Host of the MQTT broker. Ignored when ``transport`` is given.
+        Deprecated: pass ``transport=MqttTransport(host, port)``. Host of the MQTT broker.
     broker_port : int, optional
-        Port of the MQTT broker. Ignored when ``transport`` is given.
+        Deprecated: pass ``transport=MqttTransport(host, port)``. Port of the MQTT broker.
     sys_only : bool, optional
         Only run the system actors.
     mqtt_transport : str, optional
-        The MQTT socket transport, ``"tcp"`` or ``"websockets"``. Ignored when ``transport`` is given.
+        Deprecated: pass ``transport=MqttTransport(host, port, transport="websockets")``.
     tls : bool, optional
-        Connect to the MQTT broker over TLS. Ignored when ``transport`` is given.
+        Deprecated: pass ``transport=MqttTransport(host, port, tls=True)``.
     actor_types : iterable of str, optional
         Only run the actors of these types. Defaults to every registered actor. Raises
         ``ValueError`` if one of them is not registered.
@@ -82,21 +84,28 @@ class ActorLauncher:
         ``ProtobufMessageCodec``. For example a
         ``compas_eve.memory.InMemoryTransport`` shared with an orchestrator in the same
         process. Defaults to the transport configured by ``ANTIKYTHERA_TRANSPORT``: MQTT on
-        ``broker_host``:``broker_port``, or NATS at ``NATS_URL``.
+        ``MQTT_BROKER_HOST``:``MQTT_BROKER_PORT``, NATS at ``NATS_URL``, or Zenoh.
     """
 
     def __init__(
         self,
-        broker_host: str = "127.0.0.1",
-        broker_port: int = 1883,
+        broker_host: Optional[str] = None,
+        broker_port: Optional[int] = None,
         sys_only: bool = False,
-        mqtt_transport: str = "tcp",
-        tls: bool = False,
+        mqtt_transport: Optional[str] = None,
+        tls: Optional[bool] = None,
         *,
         actor_types: Optional[Iterable[str]] = None,
         discover: bool = True,
         transport: Optional[Transport] = None,
     ):
+        deprecated = [name for name, value in (("broker_host", broker_host), ("broker_port", broker_port), ("mqtt_transport", mqtt_transport), ("tls", tls)) if value is not None]
+        if deprecated:
+            warnings.warn(
+                f"ActorLauncher({', '.join(deprecated)}=...) is deprecated: pass transport=MqttTransport(...) instead (from antikythera import MqttTransport).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.launcher_id = coolname.generate_slug(4)
         self.sys_only = sys_only
         self.actor_types = None if actor_types is None else set(actor_types)
@@ -109,7 +118,7 @@ class ActorLauncher:
         if transport is not None:
             self.transport = check_transport(transport)
         else:
-            self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec(), transport=mqtt_transport, tls=tls)
+            self.transport = _get_eve_transport(host=broker_host, port=broker_port, codec=ProtobufMessageCodec(), transport=mqtt_transport or "tcp", tls=bool(tls))
         self.task_start_subscriber = Subscriber(Topic("antikythera/task/start"), self.on_task_start, transport=self.transport)
         self.task_completion_publisher = Publisher(Topic("antikythera/task/completed"), transport=self.transport)
         self.task_claim_publisher = Publisher(Topic("antikythera/task/claim"), transport=self.transport)
@@ -231,7 +240,13 @@ class ActorLauncher:
         If this launcher was selected as the winner, the claimed task is dispatched to a
         background thread for execution.
         """
-        if message.assigned_actor_id == self.launcher_id:
+        if message.assigned_actor_id != self.launcher_id:
+            # Another launcher got the task. Forget the claim, unless the task is competitive:
+            # then this launcher may get it as well.
+            claimed = self.pending_claims.get(message.task_id)
+            if claimed and claimed[0].get_param_value("execution_mode", ExecutionMode.EXCLUSIVE) != ExecutionMode.COMPETITIVE:
+                del self.pending_claims[message.task_id]
+        else:
             task_id = message.task_id
             claim_info = self.pending_claims.pop(task_id, None)
             if claim_info:

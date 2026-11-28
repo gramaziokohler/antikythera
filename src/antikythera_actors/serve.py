@@ -34,6 +34,7 @@ from typing import Optional
 from compas_eve import Transport
 
 from antikythera import config
+from antikythera_actors import launcher as launcher_module
 from antikythera_actors.launcher import ActorLauncher
 
 LOG = logging.getLogger(__name__)
@@ -52,7 +53,8 @@ def run(
     Parameters
     ----------
     *actors : type
-        The actor classes to run, each decorated with ``@actor``. Without any, every
+        The actors to run: classes decorated with ``@actor``, or functions decorated with
+        ``@tool("<actor_type>.<tool>")``. Without any, every
         registered actor runs, including the ones installed as plugins.
     broker_host : str, optional
         Host of the MQTT broker. Defaults to the ``MQTT_BROKER_HOST`` environment
@@ -76,15 +78,11 @@ def run(
                 raise TypeError(f"{cls!r} is not an actor: decorate it with @actor(type=...), or a function with @tool('<actor_type>.<tool>')")
             actor_types.append(actor_type)
 
-    launcher = ActorLauncher(
-        broker_host=broker_host or config.MQTT_BROKER_HOST,
-        broker_port=broker_port or config.MQTT_BROKER_PORT,
-        mqtt_transport=mqtt_transport,
-        tls=tls,
-        actor_types=actor_types,
-        discover=not actors,
-        transport=transport,
-    )
+    if transport is None:
+        transport = launcher_module._get_eve_transport(
+            host=broker_host or config.MQTT_BROKER_HOST, port=broker_port or config.MQTT_BROKER_PORT, codec=None, transport=mqtt_transport, tls=tls
+        )
+    launcher = ActorLauncher(actor_types=actor_types, discover=not actors, transport=transport)
     serve_forever(launcher)
 
 
