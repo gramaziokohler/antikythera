@@ -16,7 +16,7 @@
 
 <img src="docs/_images/antikythera.png" alt="Antikythera" />
 
-Antikythera is an distributed system for orchestration of fabrication processes in the context of architecture and construction.
+Antikythera runs fabrication processes for architecture and construction. You describe a process as a blueprint of tasks, and actors (robots, machines, scripts, people) do the tasks, on any machine on the network.
 
 ## Installation
 
@@ -37,7 +37,7 @@ invoke pre-build  # generates the protobuf bindings
 
 ## Documentation
 
-For further "getting started" instructions, a tutorial, examples, and an API reference,
+For a hello world, the concepts, guides, examples and the API reference,
 please check out the online documentation here: [antikythera docs](https://gramaziokohler.github.io/antikythera)
 
 ## Running Antikythera

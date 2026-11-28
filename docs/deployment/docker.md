@@ -1,13 +1,13 @@
 # Run with Docker
 
-This is the recommended way to run Antikythera. The orchestrator, the system actors
-and the web UI are published as images on Docker Hub, so nothing has to be cloned,
-built or installed — one compose file starts the whole system.
+This is the easiest way to run Antikythera. The orchestrator, the built-in actors and the
+web UI are published as Docker images. One file starts all of them; you do not need to
+download or build any code.
 
 ## Prerequisites
 
 * [Docker](https://docs.docker.com/get-started/get-docker/) with the Compose plugin
-  (v2.23.1 or newer — Docker Desktop 4.26+ ships it). Check with `docker compose version`.
+  (v2.23.1 or newer; Docker Desktop 4.26 and newer have it). Check with `docker compose version`.
 * Roughly 2 GB of disk for the images.
 
 ## Quick start
@@ -21,38 +21,37 @@ docker compose up -d
 
 Then open <http://localhost:8080>.
 
-That's it. The first run pulls the images, which takes a few minutes; subsequent
-starts are immediate.
+The first start downloads the images, which takes a few minutes. Later starts are fast.
 
 !!! note
-    Run the commands from the directory holding the downloaded `docker-compose.yml` —
-    `docker compose` always acts on the file in the current directory.
+    Run the commands in the folder with the downloaded `docker-compose.yml`.
+    `docker compose` always uses the file in the current folder.
 
 ## What is running
 
 | Service | Image | Host port | Purpose |
 | --- | --- | --- | --- |
 | `frontend` | `gramaziokohler/antikythera-frontend` | 8080 | Web UI, proxies `/api` to the orchestrator |
-| `orchestrator` | `gramaziokohler/antikythera` | 8000 | REST API — schedules and tracks sessions |
-| `actors` | `gramaziokohler/antikythera` | — | The built-in `system.*`, `io.*` and `user_interaction.*` actors |
+| `orchestrator` | `gramaziokohler/antikythera` | 8000 | HTTP API; runs and tracks sessions |
+| `actors` | `gramaziokohler/antikythera` | | The built-in `system.*`, `io.*` and `user_interaction.*` actors |
 | `mqtt-broker` | `eclipse-mosquitto` | 1883, 8083 | Message bus between orchestrator and actors |
-| `redis` | `redis` | — | Stores blueprints, sessions and session data |
+| `redis` | `redis` | | Stores blueprints, sessions and session data |
 
-Redis is deliberately not published to the host — only the orchestrator talks to it.
-The MQTT broker *is* published, because actors running on other machines connect to it.
+Only the orchestrator talks to Redis, so its port is not open to other machines. The
+MQTT broker port is open, because actors on other machines connect to it.
 
 ## Actors
 
-The `actors` service runs every actor that ships with Antikythera — the `system.*`,
-`io.*` and `user_interaction.*` task types. That is what the example blueprints need, so
-they run to completion out of the box. Adding `--sys-only` to that service's command
-restricts it to `system.*`; a blueprint using any other first-party type then stalls
-indefinitely on a task no actor claims.
+The `actors` service runs the actors that come with Antikythera: `system`, `io` and
+`user_interaction`. These are all the example blueprints need. With `--sys-only` added to
+its command, it runs only `system`. A blueprint that uses another of these actors then
+waits forever for a task that no actor takes.
 
 ### Connecting your own actors
 
-Actors for your own hardware do not run inside this stack. They run wherever the hardware is — a workshop PC,
-a robot controller, a Grasshopper session — and connect to the MQTT broker over the network:
+Actors for your own machines do not run in Docker. They run where the machine is, for
+example on a workshop computer or a robot controller, and connect to the MQTT broker over
+the network:
 
 ```bash
 pip install antikythera-sdk
@@ -62,9 +61,8 @@ antikythera-actors run --broker-host <host-running-docker> --broker-port 1883
 The dashboard in the web UI shows the broker address to use, with a button to copy it.
 
 !!! warning
-    The UI derives that address from the port the broker is normally published on (1883).
-    If you change `AKT_MQTT_PORT` below, the address shown will be wrong — adjust the port
-    yourself when configuring actors.
+    The UI assumes the broker uses port 1883. If you change `AKT_MQTT_PORT` below, the
+    address it shows is wrong, so use your port when you start actors.
 
 ## The MCP server
 
@@ -90,7 +88,7 @@ AKT_MQTT_WS_PORT=8083    # MQTT over WebSocket (default 8083)
 AKT_MCP_PORT=8001        # MCP server        (default 8001)
 ```
 
-Apply changes with `docker compose up -d` — Compose recreates only what changed.
+Apply changes with `docker compose up -d`. It restarts only what changed.
 
 ## Day-to-day
 
@@ -109,13 +107,14 @@ docker compose pull
 docker compose up -d
 ```
 
-Both images are tagged `latest`, which is the pair released together — the backend and the
-frontend are versioned independently, so there is no matching version number to pin them
-to. If you need a deployment frozen against updates, replace `latest` with a specific tag
-in `docker-compose.yml` and verify that combination yourself.
+Both images use the `latest` tag. The backend and the frontend have separate version
+numbers, so `latest` is the way to get two that work together. To stop updates, replace
+`latest` with a specific version in `docker-compose.yml`, and check yourself that the two
+versions work together.
 
-**Data** — blueprints, sessions and session data live in Redis, in the `antikythera_redis-data`
-volume. It survives `stop`, `down`, and image updates. To back it up:
+**Data**: blueprints, sessions and session data are kept by Redis, in the
+`antikythera_redis-data` volume. They are kept through `stop`, `down` and updates. To make
+a backup:
 
 ```bash
 docker compose exec redis redis-cli SAVE
@@ -131,34 +130,31 @@ docker compose down -v
 
 ## Security
 
-Antikythera is built for a trusted network — a lab, a workshop, a fabrication cell.
-There is **no authentication** on the REST API and the MQTT broker accepts anonymous
-connections. Anyone who can reach these ports can start, stop and delete sessions.
+Antikythera is made for a trusted network, like a lab or a workshop. There are **no
+passwords**: anyone who can reach the HTTP API or the MQTT broker can start, stop and
+delete sessions.
 
 Do not expose ports 8080, 8000, 1883, 8083 or 8001 to the public internet. If access from
 outside the local network is needed, put it behind a VPN or an authenticating reverse proxy.
 
 ## Troubleshooting
 
-**Port already in use** — something else on the machine holds port 8080 (or 8000, 1883).
+**Port already in use**: another program uses port 8080 (or 8000, or 1883).
 Set the corresponding `AKT_*_PORT` in `.env` and run `docker compose up -d` again.
 
-**UI loads but shows no data** — the orchestrator is not reachable. Check
+**The UI shows no data**: it cannot reach the orchestrator. Check
 `docker compose ps` for a service that is not `running`, then `docker compose logs orchestrator`.
 
-**A session stalls with a task stuck on READY** — no running actor handles that task type.
-Check `docker compose logs actors` to see which actors started, and confirm any actor of
-your own is pointed at the same broker as the orchestrator: the host and port passed to
-`antikythera-actors run` must match the address shown on the dashboard, with port 1883
-open on the machine running Docker.
+**A task stays READY and the session does not move on**: no running actor does that
+task type. Check `docker compose logs actors` to see which actors started. Make sure your
+own actors use the broker address shown on the dashboard, and that port 1883 is open on
+the machine running Docker.
 
-**`configs` top-level element error** — the Compose plugin is older than v2.23.1. Update
+**Error about the `configs` element**: Docker Compose is older than v2.23.1. Update
 Docker, or copy the `mosquitto` config block into a local `mosquitto.conf` and mount it
 as a volume instead.
 
 ## Running from a clone
 
-If you are working on Antikythera itself, use the `docker-compose.yml` in the repository
-root instead. It builds both images from local source (the frontend from a sibling
-`antikythera-frontend` checkout) and runs the orchestrator with auto-reload. See
-[Installation](../installation.md).
+To work on Antikythera itself, use the `docker-compose.yml` at the root of the
+repository instead. See [Installation](../installation.md#from-source).

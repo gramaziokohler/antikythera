@@ -28,7 +28,6 @@ def mock_storage():
         yield
 
 
-
 @pytest.fixture
 def mock_transport_orchestrator(in_memory_transport):
     with patch("antikythera_orchestrator.orchestrator._get_eve_transport", return_value=in_memory_transport) as mock:

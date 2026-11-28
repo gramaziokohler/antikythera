@@ -29,10 +29,7 @@ def check_transport(transport: Transport) -> Transport:
         If the transport does not use a protobuf codec.
     """
     if not isinstance(getattr(transport, "codec", None), ProtobufMessageCodec):
-        raise ValueError(
-            "Antikythera exchanges protobuf messages: create the transport with codec=ProtobufMessageCodec(), "
-            "e.g. InMemoryTransport(codec=ProtobufMessageCodec())."
-        )
+        raise ValueError("Antikythera exchanges protobuf messages: create the transport with codec=ProtobufMessageCodec(), e.g. InMemoryTransport(codec=ProtobufMessageCodec()).")
     return transport
 
 
@@ -82,7 +79,7 @@ def create_transport(
 
         return ZenohTransport(configured_zenoh(zenoh_connect), codec=codec)
     if kind == "mqtt":
-        from compas_eve.mqtt import MqttTransport
+        from antikythera.transports.mqtt import MqttTransport
 
         return MqttTransport(
             host=broker_host or config.MQTT_BROKER_HOST,

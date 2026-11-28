@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import uuid
+import warnings
 from dataclasses import dataclass
 from queue import Empty
 from queue import LifoQueue
@@ -398,20 +400,13 @@ class Orchestrator:
     entirely inside the current process:
 
     ```python
-    from compas_eve.codecs import ProtobufMessageCodec
-    from compas_eve.memory import InMemoryTransport
+    from antikythera import ActorLauncher, InMemoryStorage, InMemoryTransport, Orchestrator
 
-    from antikythera_actors import ActorLauncher
-    from antikythera_orchestrator import InMemoryStorage
-    from antikythera_orchestrator import Orchestrator
-
-    transport = InMemoryTransport(codec=ProtobufMessageCodec())
-    launcher = ActorLauncher(transport=transport)
-    launcher.start()
-
-    orchestrator = Orchestrator(session, transport=transport, storage=InMemoryStorage())
-    orchestrator.start()
-    orchestrator.await_completion()
+    transport = InMemoryTransport()
+    with ActorLauncher(transport=transport):
+        with Orchestrator.from_blueprint(blueprint, transport=transport, storage=InMemoryStorage()) as orchestrator:
+            orchestrator.await_completion()
+    print(orchestrator.load_outputs())
     ```
 
     Parameters
@@ -419,14 +414,15 @@ class Orchestrator:
     session : BlueprintSession
         The blueprint session to execute.
     broker_host : str, optional
-        Host of the MQTT broker. Ignored when ``transport`` is given.
+        Deprecated: pass ``transport=MqttTransport(host, port)``. Host of the MQTT broker.
     broker_port : int, optional
-        Port of the MQTT broker. Ignored when ``transport`` is given.
+        Deprecated: pass ``transport=MqttTransport(host, port)``. Port of the MQTT broker.
     transport : compas_eve.Transport, optional
         The transport to exchange messages with actors over. It must use
         ``ProtobufMessageCodec``, and actor launchers must use the same transport, or one
         connected to the same network. Defaults to the transport configured by
-        ``ANTIKYTHERA_TRANSPORT``: MQTT on ``broker_host``:``broker_port``, or NATS at ``NATS_URL``.
+        ``ANTIKYTHERA_TRANSPORT``: MQTT on ``MQTT_BROKER_HOST``:``MQTT_BROKER_PORT``,
+        NATS at ``NATS_URL``, or Zenoh.
     storage : StorageBackend, optional
         Where the session, blueprints and models are stored. Defaults to the backend
         configured by ``ANTIKYTHERA_STORAGE``, see
@@ -449,13 +445,19 @@ class Orchestrator:
     def __init__(
         self,
         session: BlueprintSession,
-        broker_host: str = "127.0.0.1",
-        broker_port: int = 1883,
+        broker_host: Optional[str] = None,
+        broker_port: Optional[int] = None,
         *,
         transport: Optional[Transport] = None,
         storage: Optional[StorageBackend] = None,
     ) -> None:
         super(Orchestrator, self).__init__()
+        if broker_host is not None or broker_port is not None:
+            warnings.warn(
+                "Orchestrator(broker_host=..., broker_port=...) is deprecated: pass transport=MqttTransport(host, port) instead (from antikythera import MqttTransport).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.session: BlueprintSession = session
         self.graph: Graph = None
         self._completion_event = threading.Event()
@@ -511,6 +513,64 @@ class Orchestrator:
         )
 
         self.register_instance(self)
+
+    @classmethod
+    def from_blueprint(
+        cls,
+        blueprint: Blueprint,
+        *,
+        bsid: Optional[str] = None,
+        params: Optional[Dict[str, Any]] = None,
+        transport: Optional[Transport] = None,
+        storage: Optional[StorageBackend] = None,
+    ) -> Orchestrator:
+        """Create an orchestrator for a new session of ``blueprint``.
+
+        Parameters
+        ----------
+        blueprint : Blueprint
+            The blueprint to run.
+        bsid : str, optional
+            The id of the new session. Defaults to the blueprint id followed by a random suffix.
+        params : dict, optional
+            The session params.
+        transport : compas_eve.Transport, optional
+            The transport messages to actors go over. Defaults to MQTT, as configured.
+        storage : StorageBackend, optional
+            The storage backend. Defaults to the configured one.
+
+        Returns
+        -------
+        Orchestrator
+        """
+        bsid = bsid or f"{blueprint.id}-{uuid.uuid4().hex[:8]}"
+        session = BlueprintSession(bsid=bsid, blueprint=blueprint, params=params)
+        return cls(session, transport=transport, storage=storage)
+
+    def load_outputs(self) -> Dict[str, Any]:
+        """Load the session data of the blueprint from the storage.
+
+        The session data holds every output the tasks have produced so far, by the name it
+        is stored under: the output's name, its ``set_to``, or the key of a link made with
+        `Task.output`. It is read from the storage on every call.
+
+        Returns
+        -------
+        dict
+
+        Examples
+        --------
+        >>> outputs = orchestrator.load_outputs()  # doctest: +SKIP
+        >>> outputs[stamp.output("stamped")]  # doctest: +SKIP
+        """
+        return self.session_storage.get_all(self.session.blueprint.id)
+
+    def __enter__(self) -> Orchestrator:
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.stop()
 
     @property
     def state(self) -> BlueprintSessionState:
@@ -831,10 +891,9 @@ class Orchestrator:
 
             inputs_value = self.session_storage.get(blueprint_id, mapped_key)
 
-            # Static inputs: If not found in session and map is implicit, use static value
-            # This is to support things like the `test_orchestrator_composite` tests that
-            # set static inputs directly in the programmatic definition of the task
-            if inputs_value is None and not inp.get_from and inp.value is not None:
+            # An input's literal value is its default: used when nothing is found in the
+            # session data, whether under its own name or under `get_from`.
+            if inputs_value is None and inp.value is not None:
                 inputs[key] = inp.value
                 continue
 

@@ -138,9 +138,7 @@ class RuntimeScope:
         except Exception as e:
             # Do not fall through to False: that would silently skip the loop and
             # let the session run to completion looking like a success.
-            raise ScopeConditionError(
-                f"Scope '{self.name}': cannot evaluate while condition '{condition}' ({e}). Names available in session data: {sorted(eval_context)}."
-            ) from e
+            raise ScopeConditionError(f"Scope '{self.name}': cannot evaluate while condition '{condition}' ({e}). Names available in session data: {sorted(eval_context)}.") from e
 
         LOG.info(f"Scope '{self.name}': while condition '{condition}' evaluated to {result}.")
         return result

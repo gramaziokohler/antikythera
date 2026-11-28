@@ -7,6 +7,7 @@ Every example here runs to completion with the actors that ship with Antikythera
 
 | File | Shows |
 | --- | --- |
+| `hello_world.py` | The smallest complete program: one actor, one blueprint, one process: `python examples/hello_world.py` |
 | `embedded.py` | The orchestrator and actors in one Python process, no broker and no Redis: `python examples/embedded.py` |
 | `greeter_actor.py` | An actor in a single file, started with `uv run examples/greeter_actor.py` or `uvx --from antikythera-sdk antikythera-actors run --actor examples/greeter_actor.py` |
 

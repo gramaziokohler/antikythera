@@ -1,9 +1,9 @@
 # Running on Zenoh
 
-[Zenoh](https://zenoh.io/) can carry Antikythera's messages and keep its state, like
-[NATS](nats.md). Messages go between Zenoh sessions directly or through a router; state
-goes into a *storage*: a router plugin that keeps the values put on a set of keys and
-answers queries for them, on memory, RocksDB, the filesystem or other volumes.
+Like [NATS](nats.md), [Zenoh](https://zenoh.io/) can carry Antikythera's messages and
+keep its data. Messages go from program to program directly, or through a Zenoh router.
+Data goes into a *storage*: a part of the router that keeps values and answers questions
+about them. A storage keeps its data in memory, in RocksDB, in files, or elsewhere.
 
 Install the extra:
 
@@ -13,8 +13,8 @@ pip install "antikythera-sdk[deployment,zenoh]"
 
 ## The router
 
-Antikythera keeps its state under `antikythera/storage`, so the router needs a storage
-covering that prefix:
+Antikythera keeps its data under the key `antikythera/storage`, so the router needs a
+storage for that key:
 
 ```json5
 // zenoh.json5
@@ -35,12 +35,12 @@ covering that prefix:
 docker run -p 7447:7447 -v $PWD/zenoh.json5:/zenoh.json5 eclipse/zenoh:1.10.2 -c /zenoh.json5
 ```
 
-The `memory` volume forgets everything when the router stops. For state that survives a
-restart, use a persistent volume such as RocksDB or the filesystem; see the
+The `memory` volume forgets everything when the router stops. To keep the data, use
+RocksDB or the filesystem instead; see the
 [storage manager documentation](https://zenoh.io/docs/manual/plugin-storage-manager/).
 
-Do not cover the whole `antikythera/**` prefix: messages are published on
-`antikythera/task/...`, and a storage there would keep every one of them.
+Do not use `antikythera/**` for the storage. Messages are sent on `antikythera/task/...`,
+and the storage would keep every one of them.
 
 ## The service
 
@@ -58,10 +58,10 @@ antikythera
 | `ZENOH_CONNECT` | `tcp/127.0.0.1:7447` | Endpoint(s) to connect to, separated by commas |
 | `ZENOH_MODE` | Zenoh's default, `peer` | `peer` or `client` |
 | `ZENOH_CONFIG` | | A Zenoh JSON5 configuration file, for anything else (TLS, credentials, ...) |
-| `ZENOH_STORAGE_PREFIX` | `antikythera/storage` | Key prefix of the stored state, so deployments can share a router |
+| `ZENOH_STORAGE_PREFIX` | `antikythera/storage` | Key of the stored data, so several installations can share a router |
 
-As with NATS, transport and storage are independent: Zenoh messages with Redis storage
-work as well.
+Transport and storage are separate choices: Zenoh for messages and Redis for data works
+as well.
 
 ## Actors
 
@@ -70,7 +70,7 @@ antikythera-actors run --transport zenoh --zenoh-connect tcp/localhost:7447
 uvx --from "antikythera-sdk[zenoh]" antikythera-actors run --transport zenoh --actor my_actor.py
 ```
 
-`ANTIKYTHERA_TRANSPORT` and the `ZENOH_*` variables set the defaults here too, and for
+`ANTIKYTHERA_TRANSPORT` and the `ZENOH_*` variables work here too, and in
 `antikythera_actors.run()`.
 
 ## From Python
@@ -94,24 +94,21 @@ Both also take a `zenoh.Config`, built by hand or with
 
 ## How it behaves
 
-- **Peer to peer.** Messages do not need the router: sessions in `peer` mode find each
-  other on the local network by multicast and talk directly. Only the storage needs a
-  router.
-- **Consistency.** Zenoh storages are eventually consistent: a query right after a write
-  can return the previous value. The orchestrator reads its own writes, so `ZenohStorage`
-  timestamps every write and waits until the storage answers with it, which costs a
-  round trip per write. If no storage covers the prefix, writes fail after a timeout with a
-  message saying so, instead of disappearing.
-- **Late subscribers.** Zenoh announces subscriptions asynchronously, so a message sent
-  the instant after an actor subscribes can miss it. The orchestrator re-sends unclaimed
-  tasks, which covers this.
-- **MQTT.** `ZenohTransport` maps topic names the way Zenoh's MQTT plugin does
-  (`antikythera/task/+` is `antikythera/task/*`), so MQTT clients reaching a router through
-  that plugin should exchange messages with it. This has not been tested, and neither has
-  the web UI over Zenoh.
+- **No router needed for messages.** In `peer` mode, programs on the same network find
+  each other and talk directly. Only the storage needs a router.
+- **Writes wait.** Right after a write, a Zenoh storage can still return the old value for
+  a short time. The orchestrator reads what it just wrote, so `ZenohStorage` waits after
+  each write until the storage returns the new value. This takes about one network round
+  trip. If no storage is set up for the key, writes fail after a timeout with a message
+  that says so.
+- **Messages right after subscribing.** Zenoh needs a moment to announce a new
+  subscriber, so a message sent at that moment can be missed. The orchestrator sends
+  unclaimed tasks again, so no task is lost.
+- **MQTT.** Topic names match those of Zenoh's MQTT plugin (`antikythera/task/+` is
+  `antikythera/task/*`), so MQTT clients connected through that plugin should work. This
+  has not been tested, and neither has the web UI with Zenoh.
 
-The Zenoh transport lives in Antikythera for now (`antikythera.transports.zenoh`).
-compas_eve has a `ZenohTransport` too; this one gives every subscription its own Zenoh
-subscriber, so removing one does not silence the others on its topic, maps MQTT-style
-wildcards, and blocks rather than drops messages under congestion. It is meant to replace
-compas_eve's once it has proven itself.
+The Zenoh transport is part of Antikythera for now (`antikythera.transports.zenoh`).
+compas_eve has a `ZenohTransport` too, but this one fixes three problems: removing one
+subscriber there stops the others on the same topic, MQTT wildcards are not translated,
+and messages are dropped when the network is busy. It will replace compas_eve's later.

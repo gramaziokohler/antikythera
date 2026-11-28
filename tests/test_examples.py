@@ -147,3 +147,9 @@ def test_greeter_example_defines_an_actor():
 
     assert greeter._actor_type == "greeter"
     assert greeter().hello("world") == {"greeting": "Hello, world!"}
+
+
+def test_hello_world_example_prints_the_greeting(capsys):
+    _load_example("hello_world.py")
+
+    assert capsys.readouterr().out.splitlines()[-1] == "Hello, world!"

@@ -51,11 +51,12 @@ def _load_actors(specs: list[str]) -> list[str]:
     for spec in specs:
         module = _import_actor_module(spec)
         for value in vars(module).values():
-            if isinstance(value, type) and getattr(value, "__module__", None) == module.__name__ and hasattr(value, "_actor_type"):
+            # Actor classes, and functions made tools with @tool("<actor_type>.<tool>")
+            if getattr(value, "__module__", None) == module.__name__ and hasattr(value, "_actor_type"):
                 loaded.add(value._actor_type)
     loaded = sorted(loaded)
     if not loaded:
-        raise SystemExit(f"No actors found in: {', '.join(specs)}. Actors are classes decorated with @actor(type=...).")
+        raise SystemExit(f"No actors found in: {', '.join(specs)}. Actors are classes decorated with @actor(type=...), or functions decorated with @tool('<actor_type>.<tool>').")
     return loaded
 
 
@@ -88,18 +89,12 @@ def _run(args: argparse.Namespace) -> None:
         print(f"Connecting to Zenoh at {args.zenoh_connect or config.ZENOH_CONFIG or config.ZENOH_CONNECT}", flush=True)
         transport = create_transport("zenoh", zenoh_connect=args.zenoh_connect)
     else:
+        from antikythera_actors import launcher as launcher_module
+
         print(f"Connecting to MQTT broker at {args.broker_host}:{args.broker_port}", flush=True)
+        transport = launcher_module._get_eve_transport(host=args.broker_host, port=args.broker_port, codec=None, transport=args.mqtt_transport, tls=args.tls)
     try:
-        launcher = ActorLauncher(
-            broker_host=args.broker_host,
-            broker_port=args.broker_port,
-            sys_only=args.sys_only,
-            mqtt_transport=args.mqtt_transport,
-            tls=args.tls,
-            actor_types=actor_types,
-            discover=not args.actor,
-            transport=transport,
-        )
+        launcher = ActorLauncher(sys_only=args.sys_only, actor_types=actor_types, discover=not args.actor, transport=transport)
     except ValueError as e:
         raise SystemExit(str(e))
 
